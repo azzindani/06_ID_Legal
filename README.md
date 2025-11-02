@@ -17,23 +17,23 @@ indonesian_legal_rag/
 │
 ├── config/
 │   ├── __init__.py
-│   ├── model_config.py          # Model paths, HF tokens
-│   ├── search_config.py         # Search phases, team personas
-│   ├── llm_config.py            # LLM generation params
+│   ├── model_config.py          ✅# Model paths, HF tokens
+│   ├── search_config.py         ✅# Search phases, team personas
+│   ├── llm_config.py            ✅# LLM generation params
 │   └── app_config.py            # Gradio UI, export settings
 │
 ├── core/
 │   ├── __init__.py
 │   ├── models/
 │   │   ├── __init__.py
-│   │   ├── embedding_model.py   # Embedding model wrapper
+│   │   ├── embedding_model.py   ✅# Embedding model wrapper
 │   │   ├── reranker_model.py    # Reranker wrapper
 │   │   └── llm_model.py         # LLM wrapper (local + API)
 │   │
 │   ├── data/
 │   │   ├── __init__.py
-│   │   ├── dataset_loader.py    # HuggingFace dataset loading
-│   │   └── preprocessing.py     # Data cleaning, validation
+│   │   ├── dataset_loader.py    ✅# HuggingFace dataset loading
+│   │   └── preprocessing.py     ✅# Data cleaning, validation
 │   │
 │   ├── knowledge_graph/
 │   │   ├── __init__.py
@@ -44,7 +44,7 @@ indonesian_legal_rag/
 │   │
 │   └── search/
 │       ├── __init__.py
-│       ├── search_engine.py     # Main search orchestrator
+│       ├── search_engine.py     ✅# Main search orchestrator
 │       ├── hybrid_search.py     # Metadata + semantic search
 │       ├── query_analyzer.py    # Advanced query understanding
 │       └── context_manager.py   # Conversation context
@@ -90,10 +90,10 @@ indonesian_legal_rag/
 │
 ├── utils/
 │   ├── __init__.py
-│   ├── logging_config.py        # Centralized logging
+│   ├── logging_config.py        ✅# Centralized logging
 │   ├── error_handlers.py        # Error recovery
 │   ├── validators.py            # Config validation
-│   ├── memory_utils.py          # Cache & memory management
+│   ├── memory_utils.py          ✅# Cache & memory management
 │   └── metrics.py               # Performance tracking
 │
 ├── tests/
