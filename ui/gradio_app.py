@@ -1,18 +1,22 @@
 """
 Gradio Interface - Indonesian Legal RAG System
 
-Web-based chat interface for legal consultation.
+Web-based chat interface for legal consultation with provider selection,
+document upload, and advanced features.
 """
 
 import gradio as gr
 import sys
 import os
 from typing import List, Tuple, Optional
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from pipeline import RAGPipeline
-from conversation import ConversationManager, MarkdownExporter, JSONExporter, HTMLExporter
+from conversation import ConversationManager, MarkdownExporter, JSONExporter, HTMLExporter, get_context_cache
+from providers import get_provider, switch_provider, list_providers
+from config import LLM_PROVIDER, EMBEDDING_DEVICE, LLM_DEVICE
 from logger_utils import get_logger
 
 logger = get_logger(__name__)
@@ -21,17 +25,21 @@ logger = get_logger(__name__)
 pipeline: Optional[RAGPipeline] = None
 manager: Optional[ConversationManager] = None
 current_session: Optional[str] = None
+current_provider: str = LLM_PROVIDER
 
 
-def initialize_system():
-    """Initialize the RAG system"""
-    global pipeline, manager, current_session
+def initialize_system(provider_type: str = None):
+    """Initialize the RAG system with specified provider"""
+    global pipeline, manager, current_session, current_provider
+
+    if provider_type:
+        current_provider = provider_type
 
     if pipeline is None:
-        logger.info("Initializing RAG system...")
-        pipeline = RAGPipeline()
+        logger.info(f"Initializing RAG system with provider: {current_provider}")
+        pipeline = RAGPipeline({'llm_provider': current_provider})
         if not pipeline.initialize():
-            raise RuntimeError("Failed to initialize pipeline")
+            return "Failed to initialize pipeline"
         logger.info("Pipeline initialized")
 
     if manager is None:
@@ -40,27 +48,33 @@ def initialize_system():
     if current_session is None:
         current_session = manager.start_session()
 
-    return "System initialized successfully!"
+    device_info = f"Embedding: {EMBEDDING_DEVICE}, LLM: {LLM_DEVICE}"
+    return f"Initialized with {current_provider} provider. {device_info}"
+
+
+def change_provider(provider_type: str):
+    """Switch to a different LLM provider"""
+    global pipeline, current_provider
+
+    try:
+        if pipeline:
+            pipeline.shutdown()
+            pipeline = None
+
+        current_provider = provider_type
+        return initialize_system(provider_type)
+    except Exception as e:
+        return f"Failed to switch provider: {e}"
 
 
 def chat(message: str, history: List[Tuple[str, str]]) -> Tuple[str, List[Tuple[str, str]]]:
-    """
-    Process chat message and return response
-
-    Args:
-        message: User message
-        history: Chat history
-
-    Returns:
-        Response and updated history
-    """
+    """Process chat message and return response"""
     global pipeline, manager, current_session
 
     if not message.strip():
         return "", history
 
     try:
-        # Initialize if needed
         if pipeline is None:
             initialize_system()
 
@@ -80,9 +94,7 @@ def chat(message: str, history: List[Tuple[str, str]]) -> Tuple[str, List[Tuple[
                 metadata=result.get('metadata')
             )
 
-        # Update history
         history.append((message, response))
-
         return "", history
 
     except Exception as e:
@@ -131,7 +143,7 @@ def export_conversation(format_type: str) -> str:
 
 def get_session_info() -> str:
     """Get current session information"""
-    global manager, current_session
+    global manager, current_session, current_provider
 
     if not manager or not current_session:
         return "No active session"
@@ -140,20 +152,49 @@ def get_session_info() -> str:
     if not summary:
         return "Session not found"
 
+    cache = get_context_cache()
+    cache_stats = cache.get_stats()
+
     return f"""Session ID: {summary['session_id']}
+Provider: {current_provider}
 Total Turns: {summary['total_turns']}
 Total Tokens: {summary['total_tokens']}
-Total Time: {summary['total_time']:.2f}s"""
+Total Time: {summary['total_time']:.2f}s
+Cache Size: {cache_stats['size']}/{cache_stats['max_size']}"""
+
+
+def upload_document(file) -> str:
+    """Handle document upload"""
+    if file is None:
+        return "No file uploaded"
+
+    try:
+        file_path = file.name
+        file_ext = Path(file_path).suffix.lower()
+
+        if file_ext == '.pdf':
+            return f"PDF uploaded: {file_path}\nPDF analysis coming soon..."
+        elif file_ext in ['.doc', '.docx']:
+            return f"Word document uploaded: {file_path}\nDOCX analysis coming soon..."
+        elif file_ext == '.txt':
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            return f"Text file uploaded ({len(content)} chars)\nReady for analysis."
+        else:
+            return f"Unsupported file type: {file_ext}"
+
+    except Exception as e:
+        return f"Upload error: {e}"
 
 
 def create_demo() -> gr.Blocks:
-    """Create Gradio demo interface"""
+    """Create Gradio demo interface with all features"""
 
     with gr.Blocks(
         title="Indonesian Legal RAG System",
         theme=gr.themes.Soft(),
         css="""
-        .container { max-width: 900px; margin: auto; }
+        .container { max-width: 1200px; margin: auto; }
         .header { text-align: center; padding: 20px; }
         """
     ) as demo:
@@ -164,14 +205,16 @@ def create_demo() -> gr.Blocks:
             ### Sistem Konsultasi Hukum Indonesia
 
             Tanyakan pertanyaan tentang hukum dan peraturan Indonesia.
+            Supports multiple LLM providers and local inference.
             """
         )
 
         with gr.Row():
-            with gr.Column(scale=4):
+            # Main chat area
+            with gr.Column(scale=3):
                 chatbot = gr.Chatbot(
                     label="Percakapan",
-                    height=500,
+                    height=450,
                     show_copy_button=True
                 )
 
@@ -184,24 +227,40 @@ def create_demo() -> gr.Blocks:
                     )
                     submit_btn = gr.Button("Kirim", variant="primary", scale=1)
 
+            # Settings panel
             with gr.Column(scale=1):
-                gr.Markdown("### Aksi")
+                with gr.Accordion("Provider Settings", open=True):
+                    provider_dropdown = gr.Dropdown(
+                        choices=['local', 'openai', 'anthropic', 'google', 'openrouter'],
+                        value='local',
+                        label="LLM Provider"
+                    )
+                    provider_btn = gr.Button("Switch Provider")
+                    provider_status = gr.Textbox(label="Provider Status", interactive=False)
 
-                clear_btn = gr.Button("Sesi Baru", variant="secondary")
-                status = gr.Textbox(label="Status", interactive=False)
+                with gr.Accordion("Session", open=True):
+                    clear_btn = gr.Button("New Session", variant="secondary")
+                    status = gr.Textbox(label="Status", interactive=False)
 
-                gr.Markdown("### Ekspor")
-                export_format = gr.Radio(
-                    choices=["Markdown", "JSON", "HTML"],
-                    value="Markdown",
-                    label="Format"
-                )
-                export_btn = gr.Button("Ekspor")
-                export_status = gr.Textbox(label="Hasil Ekspor", interactive=False)
+                with gr.Accordion("Export", open=False):
+                    export_format = gr.Radio(
+                        choices=["Markdown", "JSON", "HTML"],
+                        value="Markdown",
+                        label="Format"
+                    )
+                    export_btn = gr.Button("Export")
+                    export_status = gr.Textbox(label="Export Result", interactive=False)
 
-                gr.Markdown("### Info Sesi")
-                info_btn = gr.Button("Refresh Info")
-                session_info = gr.Textbox(label="Info", interactive=False, lines=5)
+                with gr.Accordion("Document Upload", open=False):
+                    file_upload = gr.File(
+                        label="Upload Document",
+                        file_types=[".pdf", ".docx", ".doc", ".txt"]
+                    )
+                    upload_status = gr.Textbox(label="Upload Status", interactive=False)
+
+                with gr.Accordion("Info", open=False):
+                    info_btn = gr.Button("Refresh Info")
+                    session_info = gr.Textbox(label="Session Info", interactive=False, lines=7)
 
         # Example questions
         gr.Markdown("### Contoh Pertanyaan")
@@ -229,6 +288,12 @@ def create_demo() -> gr.Blocks:
             outputs=[msg, chatbot]
         )
 
+        provider_btn.click(
+            change_provider,
+            inputs=[provider_dropdown],
+            outputs=[provider_status]
+        )
+
         clear_btn.click(
             clear_chat,
             outputs=[chatbot, status]
@@ -238,6 +303,12 @@ def create_demo() -> gr.Blocks:
             export_conversation,
             inputs=[export_format],
             outputs=[export_status]
+        )
+
+        file_upload.change(
+            upload_document,
+            inputs=[file_upload],
+            outputs=[upload_status]
         )
 
         info_btn.click(
