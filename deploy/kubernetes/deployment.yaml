@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: legal-rag
+  labels:
+    app: legal-rag
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: legal-rag
+  template:
+    metadata:
+      labels:
+        app: legal-rag
+    spec:
+      containers:
+        - name: legal-rag
+          image: id-legal-rag:latest
+          ports:
+            - containerPort: 7860
+              name: gradio
+            - containerPort: 8000
+              name: api
+          env:
+            - name: LLM_PROVIDER
+              value: "local"
+            - name: EMBEDDING_DEVICE
+              value: "cpu"
+            - name: LLM_DEVICE
+              value: "cpu"
+            - name: LLM_LOAD_IN_4BIT
+              value: "true"
+          resources:
+            requests:
+              memory: "8Gi"
+              cpu: "2"
+            limits:
+              memory: "16Gi"
+              cpu: "4"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          volumeMounts:
+            - name: model-cache
+              mountPath: /root/.cache
+      volumes:
+        - name: model-cache
+          persistentVolumeClaim:
+            claimName: model-cache-pvc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: model-cache-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
