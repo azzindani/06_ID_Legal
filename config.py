@@ -38,10 +38,58 @@ MAX_LENGTH = int(os.getenv("MAX_LENGTH", "32768"))
 EMBEDDING_DIM = int(os.getenv("EMBEDDING_DIM", "1024"))
 
 # =============================================================================
-# SYSTEM CONFIGURATION
+# DEVICE & INFERENCE CONFIGURATION
 # =============================================================================
 
+# Device settings - allows CPU/GPU split for privacy-focused local inference
 DEVICE = os.getenv("DEVICE", "cuda")
+EMBEDDING_DEVICE = os.getenv("EMBEDDING_DEVICE", "cpu")  # CPU for embeddings (small models)
+RERANKER_DEVICE = os.getenv("RERANKER_DEVICE", "cpu")    # CPU for reranker (small model)
+LLM_DEVICE = os.getenv("LLM_DEVICE", "cuda")             # GPU for LLM (large model)
+
+# Quantization settings for local inference
+LLM_QUANTIZATION = os.getenv("LLM_QUANTIZATION", "4bit")  # none, 4bit, 8bit
+LLM_LOAD_IN_4BIT = os.getenv("LLM_LOAD_IN_4BIT", "true").lower() == "true"
+LLM_LOAD_IN_8BIT = os.getenv("LLM_LOAD_IN_8BIT", "false").lower() == "true"
+EMBEDDING_DTYPE = os.getenv("EMBEDDING_DTYPE", "float32")  # float32, float16, bfloat16
+
+# =============================================================================
+# LLM PROVIDER CONFIGURATION
+# =============================================================================
+
+# Provider: local, openai, anthropic, google, openrouter
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "local")
+
+# API Keys for cloud providers
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+
+# API Model names (when using cloud providers)
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
+ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-20250514")
+GOOGLE_MODEL = os.getenv("GOOGLE_MODEL", "gemini-1.5-pro")
+OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "anthropic/claude-sonnet-4")
+
+# API Configuration
+API_TIMEOUT = int(os.getenv("API_TIMEOUT", "120"))
+API_MAX_RETRIES = int(os.getenv("API_MAX_RETRIES", "3"))
+
+# =============================================================================
+# CONTEXT CACHE CONFIGURATION
+# =============================================================================
+
+# Efficient context management (inspired by Claude Code)
+ENABLE_CONTEXT_CACHE = os.getenv("ENABLE_CONTEXT_CACHE", "true").lower() == "true"
+CONTEXT_CACHE_SIZE = int(os.getenv("CONTEXT_CACHE_SIZE", "100"))  # Max cached contexts
+CONTEXT_MAX_TOKENS = int(os.getenv("CONTEXT_MAX_TOKENS", "8192"))  # Max tokens per context
+CONTEXT_COMPRESSION = os.getenv("CONTEXT_COMPRESSION", "true").lower() == "true"
+CONTEXT_SUMMARY_THRESHOLD = int(os.getenv("CONTEXT_SUMMARY_THRESHOLD", "4096"))
+
+# =============================================================================
+# SYSTEM CONFIGURATION
+# =============================================================================
 LOG_DIR = os.getenv("LOG_DIR", "logs")
 ENABLE_FILE_LOGGING = os.getenv("ENABLE_FILE_LOGGING", "true").lower() == "true"
 CACHE_DIR = os.getenv("CACHE_DIR", ".cache")

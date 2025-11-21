@@ -25,6 +25,30 @@ This system provides intelligent legal consultation by combining:
 | **Phase 6** | User Interface (Gradio) | ✅ Complete |
 | **Phase 7** | Agentic Workflows | ✅ Complete |
 
+### Upcoming Features (Phase 8+)
+
+| Feature | Description | Priority |
+|---------|-------------|----------|
+| **Local Inference Flexibility** | CPU/GPU split, quantization support | 🔴 High |
+| **API Provider Support** | Claude, Gemini, OpenAI, OpenRouter | 🔴 High |
+| **Context Cache Management** | Efficient conversation caching | 🟡 Medium |
+| **Document Upload & Analysis** | PDF/DOCX parsing and analysis | 🟡 Medium |
+| **Form Generator** | Auto-generate legal forms | 🟡 Medium |
+| **Multi-language Support** | ID ↔ EN translation | 🟢 Low |
+| **Compliance Checker** | Validate against regulations | 🟢 Low |
+| **Audit Trail** | Query/response logging | 🟢 Low |
+
+#### Suggested Additional Features
+
+| Feature | Description | Use Case |
+|---------|-------------|----------|
+| **Contract Review** | Clause extraction, risk identification | Due diligence |
+| **Citation Graph** | Visualize regulation relationships | Legal research |
+| **Template Library** | Pre-built document templates | Document drafting |
+| **Collaborative Sessions** | Share sessions, team workspaces | Law firms |
+| **Legal Glossary** | Term definitions with references | Education |
+| **Version Comparison** | Compare regulation versions | Legislative tracking |
+
 ---
 
 ## Directory Structure Map
