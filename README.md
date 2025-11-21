@@ -18,11 +18,12 @@ This system provides intelligent legal consultation by combining:
 | Phase | Description | Status |
 |-------|-------------|--------|
 | **Phase 1** | Core RAG + LLM Integration | ✅ Complete |
-| **Phase 2** | Production Pipeline & Entry Points | 🔴 Not Started |
-| **Phase 3** | User Interface (Gradio) | 🔴 Not Started |
+| **Phase 2** | Production Pipeline & Entry Points | 🟡 In Progress |
+| **Phase 3** | Test Infrastructure | 🔴 Not Started |
 | **Phase 4** | API Layer (FastAPI) | 🔴 Not Started |
 | **Phase 5** | Deployment & Docker | 🔴 Not Started |
-| **Phase 6** | Agentic Workflows | 🔴 Not Started |
+| **Phase 6** | User Interface (Gradio) | 🔴 Not Started |
+| **Phase 7** | Agentic Workflows | 🔴 Not Started |
 
 ---
 
@@ -118,11 +119,15 @@ This system provides intelligent legal consultation by combining:
 │       ├── citation_tool.py            # Citation lookup
 │       └── summary_tool.py             # Summarization
 │
-├── pipeline/                            # 🔴 High-level pipelines
-│   ├── __init__.py
-│   ├── rag_pipeline.py                 # Complete RAG pipeline
-│   ├── streaming_pipeline.py           # Streaming response
-│   └── batch_pipeline.py               # Batch processing
+├── pipeline/                            # 🟡 High-level pipelines
+│   ├── __init__.py                     # ✅ Package exports
+│   ├── README.md                       # ✅ Module documentation
+│   ├── rag_pipeline.py                 # ✅ Complete RAG pipeline
+│   ├── tests/
+│   │   ├── __init__.py                 # ✅ Test package
+│   │   └── test_rag_pipeline.py        # ✅ Unit + integration tests
+│   ├── streaming_pipeline.py           # 🔴 Streaming response (future)
+│   └── batch_pipeline.py               # 🔴 Batch processing (future)
 │
 ├── tests/                               # 🟡 Needs reorganization
 │   ├── __init__.py
@@ -218,12 +223,14 @@ This system provides intelligent legal consultation by combining:
 | Citation Formatter | `core/generation/citation_formatter.py` | ✅ | Legal citation formatting |
 | Response Validator | `core/generation/response_validator.py` | ✅ | Response validation |
 
-### Phase 2: Production Pipeline (🔴 Not Started)
+### Phase 2: Production Pipeline (🟡 In Progress)
 
 | Component | File | Status | Description |
 |-----------|------|--------|-------------|
+| RAG Pipeline | `pipeline/rag_pipeline.py` | ✅ | High-level API |
+| Pipeline Tests | `pipeline/tests/test_rag_pipeline.py` | ✅ | Unit + integration tests |
+| Pipeline Docs | `pipeline/README.md` | ✅ | Module documentation |
 | Main Entry | `main.py` | 🔴 | System entry point |
-| RAG Pipeline | `pipeline/rag_pipeline.py` | 🔴 | High-level API |
 | Conversation Manager | `conversation/manager.py` | 🔴 | Session and history |
 | Markdown Export | `conversation/export/markdown_exporter.py` | 🔴 | Export to markdown |
 | JSON Export | `conversation/export/json_exporter.py` | 🔴 | Export to JSON |
@@ -390,10 +397,31 @@ cp .env.example .env
 
 ## Testing
 
-### Current Tests (Need Reorganization)
+### Cloud Testing
+
+Tests can be run on cloud services (Kaggle, Colab, etc.) with GPU support:
 
 ```bash
-# Existing tests in various locations
+# Run pipeline unit tests (no GPU required)
+pytest pipeline/tests/test_rag_pipeline.py -m "not integration" -v
+
+# Run pipeline integration tests (requires GPU)
+pytest pipeline/tests/test_rag_pipeline.py -m integration -v
+
+# Run all pipeline tests
+pytest pipeline/tests/test_rag_pipeline.py -v
+
+# Run with coverage
+pytest pipeline/tests/ --cov=pipeline --cov-report=html
+```
+
+### Current Tests
+
+```bash
+# Pipeline tests (NEW)
+pytest pipeline/tests/test_rag_pipeline.py -v
+
+# Existing tests
 python -m pytest loader/test_dataloader.py
 python -m pytest core/search/test_integrated_system.py
 python -m pytest core/generation/test_generation.py
@@ -414,6 +442,14 @@ pytest tests/e2e/
 # All tests
 pytest tests/
 ```
+
+### Test Markers
+
+| Marker | Description |
+|--------|-------------|
+| `integration` | Requires GPU and full model loading |
+| `slow` | Performance/benchmark tests |
+| (default) | Unit tests, no GPU required |
 
 ---
 
