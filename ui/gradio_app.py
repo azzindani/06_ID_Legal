@@ -67,8 +67,10 @@ def change_provider(provider_type: str):
         return f"Failed to switch provider: {e}"
 
 
-def chat(message: str, history: List[Tuple[str, str]]) -> Tuple[str, List[Tuple[str, str]]]:
-    """Process chat message and return response"""
+def chat(message: str, history: List[Tuple[str, str]],
+         show_thinking: bool = True, show_sources: bool = True,
+         show_metadata: bool = True) -> Tuple[str, List[Tuple[str, str]]]:
+    """Process chat message and return response with display options"""
     global pipeline, manager, current_session
 
     if not message.strip():
@@ -83,7 +85,44 @@ def chat(message: str, history: List[Tuple[str, str]]) -> Tuple[str, List[Tuple[
 
         # Generate response
         result = pipeline.query(message, conversation_history=context, stream=False)
-        response = result['answer']
+
+        # Build response based on display options
+        response_parts = []
+
+        # Add thinking process if available and enabled
+        if show_thinking and result.get('thinking'):
+            response_parts.append(f"🧠 **Proses Berpikir:**\n{result['thinking']}\n\n---\n")
+
+        # Main answer
+        response_parts.append(result['answer'])
+
+        # Add sources if available and enabled
+        if show_sources and result.get('sources'):
+            sources = result['sources']
+            if sources:
+                source_text = "\n\n---\n📚 **Sumber:**\n"
+                for i, src in enumerate(sources[:5], 1):
+                    if isinstance(src, dict):
+                        title = src.get('title', src.get('regulation', f'Source {i}'))
+                        score = src.get('score', 0)
+                        source_text += f"- {title} (skor: {score:.2f})\n"
+                    else:
+                        source_text += f"- {src}\n"
+                response_parts.append(source_text)
+
+        # Add metadata if enabled
+        if show_metadata and result.get('metadata'):
+            meta = result['metadata']
+            meta_text = "\n\n---\n📊 **Metadata:**\n"
+            if meta.get('query_type'):
+                meta_text += f"- Tipe: {meta['query_type']}\n"
+            if meta.get('processing_time'):
+                meta_text += f"- Waktu: {meta['processing_time']:.2f}s\n"
+            if meta.get('total_results'):
+                meta_text += f"- Hasil: {meta['total_results']}\n"
+            response_parts.append(meta_text)
+
+        response = "".join(response_parts)
 
         # Save to conversation history
         if current_session:
@@ -229,6 +268,11 @@ def create_demo() -> gr.Blocks:
 
             # Settings panel
             with gr.Column(scale=1):
+                with gr.Accordion("Display Options", open=True):
+                    show_thinking = gr.Checkbox(label="Show Thinking Process", value=True)
+                    show_sources = gr.Checkbox(label="Show Sources", value=True)
+                    show_metadata = gr.Checkbox(label="Show Metadata", value=False)
+
                 with gr.Accordion("Provider Settings", open=True):
                     provider_dropdown = gr.Dropdown(
                         choices=['local', 'openai', 'anthropic', 'google', 'openrouter'],
@@ -278,13 +322,13 @@ def create_demo() -> gr.Blocks:
         # Event handlers
         submit_btn.click(
             chat,
-            inputs=[msg, chatbot],
+            inputs=[msg, chatbot, show_thinking, show_sources, show_metadata],
             outputs=[msg, chatbot]
         )
 
         msg.submit(
             chat,
-            inputs=[msg, chatbot],
+            inputs=[msg, chatbot, show_thinking, show_sources, show_metadata],
             outputs=[msg, chatbot]
         )
 
