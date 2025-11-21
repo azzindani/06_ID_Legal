@@ -18,8 +18,7 @@ class ConsensusBuilder:
         self.config = config
         self.logger = get_logger("ConsensusBuilder")
         
-        # FIXED: Default to lower threshold
-        self.consensus_threshold = config.get('consensus_threshold', 0.3)
+        self.consensus_threshold = config.get('consensus_threshold', 0.6)
         self.enable_cross_validation = config.get('enable_cross_validation', True)
         self.enable_devil_advocate = config.get('enable_devil_advocate', True)
         

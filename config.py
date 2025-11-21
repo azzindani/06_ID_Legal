@@ -20,7 +20,7 @@ logger = get_logger("Config")
 # DATASET CONFIGURATION
 # =============================================================================
 
-DATASET_NAME = os.getenv("DATASET_NAME", "Azzindani/ID_REG_DB_2511")
+DATASET_NAME = os.getenv("DATASET_NAME", "Azzindani/ID_REG_DB_2510")
 HF_TOKEN = os.getenv("HF_TOKEN", None)
 
 # =============================================================================
@@ -55,9 +55,9 @@ Path(CACHE_DIR).mkdir(parents=True, exist_ok=True)
 DEFAULT_CONFIG = {
     'final_top_k': int(os.getenv("FINAL_TOP_K", "3")),
     'max_rounds': int(os.getenv("MAX_ROUNDS", "5")),
-    'initial_quality': float(os.getenv("INITIAL_QUALITY", "1.0")),      # FIXED: Start at 100%
-    'quality_degradation': float(os.getenv("QUALITY_DEGRADATION", "0.2")),  # FIXED: Degrade faster
-    'min_quality': float(os.getenv("MIN_QUALITY", "0.3")),              # FIXED: Go lower
+    'initial_quality': float(os.getenv("INITIAL_QUALITY", "0.95")),
+    'quality_degradation': float(os.getenv("QUALITY_DEGRADATION", "0.1")),
+    'min_quality': float(os.getenv("MIN_QUALITY", "0.5")),
     'parallel_research': os.getenv("PARALLEL_RESEARCH", "true").lower() == "true",
     'research_team_size': int(os.getenv("RESEARCH_TEAM_SIZE", "4")),
     'temperature': float(os.getenv("TEMPERATURE", "0.7")),
@@ -67,7 +67,7 @@ DEFAULT_CONFIG = {
     'min_p': float(os.getenv("MIN_P", "0.1")),
     'enable_cross_validation': os.getenv("ENABLE_CROSS_VALIDATION", "true").lower() == "true",
     'enable_devil_advocate': os.getenv("ENABLE_DEVIL_ADVOCATE", "true").lower() == "true",
-    'consensus_threshold': float(os.getenv("CONSENSUS_THRESHOLD", "0.3")),  # FIXED: Lower (was 0.6)
+    'consensus_threshold': float(os.getenv("CONSENSUS_THRESHOLD", "0.6")),
     'batch_size': BATCH_SIZE,
     'cache_dir': CACHE_DIR
 }
@@ -79,48 +79,48 @@ DEFAULT_CONFIG = {
 DEFAULT_SEARCH_PHASES = {
     'initial_scan': {
         'candidates': 400,
-        'semantic_threshold': 0.01,   # FIXED: Very permissive (was 0.05)
-        'keyword_threshold': 0.001,   # FIXED: Very permissive (was 0.01)
-        'description': 'Quick broad scan',
+        'semantic_threshold': 0.20,
+        'keyword_threshold': 0.06,
+        'description': 'Quick broad scan like human initial reading',
         'time_limit': 30,
         'focus_areas': ['regulation_type', 'enacting_body'],
         'enabled': True
     },
     'focused_review': {
-        'candidates': 200,
-        'semantic_threshold': 0.05,   # FIXED: Permissive (was 0.10)
-        'keyword_threshold': 0.01,    # FIXED: Permissive (was 0.05)
+        'candidates': 150,
+        'semantic_threshold': 0.35,
+        'keyword_threshold': 0.12,
         'description': 'Focused review of promising candidates',
         'time_limit': 45,
         'focus_areas': ['content', 'chapter', 'article'],
         'enabled': True
     },
     'deep_analysis': {
-        'candidates': 100,
-        'semantic_threshold': 0.10,   # FIXED: Moderate (was 0.15)
-        'keyword_threshold': 0.05,    # FIXED: Moderate (was 0.10)
-        'description': 'Deep contextual analysis',
+        'candidates': 60,
+        'semantic_threshold': 0.45,
+        'keyword_threshold': 0.18,
+        'description': 'Deep contextual analysis like careful reading',
         'time_limit': 60,
         'focus_areas': ['kg_entities', 'cross_references'],
         'enabled': True
     },
     'verification': {
-        'candidates': 50,
-        'semantic_threshold': 0.15,   # FIXED: Still selective (was 0.20)
-        'keyword_threshold': 0.10,    # FIXED: Still selective (was 0.15)
-        'description': 'Final verification',
+        'candidates': 30,
+        'semantic_threshold': 0.55,
+        'keyword_threshold': 0.22,
+        'description': 'Final verification and cross-checking',
         'time_limit': 30,
         'focus_areas': ['authority_score', 'temporal_score'],
         'enabled': True
     },
     'expert_review': {
-        'candidates': 50,
-        'semantic_threshold': 0.20,   # Expert level
-        'keyword_threshold': 0.15,    # Expert level
-        'description': 'Expert specialist review',
+        'candidates': 45,
+        'semantic_threshold': 0.50,
+        'keyword_threshold': 0.20,
+        'description': 'Expert specialist review for complex cases',
         'time_limit': 40,
         'focus_areas': ['legal_richness', 'completeness_score'],
-        'enabled': False  # Optional phase
+        'enabled': False
     }
 }
 
@@ -130,7 +130,7 @@ DEFAULT_SEARCH_PHASES = {
 
 RESEARCH_TEAM_PERSONAS = {
     'senior_legal_researcher': {
-        'name': 'Senior Legal Researcher',
+        'name': '👨‍⚖️ Senior Legal Researcher',
         'experience_years': 15,
         'specialties': ['constitutional_law', 'procedural_law', 'precedent_analysis'],
         'approach': 'systematic_thorough',
@@ -148,7 +148,7 @@ RESEARCH_TEAM_PERSONAS = {
         'accuracy_bonus': 0.15
     },
     'junior_legal_researcher': {
-        'name': 'Junior Legal Researcher',
+        'name': '👩‍⚖️ Junior Legal Researcher',
         'experience_years': 3,
         'specialties': ['research_methodology', 'digital_search', 'comprehensive_coverage'],
         'approach': 'broad_comprehensive',
@@ -166,7 +166,7 @@ RESEARCH_TEAM_PERSONAS = {
         'accuracy_bonus': 0.0
     },
     'specialist_researcher': {
-        'name': 'Knowledge Graph Specialist',
+        'name': '📚 Knowledge Graph Specialist',
         'experience_years': 8,
         'specialties': ['knowledge_graphs', 'semantic_analysis', 'entity_relationships'],
         'approach': 'relationship_focused',
@@ -184,7 +184,7 @@ RESEARCH_TEAM_PERSONAS = {
         'accuracy_bonus': 0.1
     },
     'procedural_expert': {
-        'name': 'Procedural Law Expert',
+        'name': '⚖️ Procedural Law Expert',
         'experience_years': 12,
         'specialties': ['procedural_law', 'administrative_law', 'process_analysis'],
         'approach': 'step_by_step_methodical',
@@ -202,7 +202,7 @@ RESEARCH_TEAM_PERSONAS = {
         'accuracy_bonus': 0.08
     },
     'devils_advocate': {
-        'name': "Devil's Advocate Reviewer",
+        'name': "🔍 Devil's Advocate Reviewer",
         'experience_years': 10,
         'specialties': ['critical_analysis', 'alternative_interpretations', 'edge_cases'],
         'approach': 'critical_challenging',

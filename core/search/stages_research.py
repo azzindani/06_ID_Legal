@@ -22,9 +22,9 @@ class StagesResearchEngine:
         
         self.search_phases = config.get('search_phases', DEFAULT_SEARCH_PHASES)
         self.max_rounds = config.get('max_rounds', 5)
-        self.initial_quality = config.get('initial_quality', 1.0)
-        self.quality_degradation = config.get('quality_degradation', 0.15)
-        self.min_quality = config.get('min_quality', 0.3)
+        self.initial_quality = config.get('initial_quality', 0.95)
+        self.quality_degradation = config.get('quality_degradation', 0.1)
+        self.min_quality = config.get('min_quality', 0.5)
         
         self.logger.info("StagesResearchEngine initialized", {
             "max_rounds": self.max_rounds,
