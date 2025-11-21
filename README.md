@@ -74,16 +74,20 @@ This system provides intelligent legal consultation by combining:
 │   ├── __init__.py                     # ✅ Exists
 │   └── dataloader.py                   # ✅ Dataset loading
 │
-├── conversation/                        # 🔴 Conversation management
-│   ├── __init__.py
-│   ├── manager.py                      # Session state, history tracking
-│   ├── context_enhancer.py             # Context-aware enhancements
-│   └── export/
-│       ├── __init__.py
-│       ├── base_exporter.py            # Abstract base class
-│       ├── markdown_exporter.py        # Markdown export
-│       ├── json_exporter.py            # JSON export
-│       └── html_exporter.py            # HTML export
+├── conversation/                        # ✅ Conversation management
+│   ├── __init__.py                     # ✅ Package exports
+│   ├── README.md                       # ✅ Module documentation
+│   ├── manager.py                      # ✅ Session state, history tracking
+│   ├── export/
+│   │   ├── __init__.py                 # ✅ Export package
+│   │   ├── base_exporter.py            # ✅ Abstract base class
+│   │   ├── markdown_exporter.py        # ✅ Markdown export
+│   │   ├── json_exporter.py            # ✅ JSON export
+│   │   └── html_exporter.py            # ✅ HTML export
+│   └── tests/
+│       ├── __init__.py                 # ✅ Test package
+│       ├── test_manager.py             # ✅ Manager tests
+│       └── test_exporters.py           # ✅ Export tests
 │
 ├── api/                                 # 🔴 API layer
 │   ├── __init__.py
@@ -230,11 +234,14 @@ This system provides intelligent legal consultation by combining:
 | RAG Pipeline | `pipeline/rag_pipeline.py` | ✅ | High-level API |
 | Pipeline Tests | `pipeline/tests/test_rag_pipeline.py` | ✅ | Unit + integration tests |
 | Pipeline Docs | `pipeline/README.md` | ✅ | Module documentation |
+| Conversation Manager | `conversation/manager.py` | ✅ | Session and history |
+| Manager Tests | `conversation/tests/test_manager.py` | ✅ | Manager unit tests |
+| Markdown Export | `conversation/export/markdown_exporter.py` | ✅ | Export to markdown |
+| JSON Export | `conversation/export/json_exporter.py` | ✅ | Export to JSON |
+| HTML Export | `conversation/export/html_exporter.py` | ✅ | Export to HTML |
+| Exporter Tests | `conversation/tests/test_exporters.py` | ✅ | Export unit tests |
+| Conversation Docs | `conversation/README.md` | ✅ | Module documentation |
 | Main Entry | `main.py` | 🔴 | System entry point |
-| Conversation Manager | `conversation/manager.py` | 🔴 | Session and history |
-| Markdown Export | `conversation/export/markdown_exporter.py` | 🔴 | Export to markdown |
-| JSON Export | `conversation/export/json_exporter.py` | 🔴 | Export to JSON |
-| HTML Export | `conversation/export/html_exporter.py` | 🔴 | Export to HTML |
 
 ### Phase 3: User Interface (🔴 Not Started)
 
@@ -418,8 +425,12 @@ pytest pipeline/tests/ --cov=pipeline --cov-report=html
 ### Current Tests
 
 ```bash
-# Pipeline tests (NEW)
+# Pipeline tests
 pytest pipeline/tests/test_rag_pipeline.py -v
+
+# Conversation tests
+pytest conversation/tests/test_manager.py -v
+pytest conversation/tests/test_exporters.py -v
 
 # Existing tests
 python -m pytest loader/test_dataloader.py
