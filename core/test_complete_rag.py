@@ -12,6 +12,11 @@ import json
 from pathlib import Path
 from typing import Dict, Any, List
 
+# Skip if dependencies not available
+import pytest
+numpy = pytest.importorskip("numpy")
+torch = pytest.importorskip("torch")
+
 sys.path.insert(0, os.path.abspath('.'))
 
 from logger_utils import initialize_logging, get_logger, log_session_end
