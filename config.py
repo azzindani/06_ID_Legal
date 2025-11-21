@@ -7,11 +7,15 @@ import os
 from typing import Dict, Any, List
 import warnings
 from pathlib import Path
-from dotenv import load_dotenv
-from logger_utils import get_logger
 
-# Load environment variables
-load_dotenv()
+# Make dotenv optional
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+from logger_utils import get_logger
 
 # Initialize logger for config module
 logger = get_logger("Config")
