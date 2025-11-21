@@ -1,0 +1,53 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+.eggs
+*.egg-info
+dist
+build
+.pytest_cache
+.coverage
+htmlcov
+
+# Environment
+.env
+.venv
+venv
+env
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Notebooks
+*.ipynb
+.ipynb_checkpoints
+
+# Logs and exports
+logs/
+exports/
+*.log
+
+# Docker
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# Documentation
+*.md
+!README.md
+
+# Tests (optional - remove if you want tests in container)
+tests/
+**/test_*.py
+conftest.py
+pytest.ini

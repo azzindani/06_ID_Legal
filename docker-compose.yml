@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  # Main RAG API service
+  rag-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: id-legal-rag-api
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - HF_HOME=/app/.cache/huggingface
+      - CUDA_VISIBLE_DEVICES=0
+    volumes:
+      - ./exports:/app/exports
+      - ./logs:/app/logs
+      - huggingface-cache:/app/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+  # Optional: Gradio UI service
+  rag-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: id-legal-rag-ui
+    command: ["python", "ui/gradio_app.py"]
+    ports:
+      - "7860:7860"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - API_URL=http://rag-api:8000
+    depends_on:
+      rag-api:
+        condition: service_healthy
+    restart: unless-stopped
+    profiles:
+      - ui
+
+volumes:
+  huggingface-cache:
+    driver: local
+
+networks:
+  default:
+    name: id-legal-network
