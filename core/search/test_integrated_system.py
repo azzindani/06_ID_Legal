@@ -10,6 +10,11 @@ import json
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
+# Skip if dependencies not available
+import pytest
+numpy = pytest.importorskip("numpy")
+torch = pytest.importorskip("torch")
+
 # Add parent directory to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 

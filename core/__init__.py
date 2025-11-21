@@ -9,18 +9,30 @@ This module provides the core RAG functionality including:
 - LLM-based generation
 """
 
-from .search.query_detection import QueryDetector
-from .search.hybrid_search import HybridSearchEngine
-from .search.stages_research import StagesResearch
-from .search.consensus import ConsensusBuilder
-from .search.reranking import Reranker
-from .search.langgraph_orchestrator import LangGraphOrchestrator
+# Lazy imports to avoid torch dependency during testing
+_import_map = {
+    # Search components
+    'QueryDetector': ('.search.query_detection', 'QueryDetector'),
+    'HybridSearchEngine': ('.search.hybrid_search', 'HybridSearchEngine'),
+    'StagesResearch': ('.search.stages_research', 'StagesResearch'),
+    'ConsensusBuilder': ('.search.consensus', 'ConsensusBuilder'),
+    'Reranker': ('.search.reranking', 'Reranker'),
+    'LangGraphOrchestrator': ('.search.langgraph_orchestrator', 'LangGraphOrchestrator'),
+    # Generation components
+    'LLMEngine': ('.generation.llm_engine', 'LLMEngine'),
+    'GenerationEngine': ('.generation.generation_engine', 'GenerationEngine'),
+    'PromptBuilder': ('.generation.prompt_builder', 'PromptBuilder'),
+    'CitationFormatter': ('.generation.citation_formatter', 'CitationFormatter'),
+    'ResponseValidator': ('.generation.response_validator', 'ResponseValidator'),
+}
 
-from .generation.llm_engine import LLMEngine
-from .generation.generation_engine import GenerationEngine
-from .generation.prompt_builder import PromptBuilder
-from .generation.citation_formatter import CitationFormatter
-from .generation.response_validator import ResponseValidator
+def __getattr__(name):
+    if name in _import_map:
+        module_path, attr_name = _import_map[name]
+        import importlib
+        module = importlib.import_module(module_path, __name__)
+        return getattr(module, attr_name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 __all__ = [
     # Search components
