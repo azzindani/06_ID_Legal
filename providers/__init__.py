@@ -15,7 +15,7 @@ from .openai_provider import OpenAIProvider
 from .anthropic_provider import AnthropicProvider
 from .google_provider import GoogleProvider
 from .openrouter_provider import OpenRouterProvider
-from .factory import create_provider, get_provider
+from .factory import create_provider, get_provider, list_providers, switch_provider, PROVIDERS
 
 __all__ = [
     'BaseLLMProvider',
@@ -26,4 +26,7 @@ __all__ = [
     'OpenRouterProvider',
     'create_provider',
     'get_provider',
+    'list_providers',
+    'switch_provider',
+    'PROVIDERS',
 ]
