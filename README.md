@@ -274,7 +274,75 @@ This system provides intelligent legal consultation by combining:
 
 ## Quick Start
 
-### Current Usage (Phase 1)
+### Installation
+
+```bash
+# Clone repository
+git clone https://github.com/azzindani/06_ID_Legal.git
+cd 06_ID_Legal
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Or install as package
+pip install -e .
+```
+
+### Running the System
+
+#### Option 1: Command Line Interface
+```bash
+# Interactive mode
+python main.py
+
+# Single query
+python main.py --query "Apa sanksi pelanggaran UU Ketenagakerjaan?"
+
+# Export session
+python main.py --export SESSION_ID --format md
+```
+
+#### Option 2: REST API
+```bash
+# Start API server
+uvicorn api.server:app --host 0.0.0.0 --port 8000
+
+# API docs at http://localhost:8000/docs
+```
+
+#### Option 3: Web UI (Gradio)
+```bash
+python ui/gradio_app.py
+# Open http://localhost:7860
+```
+
+#### Option 4: Docker
+```bash
+# API only
+docker-compose up
+
+# API + UI
+docker-compose --profile ui up
+```
+
+### Simple Python Usage
+
+```python
+from pipeline import RAGPipeline
+
+# Initialize
+pipeline = RAGPipeline()
+pipeline.initialize()
+
+# Query
+result = pipeline.query("Apa sanksi pelanggaran UU Ketenagakerjaan?")
+print(result['answer'])
+
+# Cleanup
+pipeline.shutdown()
+```
+
+### Advanced Usage (Phase 1)
 
 ```python
 from config import get_default_config, DEFAULT_SEARCH_PHASES, DATASET_NAME, EMBEDDING_DIM
@@ -362,36 +430,6 @@ DEFAULT_CONFIG = {
 | KG Specialist | 8 years | +10% |
 | Procedural Expert | 12 years | +8% |
 | Devil's Advocate | 10 years | +12% |
-
----
-
-## Installation
-
-```bash
-# Clone repository
-git clone <repository>
-cd 06_ID_Legal
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Configure environment (optional)
-cp .env.example .env
-# Edit .env with your settings
-```
-
-### Key Dependencies
-
-- torch
-- transformers
-- langgraph
-- gradio
-- datasets
-- scipy
-- igraph
-- python-louvain
-- fastapi (Phase 4)
-- uvicorn (Phase 4)
 
 ---
 
