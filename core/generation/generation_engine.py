@@ -1,0 +1,462 @@
+"""
+Complete Generation Engine - Orchestrates all generation components
+Integrates LLM, prompt building, citation formatting, and validation
+
+File: core/generation/generation_engine.py
+"""
+
+from typing import Dict, Any, List, Optional, Generator
+import time
+from logger_utils import get_logger
+from .llm_engine import LLMEngine
+from .prompt_builder import PromptBuilder
+from .citation_formatter import CitationFormatter
+from .response_validator import ResponseValidator
+
+
+class GenerationEngine:
+    """
+    Complete generation pipeline orchestrator
+    Coordinates all generation components for end-to-end response generation
+    """
+    
+    def __init__(self, config: Dict[str, Any]):
+        self.logger = get_logger("GenerationEngine")
+        self.config = config
+        
+        # Initialize components
+        self.llm_engine = LLMEngine(config)
+        self.prompt_builder = PromptBuilder(config)
+        self.citation_formatter = CitationFormatter(config)
+        self.response_validator = ResponseValidator(config)
+        
+        # Generation settings
+        self.enable_validation = config.get('enable_validation', True)
+        self.enable_enhancement = config.get('enable_enhancement', True)
+        self.strict_validation = config.get('strict_validation', False)
+        
+        self.logger.info("GenerationEngine initialized", {
+            "validation_enabled": self.enable_validation,
+            "enhancement_enabled": self.enable_enhancement
+        })
+    
+    def initialize(self) -> bool:
+        """
+        Initialize generation engine (load models)
+        
+        Returns:
+            True if successful, False otherwise
+        """
+        self.logger.info("Initializing generation engine...")
+        
+        if not self.llm_engine.load_model():
+            self.logger.error("Failed to load LLM model")
+            return False
+        
+        self.logger.success("Generation engine initialized successfully")
+        return True
+    
+    def generate_answer(
+        self,
+        query: str,
+        retrieved_results: List[Dict[str, Any]],
+        query_analysis: Optional[Dict[str, Any]] = None,
+        conversation_history: Optional[List[Dict[str, str]]] = None,
+        stream: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Generate complete answer with all enhancements
+        
+        Args:
+            query: User query
+            retrieved_results: Retrieved and ranked documents
+            query_analysis: Optional query analysis
+            conversation_history: Optional conversation context
+            stream: Whether to stream response
+            
+        Returns:
+            Complete generation result dictionary
+        """
+        self.logger.info("Starting answer generation", {
+            "query": query[:50] + "..." if len(query) > 50 else query,
+            "num_results": len(retrieved_results),
+            "stream": stream
+        })
+        
+        start_time = time.time()
+        
+        try:
+            # Step 1: Determine template type
+            template_type = self._determine_template_type(query, query_analysis)
+            
+            self.logger.debug("Template type determined", {
+                "template": template_type
+            })
+            
+            # Step 2: Build prompt
+            prompt = self.prompt_builder.build_prompt(
+                query=query,
+                retrieved_results=retrieved_results,
+                query_analysis=query_analysis,
+                conversation_history=conversation_history,
+                template_type=template_type
+            )
+            
+            self.logger.debug("Prompt built", {
+                "prompt_length": len(prompt)
+            })
+            
+            # Step 3: Generate response
+            if stream:
+                return self._generate_streaming_answer(
+                    query=query,
+                    prompt=prompt,
+                    retrieved_results=retrieved_results
+                )
+            else:
+                generation_result = self.llm_engine.generate(prompt)
+                
+                if not generation_result['success']:
+                    self.logger.error("Generation failed", {
+                        "error": generation_result.get('error')
+                    })
+                    return {
+                        'success': False,
+                        'error': generation_result.get('error'),
+                        'answer': '',
+                        'metadata': {}
+                    }
+                
+                raw_answer = generation_result['generated_text']
+                
+                # Step 4: Post-process response
+                processed_answer = self._post_process_response(raw_answer)
+                
+                # Step 5: Add citations
+                cited_answer = self.citation_formatter.format_inline_references(
+                    processed_answer,
+                    retrieved_results
+                )
+                
+                # Step 6: Validate response
+                validation_result = None
+                if self.enable_validation:
+                    validation_result = self.response_validator.validate_response(
+                        response=cited_answer,
+                        query=query,
+                        retrieved_results=retrieved_results,
+                        strict=self.strict_validation
+                    )
+                    
+                    if self.enable_enhancement:
+                        cited_answer = validation_result['enhanced_response']
+                
+                # Step 7: Build complete result
+                total_time = time.time() - start_time
+                
+                result = {
+                    'success': True,
+                    'answer': cited_answer,
+                    'raw_answer': raw_answer,
+                    'metadata': {
+                        'query': query,
+                        'template_type': template_type,
+                        'num_source_docs': len(retrieved_results),
+                        'generation_time': generation_result['generation_time'],
+                        'total_time': total_time,
+                        'tokens_generated': generation_result['tokens_generated'],
+                        'tokens_per_second': generation_result['tokens_per_second'],
+                        'validation': validation_result if validation_result else {},
+                        'prompt_length': len(prompt)
+                    },
+                    'citations': self._extract_citations(retrieved_results),
+                    'sources': self._format_sources(retrieved_results)
+                }
+                
+                self.logger.success("Answer generation completed", {
+                    "total_time": f"{total_time:.2f}s",
+                    "answer_length": len(cited_answer),
+                    "tokens_generated": generation_result['tokens_generated']
+                })
+                
+                return result
+        
+        except Exception as e:
+            self.logger.error("Answer generation failed", {
+                "error": str(e),
+                "error_type": type(e).__name__
+            })
+            
+            import traceback
+            self.logger.debug("Traceback", {
+                "traceback": traceback.format_exc()[:500]
+            })
+            
+            return {
+                'success': False,
+                'error': str(e),
+                'answer': '',
+                'metadata': {}
+            }
+    
+    def _generate_streaming_answer(
+        self,
+        query: str,
+        prompt: str,
+        retrieved_results: List[Dict[str, Any]]
+    ) -> Generator[Dict[str, Any], None, None]:
+        """Generate answer with streaming"""
+        
+        self.logger.info("Starting streaming generation")
+        
+        full_response = ""
+        tokens_generated = 0
+        
+        try:
+            for chunk in self.llm_engine.generate_stream(prompt):
+                if chunk['success']:
+                    if not chunk['done']:
+                        token = chunk['token']
+                        full_response += token
+                        tokens_generated = chunk['tokens_generated']
+                        
+                        yield {
+                            'type': 'token',
+                            'token': token,
+                            'tokens_generated': tokens_generated,
+                            'done': False
+                        }
+                    else:
+                        # Final chunk
+                        # Post-process and validate
+                        processed = self._post_process_response(full_response)
+                        
+                        cited = self.citation_formatter.format_inline_references(
+                            processed,
+                            retrieved_results
+                        )
+                        
+                        validation_result = None
+                        if self.enable_validation:
+                            validation_result = self.response_validator.validate_response(
+                                response=cited,
+                                query=query,
+                                retrieved_results=retrieved_results,
+                                strict=False  # Don't be strict in streaming
+                            )
+                            
+                            if self.enable_enhancement:
+                                cited = validation_result['enhanced_response']
+                        
+                        yield {
+                            'type': 'complete',
+                            'answer': cited,
+                            'raw_answer': full_response,
+                            'tokens_generated': tokens_generated,
+                            'generation_time': chunk.get('generation_time', 0),
+                            'tokens_per_second': chunk.get('tokens_per_second', 0),
+                            'validation': validation_result,
+                            'citations': self._extract_citations(retrieved_results),
+                            'done': True
+                        }
+                else:
+                    yield {
+                        'type': 'error',
+                        'error': chunk.get('error', 'Unknown error'),
+                        'done': True
+                    }
+                    
+        except Exception as e:
+            self.logger.error("Streaming generation failed", {
+                "error": str(e)
+            })
+            yield {
+                'type': 'error',
+                'error': str(e),
+                'done': True
+            }
+    
+    def _determine_template_type(
+        self,
+        query: str,
+        query_analysis: Optional[Dict[str, Any]]
+    ) -> str:
+        """Determine appropriate prompt template"""
+        
+        if not query_analysis:
+            return 'rag_qa'
+        
+        query_type = query_analysis.get('query_type', 'general')
+        
+        # Map query types to templates
+        template_mapping = {
+            'procedural': 'procedural',
+            'specific_article': 'rag_qa',
+            'definitional': 'rag_qa',
+            'sanctions': 'rag_qa',
+            'general': 'rag_qa'
+        }
+        
+        # Check for follow-up or clarification
+        if query_analysis.get('is_followup'):
+            return 'followup'
+        
+        if query_analysis.get('is_clarification'):
+            return 'clarification'
+        
+        return template_mapping.get(query_type, 'rag_qa')
+    
+    def _post_process_response(self, response: str) -> str:
+        """Post-process generated response"""
+        
+        # Sanitize
+        processed = self.response_validator.sanitize_response(response)
+        
+        # Extract thinking tags if present
+        import re
+        think_pattern = r'<think>(.*?)</think>'
+        processed = re.sub(think_pattern, '', processed, flags=re.DOTALL | re.IGNORECASE)
+        
+        # Clean up formatting
+        processed = processed.strip()
+        
+        return processed
+    
+    def _extract_citations(
+        self,
+        results: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """Extract citation information from results"""
+        
+        citations = []
+        
+        for idx, result in enumerate(results, 1):
+            record = result.get('record', {})
+            
+            citation = {
+                'id': idx,
+                'regulation_type': record.get('regulation_type', ''),
+                'regulation_number': record.get('regulation_number', ''),
+                'year': record.get('year', ''),
+                'about': record.get('about', ''),
+                'article': record.get('article', ''),
+                'chapter': record.get('chapter', ''),
+                'citation_text': self.citation_formatter.format_citation(
+                    record,
+                    style='standard'
+                )
+            }
+            
+            citations.append(citation)
+        
+        return citations
+    
+    def _format_sources(
+        self,
+        results: List[Dict[str, Any]],
+        max_sources: int = 5
+    ) -> List[Dict[str, Any]]:
+        """Format source information"""
+        
+        sources = []
+        
+        for idx, result in enumerate(results[:max_sources], 1):
+            record = result.get('record', {})
+            
+            source = {
+                'id': idx,
+                'title': self.citation_formatter.format_citation(
+                    record,
+                    style='short'
+                ),
+                'type': record.get('regulation_type', ''),
+                'year': record.get('year', ''),
+                'relevance_score': result.get(
+                    'final_score',
+                    result.get('rerank_score', 0)
+                ),
+                'url': record.get('url', ''),  # If available
+                'excerpt': record.get('content', '')[:200] + "..."
+            }
+            
+            sources.append(source)
+        
+        return sources
+    
+    def generate_follow_up_suggestions(
+        self,
+        query: str,
+        answer: str,
+        retrieved_results: List[Dict[str, Any]]
+    ) -> List[str]:
+        """
+        Generate follow-up question suggestions
+        
+        Args:
+            query: Original query
+            answer: Generated answer
+            retrieved_results: Retrieved documents
+            
+        Returns:
+            List of suggested follow-up questions
+        """
+        self.logger.info("Generating follow-up suggestions")
+        
+        suggestions = []
+        
+        # Extract key topics from results
+        topics = set()
+        for result in retrieved_results[:3]:
+            record = result.get('record', {})
+            
+            # Add regulation type
+            reg_type = record.get('regulation_type', '')
+            if reg_type:
+                topics.add(reg_type)
+            
+            # Extract keywords from about
+            about = record.get('about', '')
+            if about:
+                # Simple keyword extraction
+                words = about.lower().split()
+                topics.update(w for w in words if len(w) > 5)
+        
+        # Generate template suggestions
+        if 'sanksi' in query.lower() or 'pidana' in query.lower():
+            suggestions.append("Apa saja prosedur penegakan hukum untuk pelanggaran ini?")
+            suggestions.append("Bagaimana cara melaporkan pelanggaran?")
+        
+        if 'prosedur' in query.lower() or 'tata cara' in query.lower():
+            suggestions.append("Apa persyaratan yang harus dipenuhi?")
+            suggestions.append("Berapa lama proses ini biasanya memakan waktu?")
+        
+        # Add regulation-specific suggestions
+        if len(retrieved_results) > 0:
+            first_result = retrieved_results[0].get('record', {})
+            reg_type = first_result.get('regulation_type', '')
+            reg_num = first_result.get('regulation_number', '')
+            
+            if reg_type and reg_num:
+                suggestions.append(
+                    f"Apa peraturan lain yang berkaitan dengan {reg_type} No. {reg_num}?"
+                )
+        
+        return suggestions[:3]  # Return top 3
+    
+    def shutdown(self):
+        """Shutdown generation engine and cleanup"""
+        self.logger.info("Shutting down generation engine")
+        self.llm_engine.unload_model()
+        self.logger.success("Generation engine shut down")
+    
+    def get_engine_info(self) -> Dict[str, Any]:
+        """Get engine information"""
+        return {
+            'llm_info': self.llm_engine.get_model_info(),
+            'prompt_info': self.prompt_builder.get_template_info(),
+            'config': {
+                'validation_enabled': self.enable_validation,
+                'enhancement_enabled': self.enable_enhancement,
+                'strict_validation': self.strict_validation
+            }
+        }
