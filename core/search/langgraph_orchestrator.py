@@ -12,6 +12,7 @@ from .hybrid_search import HybridSearchEngine
 from .stages_research import StagesResearchEngine
 from .consensus import ConsensusBuilder
 from .reranking import RerankerEngine
+from core.knowledge_graph.kg_core import KnowledgeGraphCore
 
 
 class RAGState(TypedDict, total=False):
@@ -70,11 +71,14 @@ class LangGraphRAGOrchestrator:
             reranker_model=reranker_model,
             config=config
         )
-        
+
+        # Initialize KG core for regulation reference extraction
+        self.kg_core = KnowledgeGraphCore(config)
+
         # Build workflow
         self.workflow = self._build_workflow()
         self.app = self.workflow.compile()
-        
+
         self.logger.info("LangGraph RAG Orchestrator initialized")
     
     def _build_workflow(self) -> StateGraph:
@@ -164,36 +168,78 @@ class LangGraphRAGOrchestrator:
             }
     
     def _research_node(self, state: RAGState) -> Dict[str, Any]:
-        """Multi-Stage Research Node"""
+        """Multi-Stage Research Node with Metadata-First Search"""
         self.logger.info("Executing research node")
-        
+
         try:
             query = self._safe_get(state, 'enhanced_query') or state['query']
             query_analysis = state['query_analysis']
-            
-            # Conduct research
+
+            # Step 1: Extract regulation references and do metadata-first search
+            metadata_results = []
+            reg_refs = self.kg_core.extract_regulation_references_with_confidence(query)
+
+            if reg_refs:
+                self.logger.info("Regulation references found", {
+                    "count": len(reg_refs),
+                    "top_confidence": reg_refs[0]['confidence'] if reg_refs else 0
+                })
+
+                # Perform metadata-first search for exact matches
+                metadata_results = self.hybrid_search.metadata_first_search(
+                    regulation_references=reg_refs,
+                    top_k=20
+                )
+
+                self.logger.info("Metadata-first search completed", {
+                    "results": len(metadata_results),
+                    "perfect_matches": sum(1 for r in metadata_results if r['scores']['final'] == 1.0)
+                })
+
+            # Step 2: Conduct regular multi-stage research
             research_data = self.stages_research.conduct_research(
                 query=query,
                 query_analysis=query_analysis,
                 team_composition=query_analysis['team_composition']
             )
-            
+
+            # Step 3: Merge metadata-first results (they get priority)
+            if metadata_results:
+                # Get IDs already in research results
+                research_ids = {r.get('metadata', {}).get('global_id', i)
+                               for i, r in enumerate(research_data['all_results'])}
+
+                # Add metadata results that aren't duplicates
+                for meta_result in metadata_results:
+                    meta_id = meta_result['metadata'].get('global_id')
+                    if meta_id not in research_ids:
+                        research_data['all_results'].insert(0, meta_result)
+
+                # Re-sort by score (perfect matches first)
+                research_data['all_results'].sort(
+                    key=lambda x: x.get('scores', {}).get('final', 0),
+                    reverse=True
+                )
+
             # Get summary
             research_summary = self.stages_research.get_research_summary(research_data)
-            
+
             self.logger.success("Research completed", {
                 "rounds": research_data['rounds_executed'],
-                "results": len(research_data['all_results'])
+                "results": len(research_data['all_results']),
+                "metadata_first_hits": len(metadata_results)
             })
-            
+
             new_metadata = {
                 "research": {
                     "rounds": research_data['rounds_executed'],
                     "total_results": len(research_data['all_results']),
-                    "candidates_evaluated": research_data['total_candidates_evaluated']
+                    "candidates_evaluated": research_data['total_candidates_evaluated'],
+                    "metadata_first_results": len(metadata_results),
+                    "regulation_references": len(reg_refs)
                 }
             }
-            
+
             return {
                 "research_data": research_data,
                 "research_summary": research_summary,
