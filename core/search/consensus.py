@@ -85,11 +85,82 @@ class ConsensusBuilder:
             "threshold": f"{self.consensus_threshold:.0%}"
         })
         
-        # FIXED: If no results, log detailed debug info
+        # FIXED: If no results, apply fallback with progressively lower thresholds
         if len(consensus_data['validated_results']) == 0:
             self.logger.warning("NO RESULTS PASSED CONSENSUS!")
             self._log_consensus_debug(results_by_doc, team_composition)
-        
+
+            # FALLBACK: Try progressively lower thresholds
+            fallback_thresholds = [0.5, 0.4, 0.3, 0.25, 0.0]
+
+            for fallback_threshold in fallback_thresholds:
+                self.logger.info(f"Trying fallback threshold: {fallback_threshold:.0%}")
+
+                for global_id, doc_results in results_by_doc.items():
+                    # Count how many team members found this document
+                    personas_found = set()
+                    for result in doc_results:
+                        persona = result['metadata'].get('persona', 'unknown')
+                        personas_found.add(persona)
+
+                    # Calculate voting ratio
+                    voting_ratio = len(personas_found) / len(team_composition) if team_composition else 0
+
+                    # Check if passes fallback threshold
+                    if voting_ratio >= fallback_threshold or fallback_threshold == 0.0:
+                        # Already processed this document
+                        if any(r['global_id'] == global_id for r in consensus_data['validated_results']):
+                            continue
+
+                        # Aggregate scores
+                        score_aggregation = {
+                            'final': [],
+                            'semantic': [],
+                            'keyword': [],
+                            'kg': [],
+                            'authority': [],
+                            'temporal': [],
+                            'completeness': []
+                        }
+
+                        for result in doc_results:
+                            for score_type in score_aggregation.keys():
+                                score_aggregation[score_type].append(result['scores'][score_type])
+
+                        aggregated_scores = {
+                            score_type: sum(scores) / len(scores)
+                            for score_type, scores in score_aggregation.items()
+                        }
+
+                        consensus_score = aggregated_scores['final'] * (0.7 + 0.3 * voting_ratio)
+                        representative = max(doc_results, key=lambda x: x['scores']['final'])
+
+                        consensus_result = {
+                            'global_id': global_id,
+                            'record': representative['record'],
+                            'consensus_score': consensus_score,
+                            'voting_ratio': voting_ratio,
+                            'personas_agreed': list(personas_found),
+                            'aggregated_scores': aggregated_scores,
+                            'score_variance': self._calculate_score_variance(score_aggregation['final']),
+                            'metadata': representative['metadata'],
+                            'fallback_applied': True,
+                            'fallback_threshold': fallback_threshold
+                        }
+
+                        consensus_data['validated_results'].append(consensus_result)
+                        consensus_data['consensus_scores'][global_id] = consensus_score
+
+                # Stop if we have enough results
+                if len(consensus_data['validated_results']) >= 3:
+                    self.logger.info(f"Fallback succeeded with threshold {fallback_threshold:.0%}", {
+                        "results": len(consensus_data['validated_results'])
+                    })
+                    break
+
+            if len(consensus_data['validated_results']) == 0:
+                self.logger.error("FALLBACK FAILED - No results even with 0% threshold!")
+
         # Sort by consensus score
         consensus_data['validated_results'].sort(
             key=lambda x: x['consensus_score'],
