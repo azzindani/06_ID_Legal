@@ -267,5 +267,70 @@ class QueryDetector:
             "original_length": len(original_query),
             "enhanced_length": len(enhanced)
         })
-        
+
         return enhanced
+
+
+if __name__ == "__main__":
+    from logger_utils import initialize_logging
+    initialize_logging(enable_file_logging=False)
+
+    print("=" * 60)
+    print("QUERY DETECTION TEST")
+    print("=" * 60)
+
+    detector = QueryDetector()
+
+    # Test queries
+    test_queries = [
+        ("Apa itu hukum ketenagakerjaan?", "definitional"),
+        ("Bagaimana prosedur pengajuan cuti?", "procedural"),
+        ("Apa sanksi dalam UU ITE pasal 27?", "sanctions"),
+        ("Jelaskan pasal 156 UU Ketenagakerjaan", "specific_article"),
+        ("Peraturan tentang upah minimum", "general"),
+    ]
+
+    print("\nQuery Type Detection:")
+    print("-" * 60)
+
+    for query, expected in test_queries:
+        result = detector.analyze_query(query)
+        status = "✓" if result['query_type'] == expected else "✗"
+        print(f"\n{status} Query: {query}")
+        print(f"   Type: {result['query_type']} (expected: {expected})")
+        print(f"   Team: {', '.join(result['team_composition'])}")
+        print(f"   Complexity: {result['complexity_score']:.2f}")
+
+        if result['entities']:
+            print(f"   Entities: {result['entities']}")
+
+    # Test follow-up detection
+    print("\n" + "-" * 60)
+    print("Follow-up Detection:")
+    print("-" * 60)
+
+    followup_queries = [
+        "Lanjutkan penjelasan tadi",
+        "Maksudnya bagaimana?",
+        "Bisa dijelaskan lebih detail?",
+    ]
+
+    for query in followup_queries:
+        result = detector.analyze_query(query)
+        status = "✓" if result['is_followup'] or result['is_clarification'] else "✗"
+        print(f"  {status} '{query}' -> followup={result['is_followup']}, clarification={result['is_clarification']}")
+
+    # Test query enhancement
+    print("\n" + "-" * 60)
+    print("Query Enhancement:")
+    print("-" * 60)
+
+    query = "sanksi pasal 27"
+    result = detector.analyze_query(query)
+    enhanced = detector.enhance_query(query, result)
+    print(f"  Original: {query}")
+    print(f"  Enhanced: {enhanced}")
+
+    print("\n" + "=" * 60)
+    print("TEST COMPLETE")
+    print("=" * 60)
