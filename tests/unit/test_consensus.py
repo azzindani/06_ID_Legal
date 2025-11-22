@@ -25,8 +25,8 @@ class TestConsensusBuilder:
         """Test consensus with single researcher results"""
         research_data = {
             'all_results': [
-                {'record': {'global_id': 'doc-1'}, 'scores': {'final': 0.9, 'semantic': 0.85, 'keyword': 0.8}, 'metadata': {'persona': 'analyst'}},
-                {'record': {'global_id': 'doc-2'}, 'scores': {'final': 0.8, 'semantic': 0.75, 'keyword': 0.7}, 'metadata': {'persona': 'analyst'}},
+                {'record': {'global_id': 'doc-1'}, 'scores': {'final': 0.9, 'semantic': 0.85, 'keyword': 0.8, 'kg': 0.7, 'authority': 0.8, 'temporal': 0.9, 'completeness': 0.85}, 'metadata': {'persona': 'analyst'}},
+                {'record': {'global_id': 'doc-2'}, 'scores': {'final': 0.8, 'semantic': 0.75, 'keyword': 0.7, 'kg': 0.6, 'authority': 0.7, 'temporal': 0.8, 'completeness': 0.75}, 'metadata': {'persona': 'analyst'}},
             ]
         }
         team = ['analyst']
@@ -39,9 +39,9 @@ class TestConsensusBuilder:
         """Test consensus with multiple researchers agreeing"""
         research_data = {
             'all_results': [
-                {'record': {'global_id': 'doc-1'}, 'scores': {'final': 0.9, 'semantic': 0.85, 'keyword': 0.8}, 'metadata': {'persona': 'analyst'}},
-                {'record': {'global_id': 'doc-1'}, 'scores': {'final': 0.85, 'semantic': 0.8, 'keyword': 0.75}, 'metadata': {'persona': 'specialist'}},
-                {'record': {'global_id': 'doc-2'}, 'scores': {'final': 0.7, 'semantic': 0.65, 'keyword': 0.6}, 'metadata': {'persona': 'analyst'}},
+                {'record': {'global_id': 'doc-1'}, 'scores': {'final': 0.9, 'semantic': 0.85, 'keyword': 0.8, 'kg': 0.7, 'authority': 0.8, 'temporal': 0.9, 'completeness': 0.85}, 'metadata': {'persona': 'analyst'}},
+                {'record': {'global_id': 'doc-1'}, 'scores': {'final': 0.85, 'semantic': 0.8, 'keyword': 0.75, 'kg': 0.65, 'authority': 0.75, 'temporal': 0.85, 'completeness': 0.8}, 'metadata': {'persona': 'specialist'}},
+                {'record': {'global_id': 'doc-2'}, 'scores': {'final': 0.7, 'semantic': 0.65, 'keyword': 0.6, 'kg': 0.5, 'authority': 0.6, 'temporal': 0.7, 'completeness': 0.65}, 'metadata': {'persona': 'analyst'}},
             ]
         }
         team = ['analyst', 'specialist']
@@ -55,8 +55,8 @@ class TestConsensusBuilder:
         """Test that consensus scores are calculated"""
         research_data = {
             'all_results': [
-                {'record': {'global_id': 'doc-1'}, 'scores': {'final': 0.9, 'semantic': 0.85, 'keyword': 0.8}, 'metadata': {'persona': 'analyst'}},
-                {'record': {'global_id': 'doc-1'}, 'scores': {'final': 0.8, 'semantic': 0.75, 'keyword': 0.7}, 'metadata': {'persona': 'specialist'}},
+                {'record': {'global_id': 'doc-1'}, 'scores': {'final': 0.9, 'semantic': 0.85, 'keyword': 0.8, 'kg': 0.7, 'authority': 0.8, 'temporal': 0.9, 'completeness': 0.85}, 'metadata': {'persona': 'analyst'}},
+                {'record': {'global_id': 'doc-1'}, 'scores': {'final': 0.8, 'semantic': 0.75, 'keyword': 0.7, 'kg': 0.6, 'authority': 0.7, 'temporal': 0.8, 'completeness': 0.75}, 'metadata': {'persona': 'specialist'}},
             ]
         }
         team = ['analyst', 'specialist']
