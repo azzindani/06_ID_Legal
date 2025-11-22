@@ -76,7 +76,12 @@ def simple_rag_query(query: str):
     logger.info(f"Found {len(final_results)} relevant documents")
     
     if len(final_results) == 0:
-        return "Maaf, tidak ditemukan dokumen yang relevan."
+        return {
+            'success': True,
+            'answer': "Maaf, tidak ditemukan dokumen yang relevan.",
+            'citations': [],
+            'metadata': {'generation_time': 0, 'tokens_generated': 0}
+        }
     
     # Generate answer
     logger.info("Generating answer...")
