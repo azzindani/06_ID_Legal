@@ -223,26 +223,73 @@ class ConsensusBuilder:
         team_composition: List[str]
     ) -> Optional[Dict[str, Any]]:
         """
-        FIXED: Calculate consensus with logging
+        FIXED: Calculate consensus like original code - compare SCORE against threshold, not voting ratio
         """
         # Count how many team members found this document
         personas_found = set()
+        researcher_types = set()
+        researcher_scores = {}
+
         for result in doc_results:
             persona = result['metadata'].get('persona', 'unknown')
             personas_found.add(persona)
-        
-        # Calculate voting ratio
-        voting_ratio = len(personas_found) / len(team_composition)
-        
-        # FIXED: Log rejected documents
-        if voting_ratio < self.consensus_threshold:
+
+            # Track researcher types and scores
+            # Map display name back to ID for persona lookup
+            persona_id = None
+            for pid, pdata in RESEARCH_TEAM_PERSONAS.items():
+                if pdata['name'] == persona:
+                    persona_id = pid
+                    researcher_types.add(pdata['approach'])
+                    break
+
+            if persona_id:
+                researcher_scores[persona_id] = result['scores']['final']
+            else:
+                researcher_scores[persona] = result['scores']['final']
+
+        # Calculate voting ratio (for bonuses, not threshold)
+        voting_ratio = len(personas_found) / len(team_composition) if team_composition else 0
+
+        # Calculate WEIGHTED SCORE like original code
+        total_weight = 0
+        weighted_score = 0
+
+        for researcher_id, score in researcher_scores.items():
+            # Get persona data
+            persona_data = RESEARCH_TEAM_PERSONAS.get(researcher_id)
+            if persona_data:
+                weight = (persona_data['experience_years'] / 15.0) + persona_data.get('accuracy_bonus', 0)
+            else:
+                weight = 1.0  # Default weight
+
+            weighted_score += score * weight
+            total_weight += weight
+
+        final_weighted_score = weighted_score / total_weight if total_weight > 0 else sum(researcher_scores.values()) / len(researcher_scores)
+
+        # Apply consensus bonuses (like original code)
+        if len(personas_found) > 1:
+            consensus_bonus = min(0.10, 0.03 * (len(personas_found) - 1))
+            final_weighted_score += consensus_bonus
+
+        if len(researcher_types) > 1:
+            final_weighted_score += 0.05
+
+        # Adjust threshold for strong agreement
+        adjusted_threshold = self.consensus_threshold
+        if len(personas_found) >= 3:
+            adjusted_threshold *= 0.9
+
+        # FIXED: Compare SCORE against threshold (like original code)
+        if final_weighted_score < adjusted_threshold:
             self.logger.debug(f"Doc {global_id} rejected", {
-                "voting_ratio": f"{voting_ratio:.0%}",
-                "threshold": f"{self.consensus_threshold:.0%}",
+                "score": f"{final_weighted_score:.3f}",
+                "threshold": f"{adjusted_threshold:.3f}",
                 "personas": len(personas_found)
             })
             return None
-        
+
         # Aggregate scores from different personas
         score_aggregation = {
             'final': [],
@@ -253,20 +300,20 @@ class ConsensusBuilder:
             'temporal': [],
             'completeness': []
         }
-        
+
         for result in doc_results:
             for score_type in score_aggregation.keys():
                 score_aggregation[score_type].append(result['scores'][score_type])
-        
+
         # Calculate mean scores
         aggregated_scores = {
             score_type: sum(scores) / len(scores)
             for score_type, scores in score_aggregation.items()
         }
-        
-        # Calculate consensus score (weighted by voting ratio and score quality)
-        consensus_score = aggregated_scores['final'] * (0.7 + 0.3 * voting_ratio)
-        
+
+        # Use final_weighted_score as consensus_score
+        consensus_score = min(1.0, final_weighted_score)
+
         # Get representative result (highest scoring one)
         representative = max(doc_results, key=lambda x: x['scores']['final'])
         
