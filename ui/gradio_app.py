@@ -19,6 +19,8 @@ from providers import get_provider, switch_provider, list_providers
 from config import LLM_PROVIDER, EMBEDDING_DEVICE, LLM_DEVICE
 from logger_utils import get_logger
 from core.document_parser import parse_document
+from core.form_generator import get_form_generator
+from core.analytics import get_analytics
 
 logger = get_logger(__name__)
 
@@ -253,6 +255,91 @@ def upload_document(file) -> str:
 _uploaded_document = None
 
 
+def generate_legal_form(template_id: str, field_values: str) -> str:
+    """Generate a legal form from template"""
+    try:
+        generator = get_form_generator()
+
+        # Parse field values (simple key=value format)
+        data = {}
+        for line in field_values.strip().split('\n'):
+            if '=' in line:
+                key, value = line.split('=', 1)
+                data[key.strip()] = value.strip()
+
+        result = generator.generate_form(template_id, data)
+
+        if result['success']:
+            return f"**{result['template_name']}**\n\n```\n{result['content']}\n```"
+        else:
+            return f"Error: {result['error']}"
+    except Exception as e:
+        return f"Error generating form: {e}"
+
+
+def get_form_templates() -> str:
+    """Get list of available form templates"""
+    generator = get_form_generator()
+    templates = generator.list_templates()
+
+    result = "**Available Templates:**\n\n"
+    for t in templates:
+        result += f"- **{t['id']}**: {t['name']} ({t['description']})\n"
+
+        # Get template details
+        template = generator.get_template(t['id'])
+        if template:
+            result += f"  Fields: {', '.join(f['name'] for f in template['fields'])}\n\n"
+
+    return result
+
+
+def get_analytics_summary() -> str:
+    """Get analytics dashboard summary"""
+    analytics = get_analytics()
+    summary = analytics.get_summary()
+
+    result = f"""**Analytics Summary**
+
+**Session**
+- Duration: {summary['session']['duration_formatted']}
+
+**Queries**
+- Total: {summary['queries']['total']}
+- Successful: {summary['queries']['successful']}
+- Failed: {summary['queries']['failed']}
+- By Type: {dict(summary['queries']['by_type'])}
+
+**Performance**
+- Avg Response: {summary['performance']['avg_response_time']:.3f}s
+- Min Response: {summary['performance']['min_response_time']:.3f}s
+- Max Response: {summary['performance']['max_response_time']:.3f}s
+
+**Providers Used**: {dict(summary['providers'])}
+
+**Errors**: {summary['errors']['total']}
+"""
+    return result
+
+
+def get_performance_report() -> str:
+    """Get detailed performance report"""
+    analytics = get_analytics()
+    report = analytics.get_performance_report()
+
+    if isinstance(report, dict) and 'message' in report:
+        return report['message']
+
+    result = "**Performance Report**\n\n"
+    for component, ops in report.items():
+        result += f"**{component}**\n"
+        for op, stats in ops.items():
+            result += f"  - {op}: avg={stats['avg']:.3f}s, count={stats['count']}\n"
+        result += "\n"
+
+    return result
+
+
 def create_demo() -> gr.Blocks:
     """Create Gradio demo interface with all features"""
 
@@ -269,82 +356,117 @@ def create_demo() -> gr.Blocks:
             """
             # Indonesian Legal RAG System
             ### Sistem Konsultasi Hukum Indonesia
-
-            Tanyakan pertanyaan tentang hukum dan peraturan Indonesia.
-            Supports multiple LLM providers and local inference.
             """
         )
 
-        with gr.Row():
-            # Main chat area
-            with gr.Column(scale=3):
-                chatbot = gr.Chatbot(
-                    label="Percakapan",
-                    height=450,
-                    show_copy_button=True
+        with gr.Tabs():
+            # Chat Tab
+            with gr.TabItem("Chat"):
+                with gr.Row():
+                    # Main chat area
+                    with gr.Column(scale=3):
+                        chatbot = gr.Chatbot(
+                            label="Percakapan",
+                            height=450,
+                            show_copy_button=True
+                        )
+
+                        with gr.Row():
+                            msg = gr.Textbox(
+                                label="Pertanyaan Anda",
+                                placeholder="Ketik pertanyaan hukum Anda di sini...",
+                                lines=2,
+                                scale=4
+                            )
+                            submit_btn = gr.Button("Kirim", variant="primary", scale=1)
+
+                    # Settings panel
+                    with gr.Column(scale=1):
+                        with gr.Accordion("Display Options", open=True):
+                            show_thinking = gr.Checkbox(label="Show Thinking Process", value=True)
+                            show_sources = gr.Checkbox(label="Show Sources", value=True)
+                            show_metadata = gr.Checkbox(label="Show Metadata", value=False)
+
+                        with gr.Accordion("Provider Settings", open=True):
+                            provider_dropdown = gr.Dropdown(
+                                choices=['local', 'openai', 'anthropic', 'google', 'openrouter'],
+                                value='local',
+                                label="LLM Provider"
+                            )
+                            provider_btn = gr.Button("Switch Provider")
+                            provider_status = gr.Textbox(label="Provider Status", interactive=False)
+
+                        with gr.Accordion("Session", open=True):
+                            clear_btn = gr.Button("New Session", variant="secondary")
+                            status = gr.Textbox(label="Status", interactive=False)
+
+                        with gr.Accordion("Export", open=False):
+                            export_format = gr.Radio(
+                                choices=["Markdown", "JSON", "HTML"],
+                                value="Markdown",
+                                label="Format"
+                            )
+                            export_btn = gr.Button("Export")
+                            export_status = gr.Textbox(label="Export Result", interactive=False)
+
+                        with gr.Accordion("Document Upload", open=False):
+                            file_upload = gr.File(
+                                label="Upload Document",
+                                file_types=[".pdf", ".docx", ".doc", ".txt"]
+                            )
+                            upload_status = gr.Textbox(label="Upload Status", interactive=False)
+
+                        with gr.Accordion("Info", open=False):
+                            info_btn = gr.Button("Refresh Info")
+                            session_info = gr.Textbox(label="Session Info", interactive=False, lines=7)
+
+                # Example questions
+                gr.Markdown("### Contoh Pertanyaan")
+                examples = gr.Examples(
+                    examples=[
+                        "Apa itu UU Ketenagakerjaan?",
+                        "Apa sanksi pelanggaran UU Perlindungan Konsumen?",
+                        "Bagaimana prosedur PHK menurut hukum?",
+                        "Apa hak karyawan kontrak?",
+                        "Apa definisi konsumen menurut UU?"
+                    ],
+                    inputs=msg
                 )
 
+            # Form Generator Tab
+            with gr.TabItem("Form Generator"):
+                gr.Markdown("### Legal Document Generator")
                 with gr.Row():
-                    msg = gr.Textbox(
-                        label="Pertanyaan Anda",
-                        placeholder="Ketik pertanyaan hukum Anda di sini...",
-                        lines=2,
-                        scale=4
-                    )
-                    submit_btn = gr.Button("Kirim", variant="primary", scale=1)
+                    with gr.Column():
+                        templates_display = gr.Markdown()
+                        templates_btn = gr.Button("Show Templates")
 
-            # Settings panel
-            with gr.Column(scale=1):
-                with gr.Accordion("Display Options", open=True):
-                    show_thinking = gr.Checkbox(label="Show Thinking Process", value=True)
-                    show_sources = gr.Checkbox(label="Show Sources", value=True)
-                    show_metadata = gr.Checkbox(label="Show Metadata", value=False)
+                        template_id = gr.Dropdown(
+                            choices=['surat_kuasa', 'surat_pernyataan', 'perjanjian_kerja', 'pengaduan', 'somasi'],
+                            value='surat_kuasa',
+                            label="Template"
+                        )
+                        field_values = gr.Textbox(
+                            label="Field Values (key=value per line)",
+                            placeholder="pemberi_kuasa=John Doe\npenerima_kuasa=Jane Smith\nkeperluan=Mengurus dokumen\ntanggal=22 November 2025\ntempat=Jakarta",
+                            lines=8
+                        )
+                        generate_btn = gr.Button("Generate Form", variant="primary")
 
-                with gr.Accordion("Provider Settings", open=True):
-                    provider_dropdown = gr.Dropdown(
-                        choices=['local', 'openai', 'anthropic', 'google', 'openrouter'],
-                        value='local',
-                        label="LLM Provider"
-                    )
-                    provider_btn = gr.Button("Switch Provider")
-                    provider_status = gr.Textbox(label="Provider Status", interactive=False)
+                    with gr.Column():
+                        form_output = gr.Markdown(label="Generated Form")
 
-                with gr.Accordion("Session", open=True):
-                    clear_btn = gr.Button("New Session", variant="secondary")
-                    status = gr.Textbox(label="Status", interactive=False)
+            # Analytics Tab
+            with gr.TabItem("Analytics"):
+                gr.Markdown("### System Analytics")
+                with gr.Row():
+                    with gr.Column():
+                        analytics_btn = gr.Button("Refresh Analytics", variant="primary")
+                        analytics_output = gr.Markdown()
 
-                with gr.Accordion("Export", open=False):
-                    export_format = gr.Radio(
-                        choices=["Markdown", "JSON", "HTML"],
-                        value="Markdown",
-                        label="Format"
-                    )
-                    export_btn = gr.Button("Export")
-                    export_status = gr.Textbox(label="Export Result", interactive=False)
-
-                with gr.Accordion("Document Upload", open=False):
-                    file_upload = gr.File(
-                        label="Upload Document",
-                        file_types=[".pdf", ".docx", ".doc", ".txt"]
-                    )
-                    upload_status = gr.Textbox(label="Upload Status", interactive=False)
-
-                with gr.Accordion("Info", open=False):
-                    info_btn = gr.Button("Refresh Info")
-                    session_info = gr.Textbox(label="Session Info", interactive=False, lines=7)
-
-        # Example questions
-        gr.Markdown("### Contoh Pertanyaan")
-        examples = gr.Examples(
-            examples=[
-                "Apa itu UU Ketenagakerjaan?",
-                "Apa sanksi pelanggaran UU Perlindungan Konsumen?",
-                "Bagaimana prosedur PHK menurut hukum?",
-                "Apa hak karyawan kontrak?",
-                "Apa definisi konsumen menurut UU?"
-            ],
-            inputs=msg
-        )
+                    with gr.Column():
+                        performance_btn = gr.Button("Performance Report")
+                        performance_output = gr.Markdown()
 
         # Event handlers
         submit_btn.click(
@@ -385,6 +507,29 @@ def create_demo() -> gr.Blocks:
         info_btn.click(
             get_session_info,
             outputs=[session_info]
+        )
+
+        # Form Generator handlers
+        templates_btn.click(
+            get_form_templates,
+            outputs=[templates_display]
+        )
+
+        generate_btn.click(
+            generate_legal_form,
+            inputs=[template_id, field_values],
+            outputs=[form_output]
+        )
+
+        # Analytics handlers
+        analytics_btn.click(
+            get_analytics_summary,
+            outputs=[analytics_output]
+        )
+
+        performance_btn.click(
+            get_performance_report,
+            outputs=[performance_output]
         )
 
         # Initialize on load

@@ -32,9 +32,11 @@ This system provides intelligent legal consultation by combining:
 | **Local Inference Flexibility** | CPU/GPU split, quantization support | ✅ Complete |
 | **API Provider Support** | Claude, Gemini, OpenAI, OpenRouter | ✅ Complete |
 | **Context Cache Management** | Efficient conversation caching | ✅ Complete |
+| **Multi-GPU Support** | Auto-detection and workload distribution | ✅ Complete |
+| **Document Upload & Analysis** | PDF/DOCX parsing and analysis | ✅ Complete |
+| **Form Generator** | Auto-generate legal forms | ✅ Complete |
+| **Analytics Dashboard** | Query tracking and performance metrics | ✅ Complete |
 | **Multi-Database RAG** | Multiple datasets (legal, contracts, etc.) | 🔴 High |
-| **Document Upload & Analysis** | PDF/DOCX parsing and analysis | 🟡 Medium |
-| **Form Generator** | Auto-generate legal forms | 🟡 Medium |
 | **Contract Database** | Contract templates and analysis | 🟡 Medium |
 | **Multi-language Support** | ID ↔ EN translation | 🟢 Low |
 | **Compliance Checker** | Validate against regulations | 🟢 Low |
