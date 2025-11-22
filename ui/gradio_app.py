@@ -553,6 +553,119 @@ def get_performance_report() -> str:
     return result
 
 
+def get_system_health() -> str:
+    """Get comprehensive system health status"""
+    global pipeline, manager, current_session
+    import torch
+    import psutil
+
+    report = ["## 🏥 System Health Report\n"]
+
+    # Pipeline status
+    report.append("### Pipeline Status")
+    if pipeline and pipeline._initialized:
+        report.append("✅ **RAG Pipeline:** Initialized and ready")
+        info = pipeline.get_pipeline_info()
+        report.append(f"- Init time: {info.get('initialization_time', 0):.2f}s")
+        if 'dataset_stats' in info:
+            stats = info['dataset_stats']
+            report.append(f"- Total records: {stats.get('total_records', 0)}")
+            report.append(f"- KG enhanced: {stats.get('kg_enhanced_records', 0)}")
+    else:
+        report.append("❌ **RAG Pipeline:** Not initialized")
+
+    # Session status
+    report.append("\n### Session Status")
+    if manager:
+        report.append("✅ **Conversation Manager:** Active")
+        if current_session:
+            report.append(f"- Current session: `{current_session[:8]}...`")
+    else:
+        report.append("❌ **Conversation Manager:** Not initialized")
+
+    # Device status
+    report.append("\n### Device Status")
+    report.append(f"- **Embedding Device:** {EMBEDDING_DEVICE}")
+    report.append(f"- **LLM Device:** {LLM_DEVICE}")
+
+    if torch.cuda.is_available():
+        report.append(f"- **CUDA Available:** Yes")
+        for i in range(torch.cuda.device_count()):
+            mem_used = torch.cuda.memory_allocated(i) / 1024**3
+            mem_total = torch.cuda.get_device_properties(i).total_memory / 1024**3
+            report.append(f"- GPU {i}: {mem_used:.1f}/{mem_total:.1f} GB used")
+    else:
+        report.append("- **CUDA Available:** No (using CPU)")
+
+    # System resources
+    report.append("\n### System Resources")
+    mem = psutil.virtual_memory()
+    report.append(f"- **RAM:** {mem.used/1024**3:.1f}/{mem.total/1024**3:.1f} GB ({mem.percent}%)")
+    cpu_percent = psutil.cpu_percent(interval=0.1)
+    report.append(f"- **CPU:** {cpu_percent}%")
+
+    # Provider status
+    report.append("\n### LLM Provider")
+    report.append(f"- **Current Provider:** {current_provider}")
+    report.append(f"- **Available:** {', '.join(list_providers())}")
+
+    return "\n".join(report)
+
+
+def get_about_info() -> str:
+    """Get system documentation and feature information"""
+    return """## 📘 Indonesian Legal RAG System
+
+### Overview
+Advanced Retrieval-Augmented Generation system for Indonesian legal document consultation.
+
+### Key Features
+
+**🔍 Multi-Stage Search**
+- Hybrid search combining semantic + keyword matching
+- Metadata-first search with PERFECT SCORE OVERRIDE for exact regulation matches
+- Citation chain traversal for related documents
+- Dynamic community detection for thematic clustering
+
+**👥 Research Team Approach**
+- 5 specialized research personas (Analis Konstitusi, Spesialis Regulasi, Pakar Prosedural, Spesialis Ketenagakerjaan, Pencari Preseden)
+- Adaptive learning based on performance history
+- Consensus-based result aggregation
+
+**🧠 Advanced Query Analysis**
+- Automatic strategy selection (keyword_first, semantic_first, hybrid_balanced)
+- Query type detection (specific_regulation, procedural, sanctions, etc.)
+- Context-dependent query handling
+
+**📊 Knowledge Graph Integration**
+- Cross-reference extraction and traversal
+- Legal hierarchy understanding
+- Domain classification
+
+**💬 Conversation Features**
+- Multi-turn context awareness
+- Session management with export (Markdown, JSON, HTML)
+- Document upload and parsing
+
+### Configuration
+
+**Advanced Settings:**
+- **Research Team Size:** Number of personas (1-5)
+- **Consensus Threshold:** Agreement level required (0.3-0.9)
+- **Quality Threshold:** Minimum result quality (0.3-0.9)
+- **Temperature:** LLM creativity (0.0-1.0)
+- **Max Tokens:** Response length limit
+
+### Data Source
+Legal documents from Indonesian government regulations indexed with knowledge graph enhancements.
+
+### Version Info
+- **System:** Indonesian Legal RAG v2.0
+- **Architecture:** LangGraph-based orchestration
+- **Models:** Sentence-transformers for embeddings, BGE reranker
+"""
+
+
 def create_demo() -> gr.Blocks:
     """Create Gradio demo interface with all features"""
 
@@ -1009,6 +1122,18 @@ def create_demo() -> gr.Blocks:
                         performance_btn = gr.Button("Performance Report")
                         performance_output = gr.Markdown()
 
+            # System Status Tab
+            with gr.TabItem("System Status"):
+                gr.Markdown("### System Health Check")
+                with gr.Row():
+                    with gr.Column():
+                        health_btn = gr.Button("Check System Health", variant="primary")
+                        health_output = gr.Markdown()
+
+            # About Tab
+            with gr.TabItem("About"):
+                about_output = gr.Markdown(value=get_about_info())
+
         # Event handlers
         submit_btn.click(
             chat,
@@ -1071,6 +1196,12 @@ def create_demo() -> gr.Blocks:
         performance_btn.click(
             get_performance_report,
             outputs=[performance_output]
+        )
+
+        # System Status handler
+        health_btn.click(
+            get_system_health,
+            outputs=[health_output]
         )
 
         # Initialize on load

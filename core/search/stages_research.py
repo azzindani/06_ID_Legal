@@ -278,5 +278,122 @@ class StagesResearchEngine:
                 'median': sorted(scores)[len(scores)//2],
                 'top_10_mean': sum(sorted(scores, reverse=True)[:10]) / min(10, len(scores))
             }
-        
+
         return summary
+
+    def update_persona_performance(
+        self,
+        persona_name: str,
+        query_type: str,
+        success_score: float,
+        result_count: int
+    ) -> None:
+        """
+        Update persona performance metrics for adaptive learning.
+
+        Args:
+            persona_name: Name of the research persona
+            query_type: Type of query (e.g., 'specific_regulation', 'procedural')
+            success_score: Score indicating success (0.0 to 1.0)
+            result_count: Number of results contributed
+        """
+        if not hasattr(self, '_persona_performance'):
+            self._persona_performance = defaultdict(lambda: defaultdict(lambda: {
+                'total_queries': 0,
+                'success_sum': 0.0,
+                'result_counts': [],
+                'avg_success': 0.5  # Default neutral
+            }))
+
+        perf = self._persona_performance[persona_name][query_type]
+        perf['total_queries'] += 1
+        perf['success_sum'] += success_score
+        perf['result_counts'].append(result_count)
+
+        # Update rolling average
+        perf['avg_success'] = perf['success_sum'] / perf['total_queries']
+
+        self.logger.debug("Persona performance updated", {
+            "persona": persona_name,
+            "query_type": query_type,
+            "success_score": f"{success_score:.3f}",
+            "avg_success": f"{perf['avg_success']:.3f}",
+            "total_queries": perf['total_queries']
+        })
+
+    def get_adjusted_persona(
+        self,
+        base_personas: List[str],
+        query_type: str,
+        team_size: int = 3
+    ) -> List[str]:
+        """
+        Get dynamically adjusted persona team based on performance history.
+
+        Args:
+            base_personas: List of available persona names
+            query_type: Type of query to optimize for
+            team_size: Desired team size
+
+        Returns:
+            List of persona names optimized for the query type
+        """
+        if not hasattr(self, '_persona_performance') or not self._persona_performance:
+            # No history yet, return first N personas
+            return base_personas[:team_size]
+
+        # Score each persona for this query type
+        persona_scores = []
+
+        for persona in base_personas:
+            if persona in self._persona_performance:
+                perf = self._persona_performance[persona].get(query_type)
+                if perf and perf['total_queries'] >= 2:  # Need minimum history
+                    score = perf['avg_success']
+                    # Boost for consistency (low variance in result counts)
+                    if len(perf['result_counts']) > 1:
+                        variance = sum((x - sum(perf['result_counts'])/len(perf['result_counts']))**2
+                                      for x in perf['result_counts']) / len(perf['result_counts'])
+                        consistency_bonus = max(0, 0.1 - variance * 0.01)
+                        score += consistency_bonus
+                    persona_scores.append((persona, score))
+                else:
+                    # Neutral score for unknown query types
+                    persona_scores.append((persona, 0.5))
+            else:
+                # No history, use neutral score
+                persona_scores.append((persona, 0.5))
+
+        # Sort by score and select top performers
+        persona_scores.sort(key=lambda x: x[1], reverse=True)
+        selected = [p[0] for p in persona_scores[:team_size]]
+
+        self.logger.info("Adjusted persona team selected", {
+            "query_type": query_type,
+            "team": selected,
+            "scores": {p: f"{s:.3f}" for p, s in persona_scores[:team_size]}
+        })
+
+        return selected
+
+    def get_persona_performance_report(self) -> Dict[str, Any]:
+        """
+        Get comprehensive persona performance report.
+
+        Returns:
+            Dict with performance metrics per persona per query type
+        """
+        if not hasattr(self, '_persona_performance'):
+            return {"message": "No performance data collected yet"}
+
+        report = {}
+        for persona, query_types in self._persona_performance.items():
+            report[persona] = {}
+            for query_type, perf in query_types.items():
+                report[persona][query_type] = {
+                    'total_queries': perf['total_queries'],
+                    'avg_success': round(perf['avg_success'], 3),
+                    'avg_results': round(sum(perf['result_counts']) / len(perf['result_counts']), 1) if perf['result_counts'] else 0
+                }
+
+        return report
