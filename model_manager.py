@@ -184,7 +184,13 @@ class ModelManager:
                         max_length=512,
                         device=self.device
                     )
-                    
+
+                    # Fix padding token issue for batch processing
+                    if hasattr(self._reranker_model, 'tokenizer'):
+                        if self._reranker_model.tokenizer.pad_token is None:
+                            self._reranker_model.tokenizer.pad_token = self._reranker_model.tokenizer.eos_token
+                            self.logger.debug("Set reranker pad_token to eos_token")
+
                     # Add compute_score method for compatibility
                     original_predict = self._reranker_model.predict
                     

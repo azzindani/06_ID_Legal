@@ -1017,267 +1017,120 @@ Legal documents from Indonesian government regulations indexed with knowledge gr
 """
 
 
+def get_export_preview(format_type: str) -> Tuple[str, str]:
+    """Get export preview and prepare file for download"""
+    global manager, current_session
+
+    if not manager or not current_session:
+        return "No active session", ""
+
+    session_data = manager.get_session(current_session)
+    if not session_data:
+        return "Session not found", ""
+
+    exporters = {
+        'Markdown': MarkdownExporter,
+        'JSON': JSONExporter,
+        'HTML': HTMLExporter
+    }
+
+    exporter_class = exporters.get(format_type, MarkdownExporter)
+    exporter = exporter_class()
+
+    try:
+        # Generate content
+        content = exporter.export(session_data)
+
+        # Preview (truncated for display)
+        preview = content[:2000] + "..." if len(content) > 2000 else content
+
+        return preview, content
+    except Exception as e:
+        return f"Export error: {e}", ""
+
+
 def create_demo() -> gr.Blocks:
     """Create Gradio demo interface with all features"""
 
-    # Original CSS from Kaggle_Demo.ipynb - zoom-friendly responsive design
+    # CSS for clean chat interface
     custom_css = """
-    /* Base container - responsive to zoom */
     .gradio-container {
         max-width: 100%;
         width: 100%;
         margin: 0 auto;
         padding: 0;
-        overflow-x: hidden;
     }
 
-    /* Main chat area - scalable dimensions */
     .main-chat-area {
         width: 100%;
         max-width: 75em;
         margin: 0 auto;
         padding: 1.25em;
-        box-sizing: border-box;
     }
 
-    /* Chatbot container - responsive sizing */
     .chat-container {
-        height: 75vh;
+        height: 70vh;
         min-height: 25em;
-        max-height: none;
         width: 100%;
         overflow-y: auto;
-        border: 0.0625em solid #e0e0e0;
+        border: 1px solid #e0e0e0;
         border-radius: 0.75em;
         background: white;
-        box-sizing: border-box;
-        resize: vertical;
     }
 
-    /* Prevent width changes from content expansion */
-    .chatbot {
-        width: 100%;
-        max-width: none;
-        min-width: 0;
-    }
-
-    /* Chat messages - scalable overflow handling */
-    .message-wrap {
-        max-width: 100%;
-        word-wrap: break-word;
-        overflow-wrap: break-word;
-    }
-
-    /* Center the chatbot placeholder */
-    .chatbot .wrap {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        text-align: center;
-    }
-
-    .chatbot .placeholder {
-        text-align: center;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        height: 100%;
-        width: 100%;
-    }
-
-    .chatbot .empty {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        height: 100%;
-        width: 100%;
-        text-align: center;
-        color: #666;
-        font-size: 1em;
-    }
-
-    /* Input area styling */
     .input-row {
-        margin-top: 0.9375em;
-        width: 100%;
+        margin-top: 0.5em;
+        display: flex;
+        align-items: flex-end;
+        gap: 0.5em;
     }
 
-    .input-row .form {
-        width: 100%;
+    .examples-section {
+        margin-top: 1em;
     }
 
-    /* Settings panels - scalable */
-    .settings-panel {
+    .config-section {
         background-color: #f8f9fa;
-        padding: 1.25em;
-        border-radius: 0.75em;
-        margin-bottom: 0.9375em;
-        box-shadow: 0 0.125em 0.25em rgba(0,0,0,0.1);
-        width: 100%;
-        box-sizing: border-box;
-    }
-
-    .status-panel {
-        background-color: #e8f4fd;
-        padding: 0.9375em;
+        padding: 1em;
         border-radius: 0.5em;
-        border-left: 0.25em solid #2196F3;
-        margin-bottom: 0.625em;
+        margin-bottom: 1em;
     }
 
-    /* Responsive breakpoints */
-    @media (max-width: 87.5em) {
-        .main-chat-area {
-            max-width: 95%;
-            padding: 0.9375em;
-        }
-    }
-
-    @media (max-width: 64em) {
-        .chat-container {
-            height: 70vh;
-            min-height: 20em;
-        }
-
-        .main-chat-area {
-            padding: 0.9375em;
-        }
-    }
-
-    @media (max-width: 48em) {
-        .chat-container {
-            height: 65vh;
-            min-height: 18em;
-        }
-
-        .main-chat-area {
-            padding: 0.625em;
-        }
-
-        .settings-panel {
-            padding: 0.9375em;
-        }
-    }
-
-    @media (max-width: 30em) {
-        .chat-container {
-            height: 60vh;
-            min-height: 15em;
-        }
-
-        .main-chat-area {
-            padding: 0.5em;
-        }
-
-        .settings-panel {
-            padding: 0.75em;
-            margin-bottom: 0.625em;
-        }
-    }
-
-    /* Prevent layout shifts from dynamic content */
-    .block {
-        min-width: 0;
-    }
-
-    /* Tab content - centered tabs */
     .tab-nav {
-        margin-bottom: 1.25em;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        width: 100%;
+        margin-bottom: 1em;
     }
 
-    /* Center the tab navigation */
-    .tabs {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        width: 100%;
-    }
-
-    /* Style the tab buttons - scalable */
-    .tab-nav button {
-        margin: 0 0.5em;
-        padding: 0.75em 1.5em;
+    .export-preview {
+        font-family: monospace;
+        white-space: pre-wrap;
+        background: #f5f5f5;
+        padding: 1em;
         border-radius: 0.5em;
-        font-weight: 500;
-        transition: all 0.2s ease;
-    }
-
-    /* Center tab container */
-    .tabitem {
-        width: 100%;
-        max-width: 75em;
-        margin: 0 auto;
-    }
-
-    /* Examples styling */
-    .examples {
-        margin-top: 0.9375em;
-    }
-
-    /* Button styling */
-    .clear-btn {
-        margin-left: auto;
-    }
-
-    /* Ensure consistent column widths in settings */
-    .settings-columns {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 1.25em;
-        width: 100%;
-    }
-
-    @media (max-width: 48em) {
-        .settings-columns {
-            grid-template-columns: 1fr;
-        }
-    }
-
-    /* Fix for expandable content not affecting layout */
-    .prose {
-        max-width: 100%;
-    }
-
-    /* Prevent horizontal scroll */
-    * {
-        box-sizing: border-box;
-    }
-
-    /* Enhanced zoom support */
-    html {
-        -webkit-text-size-adjust: 100%;
-        -ms-text-size-adjust: 100%;
-    }
-
-    /* Ensure text scales properly with browser zoom */
-    body, .gradio-container, .chatbot {
-        font-size: 1em;
+        max-height: 400px;
+        overflow-y: auto;
     }
     """
 
     with gr.Blocks(
-        title="Enhanced Indonesian Legal Assistant",
-        theme=gr.themes.Default(),
+        title="Indonesian Legal RAG System",
+        theme=gr.themes.Soft(),
         css=custom_css
     ) as demo:
 
-        gr.Markdown(
-            """
-            # Indonesian Legal RAG System
-            ### Sistem Konsultasi Hukum Indonesia
-            """
-        )
+        gr.Markdown("# Indonesian Legal RAG System\n### Sistem Konsultasi Hukum Indonesia")
+
+        # State variables for display options
+        show_thinking = gr.State(True)
+        show_sources = gr.State(True)
+        show_metadata = gr.State(False)
+        show_analysis = gr.State(False)
 
         with gr.Tabs():
-            # Chat Tab
-            with gr.TabItem("Konsultasi Hukum", id="chat"):
+            # Main Chat Tab
+            with gr.TabItem("Konsultasi Hukum"):
                 with gr.Column(elem_classes="main-chat-area"):
                     chatbot = gr.Chatbot(
-                        height="75vh",
+                        height=500,
                         show_label=False,
                         container=True,
                         bubble_full_width=True,
@@ -1286,204 +1139,141 @@ def create_demo() -> gr.Blocks:
                         render_markdown=True,
                     )
 
+                    # Simple input row like original - textbox + attachment + send
                     with gr.Row(elem_classes="input-row"):
+                        file_upload = gr.File(
+                            label=None,
+                            file_types=[".pdf", ".docx", ".doc", ".txt"],
+                            scale=1,
+                            min_width=50,
+                            file_count="single",
+                            visible=True,
+                        )
                         msg = gr.Textbox(
                             placeholder="Tanyakan tentang hukum Indonesia...",
                             show_label=False,
                             container=False,
-                            scale=10,
+                            scale=8,
                             lines=1,
                             max_lines=3,
-                            interactive=True
                         )
-                        submit_btn = gr.Button("Kirim", variant="primary", scale=1)
+                        submit_btn = gr.Button("Kirim", variant="primary", scale=1, min_width=80)
+                        clear_btn = gr.Button("Clear", variant="secondary", scale=1, min_width=60)
 
-                    # Example questions - comprehensive like original
-                    with gr.Row():
-                        with gr.Column():
-                            gr.Examples(
-                                examples=[
-                                    "Apakah ada pengaturan yang menjamin kesetaraan hak antara guru dan dosen dalam memperoleh tunjangan profesi?",
-                                    "Apakah terdapat mekanisme pengawasan terhadap penyimpanan uang negara agar terhindar dari penyalahgunaan atau kebocoran keuangan?",
-                                    "Bagaimana mekanisme hukum untuk memperoleh izin resmi bagi pihak yang menjalankan usaha sebagai pengusaha pabrik, penyimpanan, importir, penyalur, maupun penjual eceran barang kena cukai?",
-                                    "Apakah terdapat kewajiban pemerintah untuk menyediakan dana khusus bagi penyuluhan, atau dapat melibatkan sumber pendanaan alternatif seperti swasta dan masyarakat?",
-                                    "Bagaimana prosedur hukum yang harus ditempuh sebelum sanksi denda administrasi di bidang cukai dapat dikenakan kepada pelaku usaha?",
-                                    "Bagaimana sistem perencanaan kas disusun agar mampu mengantisipasi kebutuhan mendesak negara/daerah tanpa mengganggu stabilitas fiskal?",
-                                    "syarat dan prosedur perceraian menurut hukum Indonesia",
-                                    "hak dan kewajiban pekerja dalam UU Ketenagakerjaan"
-                                ],
-                                inputs=msg,
-                                examples_per_page=4,
-                                label="Contoh Pertanyaan"
-                            )
+                    # Upload status
+                    upload_status = gr.Textbox(label="Upload Status", interactive=False, visible=False)
 
-                # Settings panel in separate row
+                    # Example questions
+                    with gr.Accordion("Contoh Pertanyaan", open=False):
+                        gr.Examples(
+                            examples=[
+                                "Apakah ada pengaturan yang menjamin kesetaraan hak antara guru dan dosen dalam memperoleh tunjangan profesi?",
+                                "Apakah terdapat mekanisme pengawasan terhadap penyimpanan uang negara?",
+                                "Bagaimana mekanisme hukum untuk memperoleh izin usaha barang kena cukai?",
+                                "Bagaimana prosedur hukum sebelum sanksi denda administrasi di bidang cukai?",
+                                "syarat dan prosedur perceraian menurut hukum Indonesia",
+                                "hak dan kewajiban pekerja dalam UU Ketenagakerjaan"
+                            ],
+                            inputs=msg,
+                            examples_per_page=6,
+                            label=""
+                        )
+
+            # Export Tab
+            with gr.TabItem("Export"):
+                gr.Markdown("### Export Conversation")
                 with gr.Row():
                     with gr.Column(scale=1):
-                        with gr.Accordion("Display Options", open=True):
-                            show_thinking = gr.Checkbox(label="Show Thinking Process", value=True)
-                            show_sources = gr.Checkbox(label="Show Sources", value=True)
-                            show_metadata = gr.Checkbox(label="Show Metadata", value=False)
-                            show_analysis = gr.Checkbox(label="Show Query Analysis", value=False, info="Display query analysis, strategy, and search phases")
+                        export_format = gr.Radio(
+                            choices=["Markdown", "JSON", "HTML"],
+                            value="Markdown",
+                            label="Export Format"
+                        )
+                        preview_btn = gr.Button("Preview", variant="secondary")
+                        download_btn = gr.Button("Download", variant="primary")
+                        export_status = gr.Textbox(label="Status", interactive=False)
 
-                    with gr.Column(scale=1):
-                        with gr.Accordion("Provider Settings", open=False):
-                            provider_dropdown = gr.Dropdown(
-                                choices=['local', 'openai', 'anthropic', 'google', 'openrouter'],
-                                value='local',
-                                label="LLM Provider"
-                            )
-                            provider_btn = gr.Button("Switch Provider")
-                            provider_status = gr.Textbox(label="Provider Status", interactive=False)
+                    with gr.Column(scale=2):
+                        export_preview = gr.Textbox(
+                            label="Preview",
+                            lines=20,
+                            max_lines=30,
+                            interactive=False,
+                            elem_classes="export-preview"
+                        )
 
-                    with gr.Column(scale=1):
-                        with gr.Accordion("Session & Export", open=False):
-                            clear_btn = gr.Button("New Session", variant="secondary")
-                            status = gr.Textbox(label="Status", interactive=False)
-                            export_format = gr.Radio(
-                                choices=["Markdown", "JSON", "HTML"],
-                                value="Markdown",
-                                label="Export Format"
-                            )
-                            export_btn = gr.Button("Export")
-                            export_status = gr.Textbox(label="Export Result", interactive=False)
-
-                    with gr.Column(scale=1):
-                        with gr.Accordion("Document Upload", open=False):
-                            file_upload = gr.File(
-                                label="Upload Document",
-                                file_types=[".pdf", ".docx", ".doc", ".txt"]
-                            )
-                            upload_status = gr.Textbox(label="Upload Status", interactive=False)
-
-                        with gr.Accordion("Info", open=False):
-                            info_btn = gr.Button("Refresh Info")
-                            session_info = gr.Textbox(label="Session Info", interactive=False, lines=7)
-
-                # Advanced Settings Row
+            # Configuration Tab - All settings here
+            with gr.TabItem("Configuration"):
                 with gr.Row():
+                    # Display Options
                     with gr.Column(scale=1):
-                        with gr.Accordion("Advanced Search Settings", open=False):
-                            gr.Markdown("⚠️ *Note: These settings require system restart to take effect*")
-                            team_size = gr.Slider(
-                                minimum=1,
-                                maximum=5,
-                                value=3,
-                                step=1,
-                                label="Research Team Size",
-                                info="Number of personas for consensus"
-                            )
-                            consensus_threshold = gr.Slider(
-                                minimum=0.3,
-                                maximum=0.9,
-                                value=0.6,
-                                step=0.05,
-                                label="Consensus Threshold",
-                                info="Agreement level for validation"
-                            )
-                            enable_cross_validation = gr.Checkbox(
-                                label="Enable Cross-Validation",
-                                value=True
-                            )
-                            enable_devils_advocate = gr.Checkbox(
-                                label="Enable Devil's Advocate",
-                                value=True
-                            )
+                        gr.Markdown("### Display Options")
+                        show_thinking_cb = gr.Checkbox(label="Show Thinking Process", value=True)
+                        show_sources_cb = gr.Checkbox(label="Show Sources", value=True)
+                        show_metadata_cb = gr.Checkbox(label="Show Metadata", value=False)
+                        show_analysis_cb = gr.Checkbox(label="Show Query Analysis", value=False)
 
+                        gr.Markdown("### Provider Settings")
+                        provider_dropdown = gr.Dropdown(
+                            choices=['local', 'openai', 'anthropic', 'google', 'openrouter'],
+                            value='local',
+                            label="LLM Provider"
+                        )
+                        provider_btn = gr.Button("Switch Provider")
+                        provider_status = gr.Textbox(label="Provider Status", interactive=False)
+
+                    # LLM Parameters
                     with gr.Column(scale=1):
-                        with gr.Accordion("LLM Parameters", open=False):
-                            temperature = gr.Slider(
-                                minimum=0.0,
-                                maximum=1.0,
-                                value=0.3,
-                                step=0.05,
-                                label="Temperature",
-                                info="Response creativity (0=focused, 1=creative)"
-                            )
-                            top_p = gr.Slider(
-                                minimum=0.1,
-                                maximum=1.0,
-                                value=0.9,
-                                step=0.05,
-                                label="Top-p (Nucleus Sampling)"
-                            )
-                            max_tokens = gr.Slider(
-                                minimum=256,
-                                maximum=4096,
-                                value=1024,
-                                step=128,
-                                label="Max New Tokens"
-                            )
+                        gr.Markdown("### LLM Parameters")
+                        temperature = gr.Slider(0.0, 1.0, 0.3, step=0.05, label="Temperature")
+                        top_p = gr.Slider(0.1, 1.0, 0.9, step=0.05, label="Top-p")
+                        max_tokens = gr.Slider(256, 4096, 1024, step=128, label="Max Tokens")
 
+                        gr.Markdown("### Research Team Settings")
+                        team_size = gr.Slider(1, 5, 3, step=1, label="Team Size")
+                        consensus_threshold = gr.Slider(0.3, 0.9, 0.6, step=0.05, label="Consensus Threshold")
+                        enable_cross_validation = gr.Checkbox(label="Cross-Validation", value=True)
+                        enable_devils_advocate = gr.Checkbox(label="Devil's Advocate", value=True)
+
+                    # Search Phase Control
                     with gr.Column(scale=1):
-                        with gr.Accordion("Search Phase Control", open=False):
-                            gr.Markdown("**Phase 1: Initial Retrieval**")
-                            phase1_top_k = gr.Slider(
-                                minimum=50,
-                                maximum=500,
-                                value=150,
-                                step=50,
-                                label="Phase 1 Top-K",
-                                info="Initial candidates per method"
-                            )
-                            phase1_threshold = gr.Slider(
-                                minimum=0.1,
-                                maximum=0.9,
-                                value=0.5,
-                                step=0.05,
-                                label="Phase 1 Similarity Threshold"
-                            )
+                        gr.Markdown("### Search Phase Control")
+                        phase1_top_k = gr.Slider(50, 500, 150, step=50, label="Phase 1 Top-K")
+                        phase1_threshold = gr.Slider(0.1, 0.9, 0.5, step=0.05, label="Phase 1 Threshold")
+                        phase2_top_k = gr.Slider(50, 300, 100, step=25, label="Phase 2 Top-K")
+                        phase2_keyword_boost = gr.Slider(1.0, 3.0, 1.5, step=0.1, label="Keyword Boost")
+                        phase3_top_k = gr.Slider(10, 100, 50, step=10, label="Phase 3 Top-K")
+                        phase4_top_k = gr.Slider(3, 20, 10, step=1, label="Final Top-K")
+                        phase4_quality = gr.Slider(0.3, 0.9, 0.6, step=0.05, label="Quality Threshold")
 
-                            gr.Markdown("**Phase 2: Fusion & Filtering**")
-                            phase2_top_k = gr.Slider(
-                                minimum=50,
-                                maximum=300,
-                                value=100,
-                                step=25,
-                                label="Phase 2 Top-K",
-                                info="After RRF fusion"
-                            )
-                            phase2_keyword_boost = gr.Slider(
-                                minimum=1.0,
-                                maximum=3.0,
-                                value=1.5,
-                                step=0.1,
-                                label="Keyword Boost Factor"
-                            )
+                # Analytics Section
+                gr.Markdown("---")
+                gr.Markdown("### Analytics & System Status")
+                with gr.Row():
+                    with gr.Column():
+                        analytics_btn = gr.Button("Refresh Analytics")
+                        analytics_output = gr.Markdown()
+                    with gr.Column():
+                        performance_btn = gr.Button("Performance Report")
+                        performance_output = gr.Markdown()
+                    with gr.Column():
+                        health_btn = gr.Button("System Health")
+                        health_output = gr.Markdown()
 
-                            gr.Markdown("**Phase 3: Reranking**")
-                            phase3_top_k = gr.Slider(
-                                minimum=10,
-                                maximum=100,
-                                value=50,
-                                step=10,
-                                label="Phase 3 Top-K",
-                                info="After reranking"
-                            )
-
-                            gr.Markdown("**Phase 4: Final Selection**")
-                            phase4_top_k = gr.Slider(
-                                minimum=3,
-                                maximum=20,
-                                value=10,
-                                step=1,
-                                label="Final Top-K Results"
-                            )
-                            phase4_quality = gr.Slider(
-                                minimum=0.3,
-                                maximum=0.9,
-                                value=0.6,
-                                step=0.05,
-                                label="Quality Threshold"
-                            )
+                # Session info
+                gr.Markdown("---")
+                with gr.Row():
+                    info_btn = gr.Button("Refresh Session Info")
+                    session_info = gr.Textbox(label="Session Info", interactive=False, lines=5)
+                    status = gr.Textbox(label="System Status", interactive=False)
 
             # Form Generator Tab
             with gr.TabItem("Form Generator"):
                 gr.Markdown("### Legal Document Generator")
                 with gr.Row():
                     with gr.Column():
-                        templates_display = gr.Markdown()
                         templates_btn = gr.Button("Show Templates")
+                        templates_display = gr.Markdown()
 
                         template_id = gr.Dropdown(
                             choices=['surat_kuasa', 'surat_pernyataan', 'perjanjian_kerja', 'pengaduan', 'somasi'],
@@ -1500,47 +1290,102 @@ def create_demo() -> gr.Blocks:
                     with gr.Column():
                         form_output = gr.Markdown(label="Generated Form")
 
-            # Analytics Tab
-            with gr.TabItem("Analytics"):
-                gr.Markdown("### System Analytics")
-                with gr.Row():
-                    with gr.Column():
-                        analytics_btn = gr.Button("Refresh Analytics", variant="primary")
-                        analytics_output = gr.Markdown()
+        # Update state from checkboxes
+        show_thinking_cb.change(lambda x: x, inputs=[show_thinking_cb], outputs=[show_thinking])
+        show_sources_cb.change(lambda x: x, inputs=[show_sources_cb], outputs=[show_sources])
+        show_metadata_cb.change(lambda x: x, inputs=[show_metadata_cb], outputs=[show_metadata])
+        show_analysis_cb.change(lambda x: x, inputs=[show_analysis_cb], outputs=[show_analysis])
 
-                    with gr.Column():
-                        performance_btn = gr.Button("Performance Report")
-                        performance_output = gr.Markdown()
+        # Chat with streaming - shows message immediately then generates
+        def chat_with_streaming(message, history, thinking, sources, metadata, analysis):
+            """Chat function that shows user message immediately then streams response"""
+            if not message.strip():
+                return "", history
 
-            # System Status Tab
-            with gr.TabItem("System Status"):
-                gr.Markdown("### System Health Check")
-                with gr.Row():
-                    with gr.Column():
-                        health_btn = gr.Button("Check System Health", variant="primary")
-                        health_output = gr.Markdown()
+            # Add user message immediately
+            history = history + [(message, None)]
+            yield "", history
 
-            # About Tab
-            with gr.TabItem("About"):
-                about_output = gr.Markdown(value=get_about_info())
+            # Now generate response
+            try:
+                if pipeline is None:
+                    initialize_system()
+
+                context = manager.get_context_for_query(current_session) if current_session else None
+                result = pipeline.query(message, conversation_history=context, stream=False)
+
+                # Build response
+                response_parts = []
+
+                # Parse think tags
+                answer_text = result.get('answer', '')
+                thinking_content_from_tags, clean_answer = parse_think_tags(answer_text)
+
+                # Combine thinking
+                thinking_content = result.get('thinking', '')
+                if thinking_content_from_tags:
+                    thinking_content = thinking_content_from_tags if not thinking_content else f"{thinking_content}\n\n{thinking_content_from_tags}"
+
+                # Add thinking
+                if thinking and thinking_content:
+                    response_parts.append(f"""<details><summary>🧠 Proses Berpikir</summary>\n\n{thinking_content}\n\n</details>\n\n---\n\n""")
+
+                # Main answer
+                final_answer = clean_answer if thinking_content_from_tags else answer_text
+                response_parts.append(f"✅ **Jawaban:**\n\n{final_answer}")
+
+                # Add sources
+                if sources and result.get('sources'):
+                    src_list = result['sources']
+                    if src_list:
+                        source_content = ""
+                        for i, src in enumerate(src_list[:5], 1):
+                            if isinstance(src, dict):
+                                title = src.get('title', src.get('regulation', f'Source {i}'))
+                                score = src.get('score', 0)
+                                doc_type = src.get('type', src.get('jenis_peraturan', ''))
+                                source_content += f"**{i}. {title}**\n- Skor: {score:.3f}\n"
+                                if doc_type:
+                                    source_content += f"- Jenis: {doc_type}\n"
+                                source_content += "\n"
+                        response_parts.append(f"""\n\n---\n\n<details><summary>📖 Sumber Hukum ({len(src_list[:5])} dokumen)</summary>\n\n{source_content}</details>""")
+
+                # Add metadata
+                if metadata and result.get('metadata'):
+                    meta = result['metadata']
+                    meta_content = ""
+                    if meta.get('query_type'):
+                        meta_content += f"- **Tipe Query:** {meta['query_type']}\n"
+                    if meta.get('processing_time'):
+                        meta_content += f"- **Waktu Proses:** {meta['processing_time']:.2f}s\n"
+                    if meta_content:
+                        response_parts.append(f"""\n\n<details><summary>📊 Metadata</summary>\n\n{meta_content}</details>""")
+
+                response = "".join(response_parts)
+
+                # Save to history
+                if current_session:
+                    manager.add_turn(current_session, message, response, result.get('metadata'))
+
+                history[-1] = (message, response)
+                yield "", history
+
+            except Exception as e:
+                logger.error(f"Chat error: {e}")
+                history[-1] = (message, f"Error: {str(e)}")
+                yield "", history
 
         # Event handlers
         submit_btn.click(
-            chat,
+            chat_with_streaming,
             inputs=[msg, chatbot, show_thinking, show_sources, show_metadata, show_analysis],
             outputs=[msg, chatbot]
         )
 
         msg.submit(
-            chat,
+            chat_with_streaming,
             inputs=[msg, chatbot, show_thinking, show_sources, show_metadata, show_analysis],
             outputs=[msg, chatbot]
-        )
-
-        provider_btn.click(
-            change_provider,
-            inputs=[provider_dropdown],
-            outputs=[provider_status]
         )
 
         clear_btn.click(
@@ -1548,57 +1393,41 @@ def create_demo() -> gr.Blocks:
             outputs=[chatbot, status]
         )
 
-        export_btn.click(
-            export_conversation,
-            inputs=[export_format],
-            outputs=[export_status]
-        )
-
+        # File upload handler
         file_upload.change(
             upload_document,
             inputs=[file_upload],
             outputs=[upload_status]
         )
 
-        info_btn.click(
-            get_session_info,
-            outputs=[session_info]
-        )
+        # Export handlers
+        def preview_export(format_type):
+            preview, _ = get_export_preview(format_type)
+            return preview
+
+        def download_export(format_type):
+            return export_conversation(format_type)
+
+        preview_btn.click(preview_export, inputs=[export_format], outputs=[export_preview])
+        download_btn.click(download_export, inputs=[export_format], outputs=[export_status])
+
+        # Provider handler
+        provider_btn.click(change_provider, inputs=[provider_dropdown], outputs=[provider_status])
+
+        # Info handler
+        info_btn.click(get_session_info, outputs=[session_info])
 
         # Form Generator handlers
-        templates_btn.click(
-            get_form_templates,
-            outputs=[templates_display]
-        )
-
-        generate_btn.click(
-            generate_legal_form,
-            inputs=[template_id, field_values],
-            outputs=[form_output]
-        )
+        templates_btn.click(get_form_templates, outputs=[templates_display])
+        generate_btn.click(generate_legal_form, inputs=[template_id, field_values], outputs=[form_output])
 
         # Analytics handlers
-        analytics_btn.click(
-            get_analytics_summary,
-            outputs=[analytics_output]
-        )
-
-        performance_btn.click(
-            get_performance_report,
-            outputs=[performance_output]
-        )
-
-        # System Status handler
-        health_btn.click(
-            get_system_health,
-            outputs=[health_output]
-        )
+        analytics_btn.click(get_analytics_summary, outputs=[analytics_output])
+        performance_btn.click(get_performance_report, outputs=[performance_output])
+        health_btn.click(get_system_health, outputs=[health_output])
 
         # Initialize on load
-        demo.load(
-            initialize_system,
-            outputs=[status]
-        )
+        demo.load(initialize_system, outputs=[status])
 
     return demo
 
