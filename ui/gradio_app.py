@@ -1364,6 +1364,7 @@ def create_demo() -> gr.Blocks:
                 with gr.Row():
                     with gr.Column(scale=1):
                         with gr.Accordion("Advanced Search Settings", open=False):
+                            gr.Markdown("⚠️ *Note: These settings require system restart to take effect*")
                             team_size = gr.Slider(
                                 minimum=1,
                                 maximum=5,
