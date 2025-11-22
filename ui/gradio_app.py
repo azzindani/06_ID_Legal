@@ -791,7 +791,34 @@ def create_demo() -> gr.Blocks:
 
 
 def launch_app(share: bool = False, server_port: int = 7860):
-    """Launch Gradio app"""
+    """Launch Gradio app with pre-initialization"""
+    global pipeline, manager, current_session
+
+    # Initialize system BEFORE launching UI
+    logger.info("Pre-initializing system before UI launch...")
+
+    # Initialize pipeline
+    if pipeline is None:
+        logger.info(f"Initializing RAG pipeline with provider: {current_provider}")
+        pipeline = RAGPipeline({'llm_provider': current_provider})
+        if not pipeline.initialize():
+            logger.error("Failed to initialize pipeline")
+            raise RuntimeError("Pipeline initialization failed")
+        logger.info("Pipeline initialized successfully")
+
+    # Initialize conversation manager
+    if manager is None:
+        manager = ConversationManager()
+        logger.info("Conversation manager initialized")
+
+    # Start session
+    if current_session is None:
+        current_session = manager.start_session()
+        logger.info(f"Session started: {current_session}")
+
+    logger.info("System fully initialized, launching UI...")
+
+    # Now create and launch demo
     demo = create_demo()
     demo.launch(
         server_name="0.0.0.0",
