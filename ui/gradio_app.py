@@ -18,6 +18,7 @@ from conversation import ConversationManager, MarkdownExporter, JSONExporter, HT
 from providers import get_provider, switch_provider, list_providers
 from config import LLM_PROVIDER, EMBEDDING_DEVICE, LLM_DEVICE
 from logger_utils import get_logger
+from core.document_parser import parse_document
 
 logger = get_logger(__name__)
 
@@ -203,27 +204,53 @@ Cache Size: {cache_stats['size']}/{cache_stats['max_size']}"""
 
 
 def upload_document(file) -> str:
-    """Handle document upload"""
+    """Handle document upload and parsing"""
     if file is None:
         return "No file uploaded"
 
     try:
         file_path = file.name
-        file_ext = Path(file_path).suffix.lower()
+        result = parse_document(file_path)
 
-        if file_ext == '.pdf':
-            return f"PDF uploaded: {file_path}\nPDF analysis coming soon..."
-        elif file_ext in ['.doc', '.docx']:
-            return f"Word document uploaded: {file_path}\nDOCX analysis coming soon..."
-        elif file_ext == '.txt':
-            with open(file_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-            return f"Text file uploaded ({len(content)} chars)\nReady for analysis."
-        else:
-            return f"Unsupported file type: {file_ext}"
+        if not result['success']:
+            return f"Parse error: {result['error']}"
+
+        meta = result['metadata']
+        content_preview = result['content'][:500] + "..." if len(result['content']) > 500 else result['content']
+
+        # Build status message
+        status = f"**Document Parsed Successfully**\n\n"
+        status += f"**File:** {meta.get('filename', 'Unknown')}\n"
+        status += f"**Format:** {meta.get('format', 'Unknown')}\n"
+
+        if 'pages' in meta:
+            status += f"**Pages:** {meta['pages']}\n"
+        if 'paragraphs' in meta:
+            status += f"**Paragraphs:** {meta['paragraphs']}\n"
+
+        status += f"**Words:** {meta.get('word_count', 0)}\n"
+        status += f"**Characters:** {meta.get('char_count', 0)}\n"
+
+        if meta.get('title'):
+            status += f"**Title:** {meta['title']}\n"
+        if meta.get('author'):
+            status += f"**Author:** {meta['author']}\n"
+
+        status += f"\n**Content Preview:**\n```\n{content_preview}\n```"
+
+        # Store parsed content for potential use in chat
+        global _uploaded_document
+        _uploaded_document = result
+
+        return status
 
     except Exception as e:
+        logger.error(f"Upload error: {e}")
         return f"Upload error: {e}"
+
+
+# Store uploaded document for use in chat
+_uploaded_document = None
 
 
 def create_demo() -> gr.Blocks:
