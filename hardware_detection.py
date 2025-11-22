@@ -85,7 +85,7 @@ def detect_hardware() -> HardwareConfig:
             reranker_device='cpu',
             llm_device='cpu',
             llm_quantization='4bit',  # Still use quantization for RAM
-            recommended_model='meta-llama/Llama-3.2-3B-Instruct',  # Smaller model
+            recommended_model='Azzindani/Deepseek_ID_Legal_Preview',
             vram_available=vram_gb,
             ram_available=ram_gb
         )
@@ -97,7 +97,7 @@ def detect_hardware() -> HardwareConfig:
             reranker_device='cpu',
             llm_device='cuda',
             llm_quantization='4bit',
-            recommended_model='meta-llama/Llama-3.2-3B-Instruct',
+            recommended_model='Azzindani/Deepseek_ID_Legal_Preview',
             vram_available=vram_gb,
             ram_available=ram_gb
         )
@@ -109,7 +109,7 @@ def detect_hardware() -> HardwareConfig:
             reranker_device='cpu',
             llm_device='cuda',
             llm_quantization='4bit',
-            recommended_model='meta-llama/Llama-3.1-8B-Instruct',
+            recommended_model='Azzindani/Deepseek_ID_Legal_Preview',
             vram_available=vram_gb,
             ram_available=ram_gb
         )
@@ -121,7 +121,7 @@ def detect_hardware() -> HardwareConfig:
             reranker_device='cpu',
             llm_device='cuda',
             llm_quantization='8bit',
-            recommended_model='meta-llama/Llama-3.1-8B-Instruct',
+            recommended_model='Azzindani/Deepseek_ID_Legal_Preview',
             vram_available=vram_gb,
             ram_available=ram_gb
         )
@@ -133,7 +133,7 @@ def detect_hardware() -> HardwareConfig:
             reranker_device='cuda',
             llm_device='cuda',
             llm_quantization='none',
-            recommended_model='meta-llama/Llama-3.1-8B-Instruct',
+            recommended_model='Azzindani/Deepseek_ID_Legal_Preview',
             vram_available=vram_gb,
             ram_available=ram_gb
         )
