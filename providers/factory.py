@@ -127,3 +127,42 @@ def switch_provider(
         New provider instance
     """
     return get_provider(provider_type, config, reinitialize=True)
+
+
+if __name__ == "__main__":
+    print("=" * 60)
+    print("PROVIDER FACTORY TEST")
+    print("=" * 60)
+
+    # List available providers
+    print("\nAvailable Providers:")
+    providers = list_providers()
+    for name, desc in providers.items():
+        print(f"  - {name}: {desc}")
+
+    # Test provider creation (without initialization)
+    print("\n" + "-" * 60)
+    print("Testing Provider Creation")
+    print("-" * 60)
+
+    for provider_name in ['local', 'openai', 'anthropic', 'google', 'openrouter']:
+        try:
+            provider = create_provider(provider_name)
+            print(f"  ✓ {provider_name}: {provider.__class__.__name__}")
+        except Exception as e:
+            print(f"  ✗ {provider_name}: {e}")
+
+    # Test invalid provider
+    print("\n" + "-" * 60)
+    print("Testing Invalid Provider (should fail)")
+    print("-" * 60)
+
+    try:
+        create_provider('invalid_provider')
+        print("  ✗ Should have raised ValueError")
+    except ValueError as e:
+        print(f"  ✓ Correctly raised: {e}")
+
+    print("\n" + "=" * 60)
+    print("TEST COMPLETE")
+    print("=" * 60)

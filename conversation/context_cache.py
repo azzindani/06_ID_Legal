@@ -245,3 +245,70 @@ def get_context_cache() -> ContextCache:
     if _context_cache is None:
         _context_cache = ContextCache()
     return _context_cache
+
+
+if __name__ == "__main__":
+    print("=" * 60)
+    print("CONTEXT CACHE TEST")
+    print("=" * 60)
+
+    cache = ContextCache({'cache_size': 5, 'max_tokens': 1000})
+
+    # Test basic put/get
+    print("\nTest 1: Basic Put/Get")
+    context1 = [
+        {'role': 'user', 'content': 'What is labor law?'},
+        {'role': 'assistant', 'content': 'Labor law regulates employment relationships.'}
+    ]
+    cache.put('session-1', context1)
+    retrieved = cache.get('session-1')
+    print(f"  ✓ Stored and retrieved {len(retrieved)} messages")
+
+    # Test update
+    print("\nTest 2: Context Update")
+    new_turn = {'role': 'user', 'content': 'What about minimum wage?'}
+    updated = cache.update('session-1', new_turn)
+    print(f"  ✓ Updated context now has {len(updated)} messages")
+
+    # Test LRU eviction
+    print("\nTest 3: LRU Eviction")
+    for i in range(6):
+        cache.put(f'session-{i}', [{'role': 'user', 'content': f'Query {i}'}])
+
+    stats = cache.get_stats()
+    print(f"  Cache size: {stats['size']}/{stats['max_size']}")
+    print(f"  ✓ Oldest session evicted: {'session-0' not in stats['keys']}")
+
+    # Test compression
+    print("\nTest 4: Context Compression")
+    long_context = [
+        {'role': 'system', 'content': 'You are a legal assistant.'},
+    ]
+    for i in range(20):
+        long_context.append({'role': 'user', 'content': f'Question {i}: ' + 'x' * 200})
+        long_context.append({'role': 'assistant', 'content': f'Answer {i}: ' + 'y' * 200})
+
+    cache.put('session-long', long_context, {'test': True})
+    compressed = cache.get('session-long')
+    print(f"  Original: {len(long_context)} messages")
+    print(f"  Compressed: {len(compressed)} messages")
+    print(f"  ✓ Compression working: {len(compressed) < len(long_context)}")
+
+    # Test stats
+    print("\nTest 5: Cache Statistics")
+    stats = cache.get_stats()
+    print(f"  Size: {stats['size']}/{stats['max_size']}")
+    print(f"  Total tokens: {stats['total_tokens']}")
+    print(f"  Keys: {stats['keys']}")
+
+    # Test clear
+    print("\nTest 6: Clear Cache")
+    cache.clear('session-long')
+    print(f"  ✓ Cleared specific key: {cache.get('session-long') is None}")
+
+    cache.clear()
+    print(f"  ✓ Cleared all: {cache.get_stats()['size'] == 0}")
+
+    print("\n" + "=" * 60)
+    print("TEST COMPLETE")
+    print("=" * 60)

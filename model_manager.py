@@ -402,16 +402,87 @@ def get_model_manager() -> ModelManager:
 def load_models(use_mock_reranker: bool = False):
     """
     Convenience function to load all models
-    
+
     Args:
         use_mock_reranker: Whether to use mock reranker for testing
-        
+
     Returns:
         Tuple of (embedding_model, reranker_model)
     """
     manager = get_model_manager()
-    
+
     embedding_model = manager.load_embedding_model()
     reranker_model = manager.load_reranker_model(use_mock=use_mock_reranker)
-    
+
     return embedding_model, reranker_model
+
+
+if __name__ == "__main__":
+    from logger_utils import initialize_logging
+    initialize_logging(enable_file_logging=False)
+
+    print("=" * 60)
+    print("MODEL MANAGER TEST")
+    print("=" * 60)
+
+    manager = ModelManager()
+
+    # Show model info before loading
+    print("\nInitial State:")
+    info = manager.get_model_info()
+    print(f"  Device: {info['device']}")
+    print(f"  CUDA Available: {info['cuda_available']}")
+    print(f"  GPU Count: {info['cuda_device_count']}")
+
+    # Test embedding model loading
+    print("\n" + "-" * 60)
+    print("Loading Embedding Model")
+    print("-" * 60)
+
+    try:
+        embedding_model = manager.load_embedding_model()
+        print(f"  ✓ Embedding model loaded")
+        print(f"  Type: {type(embedding_model).__name__}")
+    except Exception as e:
+        print(f"  ✗ Failed: {e}")
+
+    # Test reranker model loading (use mock for quick test)
+    print("\n" + "-" * 60)
+    print("Loading Reranker Model (Mock)")
+    print("-" * 60)
+
+    try:
+        reranker_model = manager.load_reranker_model(use_mock=True)
+        print(f"  ✓ Reranker model loaded")
+        print(f"  Type: {type(reranker_model).__name__}")
+
+        # Test reranker scoring
+        pairs = [
+            ["Apa sanksi UU ITE?", "UU ITE mengatur sanksi pidana untuk pelanggaran."],
+            ["Apa sanksi UU ITE?", "Cuaca hari ini cerah."]
+        ]
+        scores = reranker_model.compute_score(pairs)
+        print(f"  Test scores: {scores}")
+    except Exception as e:
+        print(f"  ✗ Failed: {e}")
+
+    # Show final state
+    print("\n" + "-" * 60)
+    print("Final State")
+    print("-" * 60)
+
+    info = manager.get_model_info()
+    print(f"  Embedding loaded: {info['embedding_model_loaded']}")
+    print(f"  Reranker loaded: {info['reranker_model_loaded']}")
+
+    # Cleanup
+    print("\n" + "-" * 60)
+    print("Cleanup")
+    print("-" * 60)
+
+    manager.unload_models()
+    print("  ✓ Models unloaded")
+
+    print("\n" + "=" * 60)
+    print("TEST COMPLETE")
+    print("=" * 60)
