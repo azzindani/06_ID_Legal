@@ -73,7 +73,9 @@ def load_dataset():
     try:
         from loader import EnhancedKGDatasetLoader
 
-        loader = EnhancedKGDatasetLoader(DATASET_NAME)
+        # Default embedding dimension for sentence-transformers models
+        embedding_dim = 384
+        loader = EnhancedKGDatasetLoader(DATASET_NAME, embedding_dim)
         data = loader.load()
 
         logger.info(f"Dataset loaded: {len(data.get('documents', []))} documents")

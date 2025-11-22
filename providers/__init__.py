@@ -17,6 +17,14 @@ from .google_provider import GoogleProvider
 from .openrouter_provider import OpenRouterProvider
 from .factory import create_provider, get_provider, list_providers, switch_provider, PROVIDERS
 
+# Alias for backward compatibility
+ProviderFactory = type('ProviderFactory', (), {
+    'create': staticmethod(create_provider),
+    'get': staticmethod(get_provider),
+    'list': staticmethod(list_providers),
+    'switch': staticmethod(switch_provider),
+})
+
 __all__ = [
     'BaseLLMProvider',
     'LocalLLMProvider',
@@ -29,4 +37,5 @@ __all__ = [
     'list_providers',
     'switch_provider',
     'PROVIDERS',
+    'ProviderFactory',
 ]
