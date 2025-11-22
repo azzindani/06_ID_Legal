@@ -678,6 +678,199 @@ pytest tests/
 
 ---
 
+---
+
+## System Alignment with Original Kaggle_Demo.ipynb
+
+**Last Reviewed**: 2025-11-22
+
+This section tracks alignment between the modular system and the original monolithic Kaggle_Demo.ipynb reference implementation.
+
+### Alignment Summary
+
+| Category | Aligned | Partial | Missing |
+|----------|---------|---------|---------|
+| Search Engine | 1 | 1 | 5 |
+| Research Team | 2 | 0 | 2 |
+| Knowledge Graph | 1 | 1 | 3 |
+| Export Functions | 4 | 0 | 0 |
+| Configuration | 4 | 0 | 0 |
+| Chat Functions | 0 | 1 | 5 |
+| UI Components | 2 | 2 | 2 |
+
+---
+
+### MISSING Components (Critical)
+
+#### Search Engine
+
+| Component | Impact | Description |
+|-----------|--------|-------------|
+| **AdvancedQueryAnalyzer** | HIGH | Multi-strategy query analysis (`keyword_first` vs `semantic_first` vs `hybrid_balanced`) with confidence scoring. Current `QueryDetector` is simpler. |
+| **extract_regulation_references_with_confidence** | HIGH | Returns confidence scores (0.3-1.0) for regulation references. Critical for metadata-first search. |
+| **_metadata_first_search** | HIGH | STRICT triple-match filtering (type+number+year) with PERFECT SCORE OVERRIDE (1.0). Ensures exact matches rank first. |
+| **direct_metadata_search** | HIGH | Direct search by regulation metadata bypassing semantic search. |
+| **DynamicCommunityDetector** | MEDIUM | Network analysis of cross-references using igraph/Louvain algorithm. |
+
+#### Knowledge Graph
+
+| Component | Impact | Description |
+|-----------|--------|-------------|
+| **follow_citation_chain** | MEDIUM | Traverses citation network to find related documents up to `max_depth=2`. |
+| **boost_cited_documents** | MEDIUM | Boosts scores of documents appearing in citation chains. |
+| **_calculate_sanction_relevance** | MEDIUM | Domain-specific KG scoring for sanctions queries. |
+| **_calculate_legal_action_relevance** | MEDIUM | Domain-specific KG scoring for procedural queries. |
+
+#### Research Team
+
+| Component | Impact | Description |
+|-----------|--------|-------------|
+| **update_persona_performance** | LOW | Adaptive learning - tracks persona success rates per query type. |
+| **get_adjusted_persona** | LOW | Dynamic persona adjustment based on performance history. |
+
+---
+
+### MISSING Chat Function Features (Critical for UX)
+
+| Feature | Impact | Description |
+|---------|--------|-------------|
+| **Streaming Response** | HIGH | Uses `yield` with `TextIteratorStreamer` for real-time typing effect. Current: simple return. |
+| **Progress Tracking** | HIGH | Real-time `add_progress()` callbacks showing search stages with timestamps. |
+| **Collapsible Sections** | HIGH | HTML `<details><summary>` tags for research process, thinking, sources, metadata. |
+| **Query Analysis Display** | MEDIUM | Shows search strategy, confidence, key phrases in output. |
+| **Community Detection Display** | MEDIUM | Shows "Discovered Thematic Clusters" section with cluster analysis. |
+
+#### Original Chat Output Structure
+
+```markdown
+<details><summary>📋 Proses Penelitian (klik)</summary>
+  🔄 [0.1s] Memulai analisis query...
+  🔄 [0.3s] Query Strategy: keyword_first (85%)
+  🔄 [0.5s] Key phrases: cipta kerja
+  🔄 [1.2s] Initial search: 150 candidates
+</details>
+
+<details><summary>🧠 Proses berfikir</summary>
+  [thinking content]
+</details>
+
+✅ **Jawaban:**
+[main answer]
+
+---
+
+### 🌐 Discovered Thematic Clusters
+• **Cluster 1** (15 docs): Administrative - Peraturan Pemerintah
+
+---
+
+<details><summary>📖 Sumber Hukum (3 dokumen)</summary>
+  [detailed sources with scores, KG metadata, team consensus]
+</details>
+```
+
+---
+
+### MISSING UI Settings (Advanced Configuration)
+
+| Setting | Description |
+|---------|-------------|
+| Search Phase Controls | All 5 phases with candidates/thresholds sliders |
+| Research Team Size | Slider 1-5 |
+| Enable Cross-Validation | Checkbox |
+| Enable Devil's Advocate | Checkbox |
+| Consensus Threshold | Slider 0.3-0.9 |
+| LLM top_p/top_k/min_p | Sliders |
+| System Health Check | Button + formatted report |
+| Reset to Defaults | Button |
+| About Tab | Complete documentation of enhanced features |
+
+---
+
+### PARTIALLY IMPLEMENTED
+
+#### ConversationContextManager
+- **Location**: `conversation/manager.py`
+- **Missing**:
+  - Semantic similarity detection for topic shifts
+  - `last_query_embedding` tracking
+  - `recent_topic_embeddings` history
+  - `topic_shift_threshold` (0.65)
+  - Automatic context clearing on topic change
+
+#### KG Scoring
+- **Location**: `core/knowledge_graph/kg_core.py`
+- **Present**: `extract_entities()`, `calculate_entity_score()`, `calculate_advanced_score()`
+- **Missing**: Domain-specific scoring methods for sanctions/procedural queries
+
+---
+
+### FULLY ALIGNED ✅
+
+#### Configuration (100% Complete)
+- `DEFAULT_SEARCH_PHASES` - All 5 phases
+- `RESEARCH_TEAM_PERSONAS` - All 5 personas
+- `QUERY_TEAM_COMPOSITIONS` - All 5 compositions
+- `KG_WEIGHTS` - All 12 weights
+- `REGULATION_TYPE_PATTERNS` - All 9 types
+- `REGULATION_PRONOUNS` - All 11 patterns
+- `FOLLOWUP_INDICATORS` - All 17 patterns
+
+#### Export Functions (100% Complete)
+- `format_complete_search_metadata`
+- `export_conversation_to_markdown`
+- `export_conversation_to_json`
+- `export_conversation_to_html`
+
+#### UI Styling (100% Complete)
+- Zoom-friendly responsive CSS with em units
+- 8 comprehensive example questions
+- 75vh chatbot height
+
+---
+
+### Implementation Priority
+
+#### HIGH Priority (Core Functionality)
+
+1. **extract_regulation_references_with_confidence** in `kg_core.py`
+2. **_metadata_first_search** in `hybrid_search.py`
+3. **Streaming chat response** in `gradio_app.py`
+4. **Progress tracking callbacks**
+5. **Collapsible HTML sections**
+
+#### MEDIUM Priority (Enhanced Features)
+
+6. **DynamicCommunityDetector** in `core/knowledge_graph/`
+7. **Advanced settings panel** in `ui/gradio_app.py`
+8. **follow_citation_chain / boost_cited_documents**
+9. **Query analysis display**
+
+#### LOW Priority (Nice-to-Have)
+
+10. **update_persona_performance / get_adjusted_persona**
+11. **Health check UI**
+12. **About tab documentation**
+
+---
+
+### Two UI Modes
+
+| Mode | File | Port | Description |
+|------|------|------|-------------|
+| Conversational UI | `ui/gradio_app.py` | 7860 | Full RAG + conversation history |
+| Search Engine UI | `ui/search_app.py` | 7861 | Document retrieval only |
+
+```bash
+# Conversational UI
+python -c "from ui.gradio_app import launch_app; launch_app(share=True)"
+
+# Search Engine UI
+python -c "from ui.search_app import launch_search_app; launch_search_app(share=True)"
+```
+
+---
+
 ## License
 
 [Specify license]
