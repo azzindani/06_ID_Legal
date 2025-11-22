@@ -1,6 +1,6 @@
 """
 Configuration Module for KG-Enhanced Indonesian Legal RAG System
-Enhanced with environment variable support and better validation
+Enhanced with environment variable support, validation, and auto-detection
 """
 
 import os
@@ -21,6 +21,37 @@ from logger_utils import get_logger
 logger = get_logger("Config")
 
 # =============================================================================
+# AUTO-DETECTION CONFIGURATION
+# =============================================================================
+
+# Enable auto-detection of hardware for optimal configuration
+AUTO_DETECT_HARDWARE = os.getenv("AUTO_DETECT_HARDWARE", "true").lower() == "true"
+
+def _get_auto_config():
+    """Get auto-detected hardware configuration"""
+    if not AUTO_DETECT_HARDWARE:
+        return {}
+
+    try:
+        from hardware_detection import detect_hardware
+        config = detect_hardware()
+        logger.info(f"Auto-detected: VRAM={config.vram_available:.1f}GB, RAM={config.ram_available:.1f}GB")
+        return {
+            'embedding_device': config.embedding_device,
+            'reranker_device': config.reranker_device,
+            'llm_device': config.llm_device,
+            'llm_load_in_4bit': config.llm_quantization == '4bit',
+            'llm_load_in_8bit': config.llm_quantization == '8bit',
+            'recommended_model': config.recommended_model,
+        }
+    except Exception as e:
+        logger.debug(f"Hardware auto-detection skipped: {e}")
+        return {}
+
+# Get auto-detected settings (empty if disabled or unavailable)
+_auto_config = _get_auto_config()
+
+# =============================================================================
 # DATASET CONFIGURATION
 # =============================================================================
 
@@ -33,7 +64,7 @@ HF_TOKEN = os.getenv("HF_TOKEN", None)
 
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "Qwen/Qwen3-Embedding-0.6B")
 RERANKER_MODEL = os.getenv("RERANKER_MODEL", "Qwen/Qwen3-Reranker-0.6B")
-LLM_MODEL = os.getenv("LLM_MODEL", "Azzindani/Deepseek_ID_Legal_Preview")
+LLM_MODEL = os.getenv("LLM_MODEL", _auto_config.get('recommended_model', "Azzindani/Deepseek_ID_Legal_Preview"))
 MAX_LENGTH = int(os.getenv("MAX_LENGTH", "32768"))
 EMBEDDING_DIM = int(os.getenv("EMBEDDING_DIM", "1024"))
 
@@ -41,16 +72,18 @@ EMBEDDING_DIM = int(os.getenv("EMBEDDING_DIM", "1024"))
 # DEVICE & INFERENCE CONFIGURATION
 # =============================================================================
 
-# Device settings - allows CPU/GPU split for privacy-focused local inference
+# Device settings - auto-detected or manual override
 DEVICE = os.getenv("DEVICE", "cuda")
-EMBEDDING_DEVICE = os.getenv("EMBEDDING_DEVICE", "cpu")  # CPU for embeddings (small models)
-RERANKER_DEVICE = os.getenv("RERANKER_DEVICE", "cpu")    # CPU for reranker (small model)
-LLM_DEVICE = os.getenv("LLM_DEVICE", "cuda")             # GPU for LLM (large model)
+EMBEDDING_DEVICE = os.getenv("EMBEDDING_DEVICE", _auto_config.get('embedding_device', "cpu"))
+RERANKER_DEVICE = os.getenv("RERANKER_DEVICE", _auto_config.get('reranker_device', "cpu"))
+LLM_DEVICE = os.getenv("LLM_DEVICE", _auto_config.get('llm_device', "cuda"))
 
-# Quantization settings for local inference
+# Quantization settings - auto-detected or manual override
 LLM_QUANTIZATION = os.getenv("LLM_QUANTIZATION", "4bit")  # none, 4bit, 8bit
-LLM_LOAD_IN_4BIT = os.getenv("LLM_LOAD_IN_4BIT", "true").lower() == "true"
-LLM_LOAD_IN_8BIT = os.getenv("LLM_LOAD_IN_8BIT", "false").lower() == "true"
+_default_4bit = "true" if _auto_config.get('llm_load_in_4bit', True) else "false"
+_default_8bit = "true" if _auto_config.get('llm_load_in_8bit', False) else "false"
+LLM_LOAD_IN_4BIT = os.getenv("LLM_LOAD_IN_4BIT", _default_4bit).lower() == "true"
+LLM_LOAD_IN_8BIT = os.getenv("LLM_LOAD_IN_8BIT", _default_8bit).lower() == "true"
 EMBEDDING_DTYPE = os.getenv("EMBEDDING_DTYPE", "float32")  # float32, float16, bfloat16
 
 # =============================================================================

@@ -19,9 +19,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 # Configuration Fixtures
 # =============================================================================
 
-@pytest.fixture
+@pytest.fixture(scope='session')
 def test_config():
-    """Base test configuration"""
+    """Base test configuration - shared across all tests in session"""
     return {
         'embedding_model': 'Alibaba-NLP/gte-Qwen2-1.5B-instruct',
         'llm_model': 'deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B',
@@ -32,15 +32,37 @@ def test_config():
     }
 
 
-@pytest.fixture
+@pytest.fixture(scope='session')
 def mock_config():
-    """Mock configuration for unit tests"""
+    """Mock configuration for unit tests - shared across session"""
     config = MagicMock()
     config.EMBEDDING_MODEL = 'test-embedding-model'
     config.LLM_MODEL = 'test-llm-model'
     config.DATASET_NAME = 'test-dataset'
     config.MAX_RESULTS = 5
     return config
+
+
+# =============================================================================
+# Shared Initialization Fixtures
+# =============================================================================
+
+@pytest.fixture(scope='session')
+def initialized_pipeline():
+    """
+    Initialize RAG pipeline once for all tests in session.
+    Use for integration tests that need the full pipeline.
+    """
+    try:
+        from pipeline import RAGPipeline
+        pipeline = RAGPipeline()
+        if pipeline.initialize():
+            yield pipeline
+            pipeline.shutdown()
+        else:
+            pytest.skip("Failed to initialize pipeline")
+    except ImportError:
+        pytest.skip("Pipeline dependencies not available")
 
 
 # =============================================================================
@@ -246,13 +268,21 @@ def skip_without_models():
 # Cleanup Fixtures
 # =============================================================================
 
-@pytest.fixture(autouse=True)
-def cleanup_after_test():
-    """Cleanup after each test"""
+@pytest.fixture
+def cleanup_gpu():
+    """
+    Cleanup GPU memory after test. Use explicitly for tests that load models.
+    NOT autouse - only add to tests that need it.
+    """
     yield
-    # Add any cleanup logic here
     import gc
     gc.collect()
+    try:
+        import torch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except ImportError:
+        pass
 
 
 # =============================================================================
