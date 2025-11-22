@@ -128,11 +128,14 @@ class GenerationEngine:
                     }
                 
                 raw_answer = generation_result['generated_text']
-                
-                # Step 4: Post-process response
-                processed_answer = self._post_process_response(raw_answer)
-                
-                # Step 5: Add citations
+
+                # Step 4: Extract thinking and answer separately
+                thinking, answer_only = self._extract_thinking(raw_answer)
+
+                # Step 5: Post-process response
+                processed_answer = self._post_process_response(answer_only)
+
+                # Step 6: Add citations
                 cited_answer = self.citation_formatter.format_inline_references(
                     processed_answer,
                     retrieved_results
@@ -151,12 +154,13 @@ class GenerationEngine:
                     if self.enable_enhancement:
                         cited_answer = validation_result['enhanced_response']
                 
-                # Step 7: Build complete result
+                # Step 8: Build complete result
                 total_time = time.time() - start_time
-                
+
                 result = {
                     'success': True,
                     'answer': cited_answer,
+                    'thinking': thinking,  # Preserved thinking process
                     'raw_answer': raw_answer,
                     'metadata': {
                         'query': query,
@@ -307,20 +311,33 @@ class GenerationEngine:
         return template_mapping.get(query_type, 'rag_qa')
     
     def _post_process_response(self, response: str) -> str:
-        """Post-process generated response"""
-        
+        """Post-process generated response - preserve thinking for separate display"""
+
         # Sanitize
         processed = self.response_validator.sanitize_response(response)
-        
-        # Extract thinking tags if present
-        import re
-        think_pattern = r'<think>(.*?)</think>'
-        processed = re.sub(think_pattern, '', processed, flags=re.DOTALL | re.IGNORECASE)
-        
+
         # Clean up formatting
         processed = processed.strip()
-        
+
         return processed
+
+    def _extract_thinking(self, response: str) -> tuple:
+        """Extract thinking process from response
+
+        Returns:
+            Tuple of (thinking_content, answer_content)
+        """
+        import re
+        think_pattern = r'<think>(.*?)</think>'
+
+        # Find thinking content
+        thinking_match = re.search(think_pattern, response, flags=re.DOTALL | re.IGNORECASE)
+        thinking = thinking_match.group(1).strip() if thinking_match else ''
+
+        # Remove thinking tags from answer
+        answer = re.sub(think_pattern, '', response, flags=re.DOTALL | re.IGNORECASE).strip()
+
+        return thinking, answer
     
     def _extract_citations(
         self,
