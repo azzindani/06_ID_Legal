@@ -17,8 +17,10 @@ from config import (
     get_default_config,
     DEFAULT_SEARCH_PHASES,
     DATASET_NAME,
-    EMBEDDING_DIM
+    EMBEDDING_DIM,
+    ENABLE_CONTEXT_CACHE
 )
+from conversation.context_cache import get_context_cache
 
 
 class RAGPipeline:
@@ -62,8 +64,14 @@ class RAGPipeline:
         self._initialized = False
         self._initialization_time = 0
 
+        # Context cache
+        self._context_cache = None
+        if ENABLE_CONTEXT_CACHE:
+            self._context_cache = get_context_cache()
+
         self.logger.info("RAGPipeline created", {
-            "config_keys": list(self.config.keys())
+            "config_keys": list(self.config.keys()),
+            "context_cache_enabled": ENABLE_CONTEXT_CACHE
         })
 
     def initialize(self, progress_callback: Optional[callable] = None) -> bool:
@@ -210,6 +218,16 @@ class RAGPipeline:
         start_time = time.time()
 
         try:
+            # Check context cache for similar recent queries
+            cache_key = None
+            if self._context_cache:
+                cache_key = f"query:{hash(question)}"
+                cached = self._context_cache.get(cache_key)
+                if cached and cached.get('answer'):
+                    self.logger.info("Cache hit for query")
+                    cached['metadata']['from_cache'] = True
+                    return cached
+
             # Step 1: Run RAG orchestrator (retrieval)
             self.logger.info("Running retrieval...")
             retrieval_start = time.time()
@@ -272,7 +290,7 @@ class RAGPipeline:
                         "answer_length": len(generation_result['answer'])
                     })
 
-                    return {
+                    result = {
                         'success': True,
                         'answer': generation_result['answer'],
                         'sources': generation_result.get('sources', []),
@@ -285,9 +303,16 @@ class RAGPipeline:
                             'results_count': len(final_results),
                             'tokens_generated': generation_result['metadata'].get('tokens_generated', 0),
                             'query_type': query_analysis.get('query_type', 'general'),
-                            'rag_metadata': rag_result.get('metadata', {})
+                            'rag_metadata': rag_result.get('metadata', {}),
+                            'from_cache': False
                         }
                     }
+
+                    # Store in cache
+                    if self._context_cache and cache_key:
+                        self._context_cache.put(cache_key, result)
+
+                    return result
                 else:
                     self.logger.error("Generation failed", {
                         "error": generation_result.get('error')
