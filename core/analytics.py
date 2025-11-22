@@ -274,3 +274,79 @@ def get_analytics() -> AnalyticsDashboard:
     if _analytics is None:
         _analytics = AnalyticsDashboard()
     return _analytics
+
+
+if __name__ == "__main__":
+    import time
+    import random
+
+    print("=" * 60)
+    print("ANALYTICS DASHBOARD TEST")
+    print("=" * 60)
+
+    analytics = AnalyticsDashboard()
+
+    # Simulate some queries
+    print("\nSimulating queries...")
+    query_types = ["definitional", "procedural", "specific_article", "sanctions"]
+    providers = ["local", "openai", "anthropic"]
+
+    for i in range(10):
+        analytics.track_query(
+            query=f"Test query {i+1}",
+            query_type=random.choice(query_types),
+            response_time=random.uniform(0.5, 3.0),
+            success=random.random() > 0.1,
+            provider=random.choice(providers)
+        )
+
+    # Simulate some errors
+    print("Simulating errors...")
+    analytics.track_error("TimeoutError", "Request timed out")
+    analytics.track_error("ValidationError", "Invalid input format")
+
+    # Simulate performance samples
+    print("Simulating performance data...")
+    for component in ["embedding", "reranker", "llm"]:
+        for _ in range(5):
+            analytics.track_performance(
+                component=component,
+                operation="inference",
+                duration=random.uniform(0.1, 2.0)
+            )
+
+    # Get summary
+    print("\n" + "-" * 60)
+    print("ANALYTICS SUMMARY")
+    print("-" * 60)
+
+    summary = analytics.get_summary()
+
+    print(f"\nSession Duration: {summary['session']['duration_formatted']}")
+    print(f"\nQueries:")
+    print(f"  Total: {summary['queries']['total']}")
+    print(f"  Successful: {summary['queries']['successful']}")
+    print(f"  Failed: {summary['queries']['failed']}")
+    print(f"  By Type: {dict(summary['queries']['by_type'])}")
+
+    print(f"\nPerformance:")
+    print(f"  Avg Response: {summary['performance']['avg_response_time']:.3f}s")
+    print(f"  Min Response: {summary['performance']['min_response_time']:.3f}s")
+    print(f"  Max Response: {summary['performance']['max_response_time']:.3f}s")
+
+    print(f"\nProviders: {dict(summary['providers'])}")
+    print(f"\nErrors: {summary['errors']['total']}")
+
+    # Performance report
+    print("\n" + "-" * 60)
+    print("PERFORMANCE REPORT")
+    print("-" * 60)
+    report = analytics.get_performance_report()
+    for component, ops in report.items():
+        print(f"\n{component}:")
+        for op, stats in ops.items():
+            print(f"  {op}: avg={stats['avg']:.3f}s, count={stats['count']}")
+
+    print("\n" + "=" * 60)
+    print("TEST COMPLETE")
+    print("=" * 60)
