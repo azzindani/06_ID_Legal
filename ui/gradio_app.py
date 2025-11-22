@@ -895,6 +895,85 @@ def create_demo() -> gr.Blocks:
                             info_btn = gr.Button("Refresh Info")
                             session_info = gr.Textbox(label="Session Info", interactive=False, lines=7)
 
+                # Advanced Settings Row
+                with gr.Row():
+                    with gr.Column(scale=1):
+                        with gr.Accordion("Advanced Search Settings", open=False):
+                            team_size = gr.Slider(
+                                minimum=1,
+                                maximum=5,
+                                value=3,
+                                step=1,
+                                label="Research Team Size",
+                                info="Number of personas for consensus"
+                            )
+                            consensus_threshold = gr.Slider(
+                                minimum=0.3,
+                                maximum=0.9,
+                                value=0.6,
+                                step=0.05,
+                                label="Consensus Threshold",
+                                info="Agreement level for validation"
+                            )
+                            enable_cross_validation = gr.Checkbox(
+                                label="Enable Cross-Validation",
+                                value=True
+                            )
+                            enable_devils_advocate = gr.Checkbox(
+                                label="Enable Devil's Advocate",
+                                value=True
+                            )
+
+                    with gr.Column(scale=1):
+                        with gr.Accordion("LLM Parameters", open=False):
+                            temperature = gr.Slider(
+                                minimum=0.0,
+                                maximum=1.0,
+                                value=0.3,
+                                step=0.05,
+                                label="Temperature",
+                                info="Response creativity (0=focused, 1=creative)"
+                            )
+                            top_p = gr.Slider(
+                                minimum=0.1,
+                                maximum=1.0,
+                                value=0.9,
+                                step=0.05,
+                                label="Top-p (Nucleus Sampling)"
+                            )
+                            max_tokens = gr.Slider(
+                                minimum=256,
+                                maximum=4096,
+                                value=1024,
+                                step=128,
+                                label="Max New Tokens"
+                            )
+
+                    with gr.Column(scale=1):
+                        with gr.Accordion("Search Phase Control", open=False):
+                            phase_candidates = gr.Slider(
+                                minimum=50,
+                                maximum=500,
+                                value=150,
+                                step=50,
+                                label="Initial Candidates",
+                                info="Documents per search phase"
+                            )
+                            semantic_threshold = gr.Slider(
+                                minimum=0.1,
+                                maximum=0.9,
+                                value=0.5,
+                                step=0.05,
+                                label="Semantic Threshold"
+                            )
+                            keyword_threshold = gr.Slider(
+                                minimum=0.05,
+                                maximum=0.5,
+                                value=0.15,
+                                step=0.05,
+                                label="Keyword Threshold"
+                            )
+
             # Form Generator Tab
             with gr.TabItem("Form Generator"):
                 gr.Markdown("### Legal Document Generator")
