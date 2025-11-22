@@ -478,3 +478,165 @@ class KnowledgeGraphCore:
         enhanced.sort(key=lambda x: x['final_score'], reverse=True)
 
         return enhanced
+
+    def follow_citation_chain(
+        self,
+        start_doc_id: str,
+        all_documents: List[Dict[str, Any]],
+        max_depth: int = 2
+    ) -> List[Dict[str, Any]]:
+        """
+        Traverse citation network to find related documents.
+
+        Follows cross-references up to max_depth hops to find
+        documents in the citation chain.
+
+        Args:
+            start_doc_id: Starting document ID
+            all_documents: All available documents
+            max_depth: Maximum traversal depth (default 2)
+
+        Returns:
+            List of related documents with depth information
+        """
+        # Build document lookup
+        doc_lookup = {}
+        for doc in all_documents:
+            doc_id = doc.get('global_id', doc.get('id'))
+            if doc_id:
+                doc_lookup[str(doc_id)] = doc
+
+        visited = set()
+        results = []
+
+        def traverse(doc_id: str, depth: int):
+            if depth > max_depth or doc_id in visited:
+                return
+
+            visited.add(doc_id)
+            doc = doc_lookup.get(str(doc_id))
+
+            if not doc:
+                return
+
+            if depth > 0:  # Don't include start document
+                results.append({
+                    'document': doc,
+                    'depth': depth,
+                    'global_id': doc_id
+                })
+
+            # Get cross-references
+            cross_refs = doc.get('kg_cross_references', [])
+
+            for ref in cross_refs:
+                ref_id = ref if isinstance(ref, (int, str)) else ref.get('id', ref.get('global_id'))
+                if ref_id:
+                    traverse(str(ref_id), depth + 1)
+
+        # Start traversal
+        traverse(str(start_doc_id), 0)
+
+        logger.debug(f"Citation chain from {start_doc_id}: found {len(results)} related docs")
+        return results
+
+    def boost_cited_documents(
+        self,
+        results: List[Dict[str, Any]],
+        all_documents: List[Dict[str, Any]],
+        boost_factor: float = 0.1,
+        max_depth: int = 2
+    ) -> List[Dict[str, Any]]:
+        """
+        Boost scores of documents that appear in citation chains.
+
+        Documents that are cited by high-scoring results get a score boost.
+
+        Args:
+            results: Search results to process
+            all_documents: All available documents for chain lookup
+            boost_factor: Score boost per citation (default 0.1)
+            max_depth: Max citation chain depth (default 2)
+
+        Returns:
+            Results with boosted scores for cited documents
+        """
+        if not results:
+            return results
+
+        # Track citation counts for each document
+        citation_counts: Dict[str, int] = {}
+        citation_depths: Dict[str, int] = {}
+
+        # Follow citation chains from top results
+        top_n = min(10, len(results))  # Process top 10 results
+
+        for result in results[:top_n]:
+            doc_id = result.get('metadata', {}).get('global_id')
+            if not doc_id:
+                record = result.get('record', {})
+                doc_id = record.get('global_id', record.get('id'))
+
+            if doc_id:
+                chain = self.follow_citation_chain(
+                    start_doc_id=str(doc_id),
+                    all_documents=all_documents,
+                    max_depth=max_depth
+                )
+
+                for cited in chain:
+                    cited_id = str(cited['global_id'])
+                    citation_counts[cited_id] = citation_counts.get(cited_id, 0) + 1
+
+                    # Track minimum depth (closer = better)
+                    if cited_id not in citation_depths:
+                        citation_depths[cited_id] = cited['depth']
+                    else:
+                        citation_depths[cited_id] = min(citation_depths[cited_id], cited['depth'])
+
+        # Apply boosts to results
+        boosted_results = []
+
+        for result in results:
+            doc_id = result.get('metadata', {}).get('global_id')
+            if not doc_id:
+                record = result.get('record', {})
+                doc_id = record.get('global_id', record.get('id'))
+
+            boosted_result = result.copy()
+            original_score = result.get('scores', {}).get('final', result.get('final_score', 0.0))
+
+            if doc_id and str(doc_id) in citation_counts:
+                count = citation_counts[str(doc_id)]
+                depth = citation_depths[str(doc_id)]
+
+                # Boost formula: more citations and closer = higher boost
+                # Depth 1 = full boost, depth 2 = half boost
+                depth_multiplier = 1.0 / depth
+                boost = boost_factor * count * depth_multiplier
+
+                new_score = min(1.0, original_score + boost)
+
+                if 'scores' in boosted_result:
+                    boosted_result['scores'] = boosted_result['scores'].copy()
+                    boosted_result['scores']['final'] = new_score
+                    boosted_result['scores']['citation_boost'] = boost
+                else:
+                    boosted_result['final_score'] = new_score
+                    boosted_result['citation_boost'] = boost
+
+                boosted_result['citation_count'] = count
+                boosted_result['citation_depth'] = depth
+
+            boosted_results.append(boosted_result)
+
+        # Re-sort by score
+        boosted_results.sort(
+            key=lambda x: x.get('scores', {}).get('final', x.get('final_score', 0)),
+            reverse=True
+        )
+
+        boosted_count = sum(1 for r in boosted_results if r.get('citation_count', 0) > 0)
+        logger.debug(f"Citation boosting: {boosted_count} documents boosted")
+
+        return boosted_results
