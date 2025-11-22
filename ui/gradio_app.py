@@ -343,13 +343,249 @@ def get_performance_report() -> str:
 def create_demo() -> gr.Blocks:
     """Create Gradio demo interface with all features"""
 
+    # Original CSS from Kaggle_Demo.ipynb - zoom-friendly responsive design
+    custom_css = """
+    /* Base container - responsive to zoom */
+    .gradio-container {
+        max-width: 100%;
+        width: 100%;
+        margin: 0 auto;
+        padding: 0;
+        overflow-x: hidden;
+    }
+
+    /* Main chat area - scalable dimensions */
+    .main-chat-area {
+        width: 100%;
+        max-width: 75em;
+        margin: 0 auto;
+        padding: 1.25em;
+        box-sizing: border-box;
+    }
+
+    /* Chatbot container - responsive sizing */
+    .chat-container {
+        height: 75vh;
+        min-height: 25em;
+        max-height: none;
+        width: 100%;
+        overflow-y: auto;
+        border: 0.0625em solid #e0e0e0;
+        border-radius: 0.75em;
+        background: white;
+        box-sizing: border-box;
+        resize: vertical;
+    }
+
+    /* Prevent width changes from content expansion */
+    .chatbot {
+        width: 100%;
+        max-width: none;
+        min-width: 0;
+    }
+
+    /* Chat messages - scalable overflow handling */
+    .message-wrap {
+        max-width: 100%;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+    }
+
+    /* Center the chatbot placeholder */
+    .chatbot .wrap {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+    }
+
+    .chatbot .placeholder {
+        text-align: center;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        width: 100%;
+    }
+
+    .chatbot .empty {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        width: 100%;
+        text-align: center;
+        color: #666;
+        font-size: 1em;
+    }
+
+    /* Input area styling */
+    .input-row {
+        margin-top: 0.9375em;
+        width: 100%;
+    }
+
+    .input-row .form {
+        width: 100%;
+    }
+
+    /* Settings panels - scalable */
+    .settings-panel {
+        background-color: #f8f9fa;
+        padding: 1.25em;
+        border-radius: 0.75em;
+        margin-bottom: 0.9375em;
+        box-shadow: 0 0.125em 0.25em rgba(0,0,0,0.1);
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    .status-panel {
+        background-color: #e8f4fd;
+        padding: 0.9375em;
+        border-radius: 0.5em;
+        border-left: 0.25em solid #2196F3;
+        margin-bottom: 0.625em;
+    }
+
+    /* Responsive breakpoints */
+    @media (max-width: 87.5em) {
+        .main-chat-area {
+            max-width: 95%;
+            padding: 0.9375em;
+        }
+    }
+
+    @media (max-width: 64em) {
+        .chat-container {
+            height: 70vh;
+            min-height: 20em;
+        }
+
+        .main-chat-area {
+            padding: 0.9375em;
+        }
+    }
+
+    @media (max-width: 48em) {
+        .chat-container {
+            height: 65vh;
+            min-height: 18em;
+        }
+
+        .main-chat-area {
+            padding: 0.625em;
+        }
+
+        .settings-panel {
+            padding: 0.9375em;
+        }
+    }
+
+    @media (max-width: 30em) {
+        .chat-container {
+            height: 60vh;
+            min-height: 15em;
+        }
+
+        .main-chat-area {
+            padding: 0.5em;
+        }
+
+        .settings-panel {
+            padding: 0.75em;
+            margin-bottom: 0.625em;
+        }
+    }
+
+    /* Prevent layout shifts from dynamic content */
+    .block {
+        min-width: 0;
+    }
+
+    /* Tab content - centered tabs */
+    .tab-nav {
+        margin-bottom: 1.25em;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        width: 100%;
+    }
+
+    /* Center the tab navigation */
+    .tabs {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        width: 100%;
+    }
+
+    /* Style the tab buttons - scalable */
+    .tab-nav button {
+        margin: 0 0.5em;
+        padding: 0.75em 1.5em;
+        border-radius: 0.5em;
+        font-weight: 500;
+        transition: all 0.2s ease;
+    }
+
+    /* Center tab container */
+    .tabitem {
+        width: 100%;
+        max-width: 75em;
+        margin: 0 auto;
+    }
+
+    /* Examples styling */
+    .examples {
+        margin-top: 0.9375em;
+    }
+
+    /* Button styling */
+    .clear-btn {
+        margin-left: auto;
+    }
+
+    /* Ensure consistent column widths in settings */
+    .settings-columns {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1.25em;
+        width: 100%;
+    }
+
+    @media (max-width: 48em) {
+        .settings-columns {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    /* Fix for expandable content not affecting layout */
+    .prose {
+        max-width: 100%;
+    }
+
+    /* Prevent horizontal scroll */
+    * {
+        box-sizing: border-box;
+    }
+
+    /* Enhanced zoom support */
+    html {
+        -webkit-text-size-adjust: 100%;
+        -ms-text-size-adjust: 100%;
+    }
+
+    /* Ensure text scales properly with browser zoom */
+    body, .gradio-container, .chatbot {
+        font-size: 1em;
+    }
+    """
+
     with gr.Blocks(
-        title="Indonesian Legal RAG System",
-        theme=gr.themes.Soft(),
-        css="""
-        .container { max-width: 1200px; margin: auto; }
-        .header { text-align: center; padding: 20px; }
-        """
+        title="Enhanced Indonesian Legal Assistant",
+        theme=gr.themes.Default(),
+        css=custom_css
     ) as demo:
 
         gr.Markdown(
@@ -361,33 +597,59 @@ def create_demo() -> gr.Blocks:
 
         with gr.Tabs():
             # Chat Tab
-            with gr.TabItem("Chat"):
-                with gr.Row():
-                    # Main chat area
-                    with gr.Column(scale=3):
-                        chatbot = gr.Chatbot(
-                            label="Percakapan",
-                            height=450,
-                            show_copy_button=True
+            with gr.TabItem("Konsultasi Hukum", id="chat"):
+                with gr.Column(elem_classes="main-chat-area"):
+                    chatbot = gr.Chatbot(
+                        height="75vh",
+                        show_label=False,
+                        container=True,
+                        bubble_full_width=True,
+                        elem_classes="chat-container",
+                        show_copy_button=True,
+                        render_markdown=True,
+                    )
+
+                    with gr.Row(elem_classes="input-row"):
+                        msg = gr.Textbox(
+                            placeholder="Tanyakan tentang hukum Indonesia...",
+                            show_label=False,
+                            container=False,
+                            scale=10,
+                            lines=1,
+                            max_lines=3,
+                            interactive=True
                         )
+                        submit_btn = gr.Button("Kirim", variant="primary", scale=1)
 
-                        with gr.Row():
-                            msg = gr.Textbox(
-                                label="Pertanyaan Anda",
-                                placeholder="Ketik pertanyaan hukum Anda di sini...",
-                                lines=2,
-                                scale=4
+                    # Example questions - comprehensive like original
+                    with gr.Row():
+                        with gr.Column():
+                            gr.Examples(
+                                examples=[
+                                    "Apakah ada pengaturan yang menjamin kesetaraan hak antara guru dan dosen dalam memperoleh tunjangan profesi?",
+                                    "Apakah terdapat mekanisme pengawasan terhadap penyimpanan uang negara agar terhindar dari penyalahgunaan atau kebocoran keuangan?",
+                                    "Bagaimana mekanisme hukum untuk memperoleh izin resmi bagi pihak yang menjalankan usaha sebagai pengusaha pabrik, penyimpanan, importir, penyalur, maupun penjual eceran barang kena cukai?",
+                                    "Apakah terdapat kewajiban pemerintah untuk menyediakan dana khusus bagi penyuluhan, atau dapat melibatkan sumber pendanaan alternatif seperti swasta dan masyarakat?",
+                                    "Bagaimana prosedur hukum yang harus ditempuh sebelum sanksi denda administrasi di bidang cukai dapat dikenakan kepada pelaku usaha?",
+                                    "Bagaimana sistem perencanaan kas disusun agar mampu mengantisipasi kebutuhan mendesak negara/daerah tanpa mengganggu stabilitas fiskal?",
+                                    "syarat dan prosedur perceraian menurut hukum Indonesia",
+                                    "hak dan kewajiban pekerja dalam UU Ketenagakerjaan"
+                                ],
+                                inputs=msg,
+                                examples_per_page=4,
+                                label="Contoh Pertanyaan"
                             )
-                            submit_btn = gr.Button("Kirim", variant="primary", scale=1)
 
-                    # Settings panel
+                # Settings panel in separate row
+                with gr.Row():
                     with gr.Column(scale=1):
                         with gr.Accordion("Display Options", open=True):
                             show_thinking = gr.Checkbox(label="Show Thinking Process", value=True)
                             show_sources = gr.Checkbox(label="Show Sources", value=True)
                             show_metadata = gr.Checkbox(label="Show Metadata", value=False)
 
-                        with gr.Accordion("Provider Settings", open=True):
+                    with gr.Column(scale=1):
+                        with gr.Accordion("Provider Settings", open=False):
                             provider_dropdown = gr.Dropdown(
                                 choices=['local', 'openai', 'anthropic', 'google', 'openrouter'],
                                 value='local',
@@ -396,19 +658,19 @@ def create_demo() -> gr.Blocks:
                             provider_btn = gr.Button("Switch Provider")
                             provider_status = gr.Textbox(label="Provider Status", interactive=False)
 
-                        with gr.Accordion("Session", open=True):
+                    with gr.Column(scale=1):
+                        with gr.Accordion("Session & Export", open=False):
                             clear_btn = gr.Button("New Session", variant="secondary")
                             status = gr.Textbox(label="Status", interactive=False)
-
-                        with gr.Accordion("Export", open=False):
                             export_format = gr.Radio(
                                 choices=["Markdown", "JSON", "HTML"],
                                 value="Markdown",
-                                label="Format"
+                                label="Export Format"
                             )
                             export_btn = gr.Button("Export")
                             export_status = gr.Textbox(label="Export Result", interactive=False)
 
+                    with gr.Column(scale=1):
                         with gr.Accordion("Document Upload", open=False):
                             file_upload = gr.File(
                                 label="Upload Document",
@@ -419,19 +681,6 @@ def create_demo() -> gr.Blocks:
                         with gr.Accordion("Info", open=False):
                             info_btn = gr.Button("Refresh Info")
                             session_info = gr.Textbox(label="Session Info", interactive=False, lines=7)
-
-                # Example questions
-                gr.Markdown("### Contoh Pertanyaan")
-                examples = gr.Examples(
-                    examples=[
-                        "Apa itu UU Ketenagakerjaan?",
-                        "Apa sanksi pelanggaran UU Perlindungan Konsumen?",
-                        "Bagaimana prosedur PHK menurut hukum?",
-                        "Apa hak karyawan kontrak?",
-                        "Apa definisi konsumen menurut UU?"
-                    ],
-                    inputs=msg
-                )
 
             # Form Generator Tab
             with gr.TabItem("Form Generator"):
