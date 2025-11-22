@@ -170,7 +170,7 @@ def chat(message: str, history: List[Tuple[str, str]],
         final_answer = clean_answer if thinking_from_tags else answer_text
         response_parts.append(f"✅ **Jawaban:**\n\n{final_answer}")
 
-        # Add sources in collapsible section
+        # Add sources in collapsible section with enhanced metadata
         if show_sources and result.get('sources'):
             sources = result['sources']
             if sources:
@@ -180,10 +180,62 @@ def chat(message: str, history: List[Tuple[str, str]],
                         title = src.get('title', src.get('regulation', f'Source {i}'))
                         score = src.get('score', 0)
                         doc_type = src.get('type', src.get('jenis_peraturan', ''))
+
                         source_content += f"**{i}. {title}**\n"
                         source_content += f"- Skor: {score:.3f}\n"
+
+                        # Enhanced regulation metadata
+                        if src.get('regulation_number') or src.get('nomor_peraturan'):
+                            reg_num = src.get('regulation_number', src.get('nomor_peraturan', ''))
+                            year = src.get('year', src.get('tahun', ''))
+                            if reg_num and year:
+                                source_content += f"- Nomor: {reg_num} Tahun {year}\n"
+                            elif reg_num:
+                                source_content += f"- Nomor: {reg_num}\n"
+
                         if doc_type:
                             source_content += f"- Jenis: {doc_type}\n"
+
+                        # Legal domain
+                        domain = src.get('kg_primary_domain', src.get('domain', ''))
+                        if domain:
+                            source_content += f"- Domain: {domain}\n"
+
+                        # Authority and complexity scores
+                        authority = src.get('kg_authority_score', src.get('authority_score', 0))
+                        if authority:
+                            auth_level = "Tinggi" if authority > 0.7 else "Sedang" if authority > 0.4 else "Rendah"
+                            source_content += f"- Otoritas: {auth_level} ({authority:.2f})\n"
+
+                        complexity = src.get('kg_legal_complexity', 0)
+                        if complexity:
+                            source_content += f"- Kompleksitas: {complexity:.2f}\n"
+
+                        # Content indicators
+                        indicators = []
+                        if src.get('kg_has_obligations'):
+                            indicators.append("Kewajiban")
+                        if src.get('kg_has_prohibitions'):
+                            indicators.append("Larangan")
+                        if src.get('kg_has_permissions'):
+                            indicators.append("Izin")
+                        if indicators:
+                            source_content += f"- Mengandung: {', '.join(indicators)}\n"
+
+                        # Network importance
+                        pagerank = src.get('kg_pagerank', 0)
+                        if pagerank and pagerank > 0.01:
+                            source_content += f"- Konektivitas: {pagerank:.3f}\n"
+
+                        # Research team consensus info
+                        if src.get('voting_ratio'):
+                            voting = src['voting_ratio']
+                            source_content += f"- Konsensus Tim: {voting:.0%}\n"
+                        if src.get('personas_agreed'):
+                            personas = src['personas_agreed']
+                            if len(personas) > 1:
+                                source_content += f"- Peneliti: {', '.join(personas[:3])}\n"
+
                         source_content += "\n"
                     else:
                         source_content += f"- {src}\n"
@@ -197,6 +249,73 @@ def chat(message: str, history: List[Tuple[str, str]],
 {source_content}
 </details>"""
                 response_parts.append(source_html)
+
+        # Add research team consensus display
+        if result.get('consensus_data') or result.get('research_data'):
+            consensus = result.get('consensus_data', {})
+            research = result.get('research_data', {})
+
+            team_content = ""
+
+            # Agreement level
+            if consensus.get('agreement_level'):
+                team_content += f"- **Tingkat Kesepakatan:** {consensus['agreement_level']:.0%}\n"
+
+            # Rounds executed
+            if research.get('rounds_executed'):
+                team_content += f"- **Ronde Penelitian:** {research['rounds_executed']}/5\n"
+
+            # Candidates evaluated
+            if research.get('total_candidates_evaluated'):
+                team_content += f"- **Dokumen Dievaluasi:** {research['total_candidates_evaluated']:,}\n"
+
+            # Results by persona
+            if research.get('persona_results'):
+                team_content += "\n**Hasil per Peneliti:**\n"
+                for persona, results in research['persona_results'].items():
+                    team_content += f"- {persona}: {len(results)} dokumen\n"
+
+            # Devil's advocate flags
+            if consensus.get('devil_advocate_flags'):
+                flags = consensus['devil_advocate_flags']
+                if flags:
+                    team_content += f"\n**⚠️ Catatan Devil's Advocate:** {len(flags)} peringatan\n"
+
+            if team_content:
+                team_html = f"""
+
+<details><summary>👥 Tim Peneliti & Konsensus</summary>
+
+{team_content}
+</details>"""
+                response_parts.append(team_html)
+
+        # Add community clusters display
+        if result.get('communities') or result.get('clusters'):
+            communities = result.get('communities', result.get('clusters', []))
+            if communities:
+                cluster_content = ""
+                for i, community in enumerate(communities[:5], 1):
+                    if isinstance(community, dict):
+                        name = community.get('name', f'Cluster {i}')
+                        size = community.get('size', 0)
+                        theme = community.get('dominant_theme', community.get('theme', ''))
+                        cluster_content += f"**{i}. {name}** ({size} dokumen)\n"
+                        if theme:
+                            cluster_content += f"- Tema: {theme}\n"
+                        if community.get('members'):
+                            members = community['members'][:3]
+                            cluster_content += f"- Anggota: {', '.join(str(m) for m in members)}...\n"
+                        cluster_content += "\n"
+
+                if cluster_content:
+                    cluster_html = f"""
+
+<details><summary>🔗 Cluster Tematik</summary>
+
+{cluster_content}
+</details>"""
+                    response_parts.append(cluster_html)
 
         # Add metadata in collapsible section
         if show_metadata and result.get('metadata'):
@@ -402,7 +521,7 @@ def chat_streaming(message: str, history: List[Tuple[str, str]],
             # Non-streaming fallback
             response_parts.append(f"✅ **Jawaban:**\n\n{answer}")
 
-        # Phase 4: Add sources in collapsible section
+        # Phase 4: Add sources in collapsible section with enhanced metadata
         if show_sources and result.get('sources'):
             sources = result['sources']
             if sources:
@@ -412,10 +531,62 @@ def chat_streaming(message: str, history: List[Tuple[str, str]],
                         title = src.get('title', src.get('regulation', f'Source {i}'))
                         score = src.get('score', 0)
                         doc_type = src.get('type', src.get('jenis_peraturan', ''))
+
                         source_content += f"**{i}. {title}**\n"
                         source_content += f"- Skor: {score:.3f}\n"
+
+                        # Enhanced regulation metadata
+                        if src.get('regulation_number') or src.get('nomor_peraturan'):
+                            reg_num = src.get('regulation_number', src.get('nomor_peraturan', ''))
+                            year = src.get('year', src.get('tahun', ''))
+                            if reg_num and year:
+                                source_content += f"- Nomor: {reg_num} Tahun {year}\n"
+                            elif reg_num:
+                                source_content += f"- Nomor: {reg_num}\n"
+
                         if doc_type:
                             source_content += f"- Jenis: {doc_type}\n"
+
+                        # Legal domain
+                        domain = src.get('kg_primary_domain', src.get('domain', ''))
+                        if domain:
+                            source_content += f"- Domain: {domain}\n"
+
+                        # Authority and complexity scores
+                        authority = src.get('kg_authority_score', src.get('authority_score', 0))
+                        if authority:
+                            auth_level = "Tinggi" if authority > 0.7 else "Sedang" if authority > 0.4 else "Rendah"
+                            source_content += f"- Otoritas: {auth_level} ({authority:.2f})\n"
+
+                        complexity = src.get('kg_legal_complexity', 0)
+                        if complexity:
+                            source_content += f"- Kompleksitas: {complexity:.2f}\n"
+
+                        # Content indicators
+                        indicators = []
+                        if src.get('kg_has_obligations'):
+                            indicators.append("Kewajiban")
+                        if src.get('kg_has_prohibitions'):
+                            indicators.append("Larangan")
+                        if src.get('kg_has_permissions'):
+                            indicators.append("Izin")
+                        if indicators:
+                            source_content += f"- Mengandung: {', '.join(indicators)}\n"
+
+                        # Network importance
+                        pagerank = src.get('kg_pagerank', 0)
+                        if pagerank and pagerank > 0.01:
+                            source_content += f"- Konektivitas: {pagerank:.3f}\n"
+
+                        # Research team consensus info
+                        if src.get('voting_ratio'):
+                            voting = src['voting_ratio']
+                            source_content += f"- Konsensus Tim: {voting:.0%}\n"
+                        if src.get('personas_agreed'):
+                            personas = src['personas_agreed']
+                            if len(personas) > 1:
+                                source_content += f"- Peneliti: {', '.join(personas[:3])}\n"
+
                         source_content += "\n"
                     else:
                         source_content += f"- {src}\n"
@@ -429,6 +600,73 @@ def chat_streaming(message: str, history: List[Tuple[str, str]],
 {source_content}
 </details>"""
                 response_parts.append(source_html)
+
+        # Add research team consensus display
+        if result.get('consensus_data') or result.get('research_data'):
+            consensus = result.get('consensus_data', {})
+            research = result.get('research_data', {})
+
+            team_content = ""
+
+            # Agreement level
+            if consensus.get('agreement_level'):
+                team_content += f"- **Tingkat Kesepakatan:** {consensus['agreement_level']:.0%}\n"
+
+            # Rounds executed
+            if research.get('rounds_executed'):
+                team_content += f"- **Ronde Penelitian:** {research['rounds_executed']}/5\n"
+
+            # Candidates evaluated
+            if research.get('total_candidates_evaluated'):
+                team_content += f"- **Dokumen Dievaluasi:** {research['total_candidates_evaluated']:,}\n"
+
+            # Results by persona
+            if research.get('persona_results'):
+                team_content += "\n**Hasil per Peneliti:**\n"
+                for persona, results in research['persona_results'].items():
+                    team_content += f"- {persona}: {len(results)} dokumen\n"
+
+            # Devil's advocate flags
+            if consensus.get('devil_advocate_flags'):
+                flags = consensus['devil_advocate_flags']
+                if flags:
+                    team_content += f"\n**⚠️ Catatan Devil's Advocate:** {len(flags)} peringatan\n"
+
+            if team_content:
+                team_html = f"""
+
+<details><summary>👥 Tim Peneliti & Konsensus</summary>
+
+{team_content}
+</details>"""
+                response_parts.append(team_html)
+
+        # Add community clusters display
+        if result.get('communities') or result.get('clusters'):
+            communities = result.get('communities', result.get('clusters', []))
+            if communities:
+                cluster_content = ""
+                for i, community in enumerate(communities[:5], 1):
+                    if isinstance(community, dict):
+                        name = community.get('name', f'Cluster {i}')
+                        size = community.get('size', 0)
+                        theme = community.get('dominant_theme', community.get('theme', ''))
+                        cluster_content += f"**{i}. {name}** ({size} dokumen)\n"
+                        if theme:
+                            cluster_content += f"- Tema: {theme}\n"
+                        if community.get('members'):
+                            members = community['members'][:3]
+                            cluster_content += f"- Anggota: {', '.join(str(m) for m in members)}...\n"
+                        cluster_content += "\n"
+
+                if cluster_content:
+                    cluster_html = f"""
+
+<details><summary>🔗 Cluster Tematik</summary>
+
+{cluster_content}
+</details>"""
+                    response_parts.append(cluster_html)
 
         # Phase 5: Add metadata in collapsible section
         if show_metadata and result.get('metadata'):
