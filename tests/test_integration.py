@@ -31,10 +31,10 @@ class TestPipelineIntegration:
         assert result['success'] is False
         assert 'not initialized' in result['error'].lower()
 
-    @patch('pipeline.rag_pipeline.load_models')
-    @patch('pipeline.rag_pipeline.EnhancedKGDatasetLoader')
-    @patch('pipeline.rag_pipeline.LangGraphRAGOrchestrator')
-    @patch('pipeline.rag_pipeline.GenerationEngine')
+    @patch('model_manager.load_models')
+    @patch('loader.dataloader.EnhancedKGDatasetLoader')
+    @patch('core.search.langgraph_orchestrator.LangGraphRAGOrchestrator')
+    @patch('core.generation.generation_engine.GenerationEngine')
     def test_pipeline_initialization(
         self, mock_gen, mock_orch, mock_loader, mock_models, test_config
     ):
@@ -57,10 +57,10 @@ class TestPipelineIntegration:
         assert result is True
         assert pipeline._initialized is True
 
-    @patch('pipeline.rag_pipeline.load_models')
-    @patch('pipeline.rag_pipeline.EnhancedKGDatasetLoader')
-    @patch('pipeline.rag_pipeline.LangGraphRAGOrchestrator')
-    @patch('pipeline.rag_pipeline.GenerationEngine')
+    @patch('model_manager.load_models')
+    @patch('loader.dataloader.EnhancedKGDatasetLoader')
+    @patch('core.search.langgraph_orchestrator.LangGraphRAGOrchestrator')
+    @patch('core.generation.generation_engine.GenerationEngine')
     def test_pipeline_query_flow(
         self, mock_gen, mock_orch, mock_loader, mock_models, test_config
     ):
@@ -128,12 +128,13 @@ class TestProviderIntegration:
 
     def test_provider_switching(self):
         """Test switching between providers"""
-        from providers import switch_provider, PROVIDERS
+        from providers import PROVIDERS, create_provider
 
-        # Test switching to each provider
+        # Test that providers can be created (not initialized)
         for provider_name in ['local', 'openai', 'anthropic']:
-            result = switch_provider(provider_name)
-            assert result is True or provider_name in PROVIDERS
+            assert provider_name in PROVIDERS
+            provider = create_provider(provider_name)
+            assert provider is not None
 
     @patch.dict('os.environ', {'OPENAI_API_KEY': 'test-key'})
     def test_openai_provider_config(self):
@@ -206,13 +207,16 @@ class TestContextCache:
 
         cache = get_context_cache()
 
-        # Put and get
-        test_data = {'answer': 'test', 'metadata': {}}
-        cache.put('test-key', test_data)
+        # Put and get - cache expects list of message dicts
+        test_data = [
+            {'role': 'user', 'content': 'test question'},
+            {'role': 'assistant', 'content': 'test answer'}
+        ]
+        cache.put('test-key-2', test_data)
 
-        retrieved = cache.get('test-key')
+        retrieved = cache.get('test-key-2')
         assert retrieved is not None
-        assert retrieved.get('answer') == 'test'
+        assert len(retrieved) == 2
 
     def test_cache_miss(self):
         """Test cache miss returns None"""
@@ -234,8 +238,9 @@ class TestHardwareDetection:
 
         config = detect_hardware()
 
-        assert config.embedding_device in ['cpu', 'cuda']
-        assert config.llm_device in ['cpu', 'cuda']
+        # Device can be 'cpu', 'cuda', 'cuda:0', 'cuda:1', etc.
+        assert config.embedding_device == 'cpu' or config.embedding_device.startswith('cuda')
+        assert config.llm_device == 'cpu' or config.llm_device.startswith('cuda')
         assert config.llm_quantization in ['none', '4bit', '8bit']
 
     def test_ram_detection(self):
