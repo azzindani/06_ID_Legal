@@ -69,6 +69,57 @@ MAX_LENGTH = int(os.getenv("MAX_LENGTH", "32768"))
 EMBEDDING_DIM = int(os.getenv("EMBEDDING_DIM", "1024"))
 
 # =============================================================================
+# LOCAL MODEL CONFIGURATION
+# =============================================================================
+
+# Enable loading models from local directory instead of HuggingFace
+USE_LOCAL_MODELS = os.getenv("USE_LOCAL_MODELS", "false").lower() == "true"
+
+# Base directory for local models
+LOCAL_MODEL_DIR = os.getenv("LOCAL_MODEL_DIR", "./models")
+
+# Individual local model paths (override base directory)
+LOCAL_EMBEDDING_PATH = os.getenv("LOCAL_EMBEDDING_PATH", "")
+LOCAL_RERANKER_PATH = os.getenv("LOCAL_RERANKER_PATH", "")
+LOCAL_LLM_PATH = os.getenv("LOCAL_LLM_PATH", "")
+
+def get_model_path(model_type: str) -> str:
+    """
+    Get the model path based on configuration.
+
+    Args:
+        model_type: 'embedding', 'reranker', or 'llm'
+
+    Returns:
+        Local path if USE_LOCAL_MODELS is True, otherwise HuggingFace model name
+    """
+    if not USE_LOCAL_MODELS:
+        if model_type == 'embedding':
+            return EMBEDDING_MODEL
+        elif model_type == 'reranker':
+            return RERANKER_MODEL
+        elif model_type == 'llm':
+            return LLM_MODEL
+        else:
+            raise ValueError(f"Unknown model type: {model_type}")
+
+    # Check for individual path override first
+    if model_type == 'embedding':
+        if LOCAL_EMBEDDING_PATH:
+            return LOCAL_EMBEDDING_PATH
+        return os.path.join(LOCAL_MODEL_DIR, "embedding")
+    elif model_type == 'reranker':
+        if LOCAL_RERANKER_PATH:
+            return LOCAL_RERANKER_PATH
+        return os.path.join(LOCAL_MODEL_DIR, "reranker")
+    elif model_type == 'llm':
+        if LOCAL_LLM_PATH:
+            return LOCAL_LLM_PATH
+        return os.path.join(LOCAL_MODEL_DIR, "llm")
+    else:
+        raise ValueError(f"Unknown model type: {model_type}")
+
+# =============================================================================
 # DEVICE & INFERENCE CONFIGURATION
 # =============================================================================
 

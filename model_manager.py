@@ -7,7 +7,7 @@ from transformers import AutoModel, AutoTokenizer
 from typing import Optional, Any
 import time
 from logger_utils import get_logger
-from config import EMBEDDING_MODEL, RERANKER_MODEL, DEVICE, CACHE_DIR
+from config import EMBEDDING_MODEL, RERANKER_MODEL, DEVICE, CACHE_DIR, get_model_path, USE_LOCAL_MODELS
 
 
 class EmbeddingModelWrapper:
@@ -79,9 +79,10 @@ class ModelManager:
         if self._embedding_model is not None:
             self.logger.debug("Returning cached embedding model")
             return self._embedding_model
-        
-        model_name = model_name or EMBEDDING_MODEL
-        self.logger.info("Loading embedding model", {"model": model_name})
+
+        # Use get_model_path for local model support
+        model_name = model_name or get_model_path('embedding')
+        self.logger.info("Loading embedding model", {"model": model_name, "local": USE_LOCAL_MODELS})
         
         for attempt in range(1, max_retries + 1):
             try:
@@ -165,8 +166,9 @@ class ModelManager:
             self._reranker_model = MockReranker()
             return self._reranker_model
         
-        model_name = model_name or RERANKER_MODEL
-        self.logger.info("Loading reranker model", {"model": model_name})
+        # Use get_model_path for local model support
+        model_name = model_name or get_model_path('reranker')
+        self.logger.info("Loading reranker model", {"model": model_name, "local": USE_LOCAL_MODELS})
         
         for attempt in range(1, max_retries + 1):
             try:

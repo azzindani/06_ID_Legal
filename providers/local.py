@@ -29,10 +29,12 @@ class LocalLLMProvider(BaseLLMProvider):
 
         # Import config defaults
         from config import (
-            LLM_MODEL, LLM_DEVICE, LLM_LOAD_IN_4BIT, LLM_LOAD_IN_8BIT
+            LLM_MODEL, LLM_DEVICE, LLM_LOAD_IN_4BIT, LLM_LOAD_IN_8BIT,
+            get_model_path, USE_LOCAL_MODELS
         )
 
-        self.model_name = self.config.get('model', LLM_MODEL)
+        # Use get_model_path for local model support
+        self.model_name = self.config.get('model', get_model_path('llm'))
         self.device = self.config.get('device', LLM_DEVICE)
         self.load_in_4bit = self.config.get('load_in_4bit', LLM_LOAD_IN_4BIT)
         self.load_in_8bit = self.config.get('load_in_8bit', LLM_LOAD_IN_8BIT)
