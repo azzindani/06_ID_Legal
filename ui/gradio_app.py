@@ -146,6 +146,123 @@ def chat(message: str, history: List[Tuple[str, str]],
         return "", history
 
 
+def chat_streaming(message: str, history: List[Tuple[str, str]],
+                   show_thinking: bool = True, show_sources: bool = True,
+                   show_metadata: bool = True):
+    """
+    Streaming chat function that yields partial responses.
+
+    This provides real-time feedback as the response is generated,
+    matching the original Kaggle_Demo.ipynb streaming behavior.
+    """
+    global pipeline, manager, current_session
+
+    if not message.strip():
+        yield "", history
+        return
+
+    try:
+        if pipeline is None:
+            initialize_system()
+
+        # Get conversation context
+        context = manager.get_context_for_query(current_session) if current_session else None
+
+        # Show searching status
+        history_with_status = history + [(message, "🔍 Mencari dokumen relevan...")]
+        yield "", history_with_status
+
+        # Generate response with streaming enabled
+        result = pipeline.query(message, conversation_history=context, stream=True)
+
+        # Build response progressively
+        response_parts = []
+        current_response = ""
+
+        # Phase 1: Show thinking process
+        if show_thinking and result.get('thinking'):
+            thinking_text = f"🧠 **Proses Berpikir:**\n{result['thinking']}\n\n---\n"
+            response_parts.append(thinking_text)
+            current_response = "".join(response_parts)
+            history_with_progress = history + [(message, current_response + "⏳ Generating answer...")]
+            yield "", history_with_progress
+
+        # Phase 2: Stream the main answer
+        answer = result.get('answer', '')
+
+        # If streaming iterator is available, use it
+        if hasattr(result, '__iter__') and not isinstance(result, (dict, str)):
+            partial_answer = ""
+            for chunk in result:
+                if isinstance(chunk, str):
+                    partial_answer += chunk
+                elif isinstance(chunk, dict) and 'text' in chunk:
+                    partial_answer += chunk['text']
+
+                current_display = "".join(response_parts) + partial_answer
+                history_with_progress = history + [(message, current_display)]
+                yield "", history_with_progress
+
+            response_parts.append(partial_answer)
+        else:
+            # Non-streaming fallback - show answer in chunks for visual effect
+            chunk_size = 50
+            for i in range(0, len(answer), chunk_size):
+                partial = answer[:i + chunk_size]
+                current_display = "".join(response_parts) + partial
+                history_with_progress = history + [(message, current_display)]
+                yield "", history_with_progress
+
+            response_parts.append(answer)
+
+        # Phase 3: Add sources
+        if show_sources and result.get('sources'):
+            sources = result['sources']
+            if sources:
+                source_text = "\n\n---\n📚 **Sumber:**\n"
+                for i, src in enumerate(sources[:5], 1):
+                    if isinstance(src, dict):
+                        title = src.get('title', src.get('regulation', f'Source {i}'))
+                        score = src.get('score', 0)
+                        source_text += f"- {title} (skor: {score:.2f})\n"
+                    else:
+                        source_text += f"- {src}\n"
+                response_parts.append(source_text)
+
+        # Phase 4: Add metadata
+        if show_metadata and result.get('metadata'):
+            meta = result['metadata']
+            meta_text = "\n\n---\n📊 **Metadata:**\n"
+            if meta.get('query_type'):
+                meta_text += f"- Tipe: {meta['query_type']}\n"
+            if meta.get('processing_time'):
+                meta_text += f"- Waktu: {meta['processing_time']:.2f}s\n"
+            if meta.get('total_results'):
+                meta_text += f"- Hasil: {meta['total_results']}\n"
+            response_parts.append(meta_text)
+
+        # Final response
+        final_response = "".join(response_parts)
+
+        # Save to conversation history
+        if current_session:
+            manager.add_turn(
+                session_id=current_session,
+                query=message,
+                answer=final_response,
+                metadata=result.get('metadata')
+            )
+
+        history.append((message, final_response))
+        yield "", history
+
+    except Exception as e:
+        logger.error(f"Chat streaming error: {e}")
+        error_msg = f"Error: {str(e)}"
+        history.append((message, error_msg))
+        yield "", history
+
+
 def clear_chat():
     """Clear chat and start new session"""
     global manager, current_session

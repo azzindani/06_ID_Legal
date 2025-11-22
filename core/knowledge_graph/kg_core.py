@@ -45,6 +45,17 @@ class KnowledgeGraphCore:
             'legal_action': 0.7,
         }
 
+        # Regulation type mappings for confidence scoring
+        self.regulation_type_mappings = {
+            'UU': 'Undang-Undang',
+            'PP': 'Peraturan Pemerintah',
+            'Perpres': 'Peraturan Presiden',
+            'Permen': 'Peraturan Menteri',
+            'Perda': 'Peraturan Daerah',
+            'Keppres': 'Keputusan Presiden',
+            'Kepmen': 'Keputusan Menteri',
+        }
+
         # Advanced KG weights from original notebook
         self.kg_weights = {
             'direct_match': 1.0,
@@ -89,6 +100,114 @@ class KnowledgeGraphCore:
                 entities[entity_type] = list(set(matches))
 
         return entities
+
+    def extract_regulation_references_with_confidence(self, text: str) -> List[Dict[str, Any]]:
+        """
+        Extract regulation references from text with confidence scores.
+
+        Confidence levels:
+        - 1.0: Complete reference (type + number + year) e.g., "UU No. 13 Tahun 2003"
+        - 0.7: Partial reference (type + number OR type + year) e.g., "UU No. 13"
+        - 0.3: Vague reference (type only or contextual) e.g., "Undang-Undang Ketenagakerjaan"
+
+        Args:
+            text: Input text to analyze
+
+        Returns:
+            List of dicts with 'reference', 'type', 'number', 'year', 'confidence'
+        """
+        references = []
+        text_upper = text.upper()
+
+        # Pattern 1: Complete reference (type + number + year) - confidence 1.0
+        complete_pattern = r'(?:UU|PP|Perpres|Permen|Perda|Keppres|Kepmen|Undang-Undang|Peraturan\s+Pemerintah|Peraturan\s+Presiden|Peraturan\s+Menteri|Peraturan\s+Daerah)\s*(?:No\.?\s*)?(\d+)\s*(?:Tahun\s*)(\d{4})'
+
+        for match in re.finditer(complete_pattern, text, re.IGNORECASE):
+            full_match = match.group(0)
+            number = match.group(1)
+            year = match.group(2)
+
+            # Determine regulation type
+            reg_type = self._extract_regulation_type(full_match)
+
+            references.append({
+                'reference': full_match.strip(),
+                'type': reg_type,
+                'number': number,
+                'year': year,
+                'confidence': 1.0
+            })
+
+        # Pattern 2: Partial reference (type + number without year) - confidence 0.7
+        partial_pattern = r'(?:UU|PP|Perpres|Permen|Perda|Keppres|Kepmen|Undang-Undang|Peraturan\s+Pemerintah)\s*(?:No\.?\s*)?(\d+)(?!\s*(?:Tahun\s*)\d{4})'
+
+        for match in re.finditer(partial_pattern, text, re.IGNORECASE):
+            full_match = match.group(0)
+            number = match.group(1)
+
+            # Skip if already captured as complete reference
+            if any(number in ref['reference'] for ref in references if ref['confidence'] == 1.0):
+                continue
+
+            reg_type = self._extract_regulation_type(full_match)
+
+            references.append({
+                'reference': full_match.strip(),
+                'type': reg_type,
+                'number': number,
+                'year': None,
+                'confidence': 0.7
+            })
+
+        # Pattern 3: Vague reference (type + topic keyword) - confidence 0.3
+        vague_patterns = [
+            (r'(?:UU|Undang-Undang)\s+(?:tentang\s+)?(?:Ketenagakerjaan|Perseroan|Perkawinan|Perlindungan\s+Konsumen|Cipta\s+Kerja)', 'UU'),
+            (r'(?:PP|Peraturan\s+Pemerintah)\s+(?:tentang\s+)?(?:Pengupahan|Pelaksanaan|Pendirian)', 'PP'),
+            (r'(?:Perpres|Peraturan\s+Presiden)\s+(?:tentang\s+)?(?:Pengadaan|Investasi)', 'Perpres'),
+        ]
+
+        for pattern, default_type in vague_patterns:
+            for match in re.finditer(pattern, text, re.IGNORECASE):
+                full_match = match.group(0)
+
+                # Skip if already captured
+                if any(full_match.lower() in ref['reference'].lower() for ref in references):
+                    continue
+
+                references.append({
+                    'reference': full_match.strip(),
+                    'type': default_type,
+                    'number': None,
+                    'year': None,
+                    'confidence': 0.3
+                })
+
+        # Sort by confidence (highest first)
+        references.sort(key=lambda x: x['confidence'], reverse=True)
+
+        logger.debug(f"Extracted {len(references)} regulation references from query")
+        return references
+
+    def _extract_regulation_type(self, text: str) -> str:
+        """Extract regulation type from text"""
+        text_upper = text.upper()
+
+        if 'UNDANG-UNDANG' in text_upper or text_upper.startswith('UU'):
+            return 'UU'
+        elif 'PERATURAN PEMERINTAH' in text_upper or text_upper.startswith('PP'):
+            return 'PP'
+        elif 'PERATURAN PRESIDEN' in text_upper or text_upper.startswith('PERPRES'):
+            return 'Perpres'
+        elif 'PERATURAN MENTERI' in text_upper or text_upper.startswith('PERMEN'):
+            return 'Permen'
+        elif 'PERATURAN DAERAH' in text_upper or text_upper.startswith('PERDA'):
+            return 'Perda'
+        elif 'KEPUTUSAN PRESIDEN' in text_upper or text_upper.startswith('KEPPRES'):
+            return 'Keppres'
+        elif 'KEPUTUSAN MENTERI' in text_upper or text_upper.startswith('KEPMEN'):
+            return 'Kepmen'
+
+        return 'Unknown'
 
     def calculate_entity_score(
         self,

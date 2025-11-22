@@ -424,5 +424,136 @@ class HybridSearchEngine:
         if any(w in query_lower for w in ['sanksi', 'pidana', 'denda', 'hukuman']):
             if record.get('kg_has_prohibitions') or 'sanksi' in str(record.get('content', '')).lower():
                 kg_score += 0.15 * KG_WEIGHTS['sanction_relevance']
-        
+
         return min(1.0, kg_score)
+
+    def metadata_first_search(
+        self,
+        regulation_references: List[Dict[str, Any]],
+        top_k: int = 20
+    ) -> List[Dict[str, Any]]:
+        """
+        Direct metadata search with PERFECT SCORE OVERRIDE for exact matches.
+
+        This implements the original notebook's metadata-first strategy where
+        explicit regulation references (e.g., "UU No. 13 Tahun 2003") get
+        perfect scores to ensure they appear at the top.
+
+        Args:
+            regulation_references: List of dicts with 'type', 'number', 'year', 'confidence'
+            top_k: Maximum results to return
+
+        Returns:
+            List of results with perfect scores for exact matches
+        """
+        if not regulation_references:
+            return []
+
+        self.logger.info("Executing metadata-first search", {
+            "references": len(regulation_references)
+        })
+
+        results = []
+        seen_ids = set()
+
+        for ref in regulation_references:
+            ref_type = ref.get('type', '').upper()
+            ref_number = ref.get('number')
+            ref_year = ref.get('year')
+            confidence = ref.get('confidence', 0.3)
+
+            for idx, record in enumerate(self.data_loader.all_records):
+                global_id = record.get('global_id', idx)
+
+                if global_id in seen_ids:
+                    continue
+
+                # Get record metadata
+                doc_type = str(record.get('regulation_type', '')).upper()
+                doc_number = str(record.get('regulation_number', ''))
+                doc_year = str(record.get('year', ''))
+
+                # Normalize types for comparison
+                type_match = self._normalize_regulation_type(ref_type) == self._normalize_regulation_type(doc_type)
+                number_match = ref_number and doc_number and str(ref_number) == str(doc_number)
+                year_match = ref_year and doc_year and str(ref_year) == str(doc_year)
+
+                # Calculate match score
+                match_score = 0.0
+                match_type = None
+
+                # PERFECT SCORE OVERRIDE: Triple match (type + number + year)
+                if type_match and number_match and year_match:
+                    match_score = 1.0  # PERFECT SCORE
+                    match_type = 'exact_triple'
+                    self.logger.debug(f"Perfect match: {doc_type} {doc_number}/{doc_year}")
+
+                # Strong match: Type + Number (without year)
+                elif type_match and number_match:
+                    match_score = 0.85
+                    match_type = 'type_number'
+
+                # Partial match: Type + Year
+                elif type_match and year_match:
+                    match_score = 0.7
+                    match_type = 'type_year'
+
+                # Type only match (for vague references)
+                elif type_match and confidence <= 0.3:
+                    match_score = 0.4
+                    match_type = 'type_only'
+
+                if match_score > 0:
+                    seen_ids.add(global_id)
+
+                    result = {
+                        'index': idx,
+                        'record': record,
+                        'scores': {
+                            'final': match_score,
+                            'metadata_match': match_score,
+                            'semantic': 0.0,
+                            'keyword': 0.0,
+                            'kg': 0.0,
+                        },
+                        'metadata': {
+                            'global_id': global_id,
+                            'regulation_type': doc_type,
+                            'regulation_number': doc_number,
+                            'year': doc_year,
+                            'match_type': match_type,
+                            'reference_confidence': confidence,
+                        }
+                    }
+                    results.append(result)
+
+        # Sort by score (perfect matches first)
+        results.sort(key=lambda x: x['scores']['final'], reverse=True)
+
+        self.logger.info("Metadata-first search completed", {
+            "results": len(results),
+            "perfect_matches": sum(1 for r in results if r['scores']['final'] == 1.0)
+        })
+
+        return results[:top_k]
+
+    def _normalize_regulation_type(self, reg_type: str) -> str:
+        """Normalize regulation type for comparison"""
+        reg_type = reg_type.upper().strip()
+
+        # Map full names to abbreviations
+        mappings = {
+            'UNDANG-UNDANG': 'UU',
+            'PERATURAN PEMERINTAH': 'PP',
+            'PERATURAN PRESIDEN': 'PERPRES',
+            'PERATURAN MENTERI': 'PERMEN',
+            'PERATURAN DAERAH': 'PERDA',
+            'KEPUTUSAN PRESIDEN': 'KEPPRES',
+            'KEPUTUSAN MENTERI': 'KEPMEN',
+        }
+
+        for full_name, abbrev in mappings.items():
+            if full_name in reg_type or reg_type == abbrev:
+                return abbrev
+
+        return reg_type
