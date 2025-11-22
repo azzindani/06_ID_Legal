@@ -354,3 +354,75 @@ def get_form_generator() -> FormGenerator:
     if _form_generator is None:
         _form_generator = FormGenerator()
     return _form_generator
+
+
+if __name__ == "__main__":
+    print("=" * 60)
+    print("FORM GENERATOR TEST")
+    print("=" * 60)
+
+    generator = FormGenerator()
+
+    # List templates
+    print("\nAvailable Templates:")
+    templates = generator.list_templates()
+    for t in templates:
+        print(f"  - {t['id']}: {t['name']} ({t['description']})")
+
+    # Test Surat Kuasa
+    print("\n" + "-" * 60)
+    print("TEST: Surat Kuasa")
+    print("-" * 60)
+
+    result = generator.generate_form("surat_kuasa", {
+        "pemberi_kuasa": "John Doe",
+        "penerima_kuasa": "Jane Smith",
+        "keperluan": "Mengurus dokumen perizinan usaha",
+        "tanggal": "22 November 2025",
+        "tempat": "Jakarta"
+    })
+
+    if result['success']:
+        print(f"\n✓ Generated: {result['template_name']}")
+        print(f"\n{result['content']}")
+    else:
+        print(f"\n✗ Failed: {result['error']}")
+
+    # Test Perjanjian Kerja
+    print("\n" + "-" * 60)
+    print("TEST: Perjanjian Kerja")
+    print("-" * 60)
+
+    result = generator.generate_form("perjanjian_kerja", {
+        "nama_perusahaan": "PT Teknologi Indonesia",
+        "nama_karyawan": "Ahmad Wijaya",
+        "jabatan": "Software Engineer",
+        "gaji": "15.000.000",
+        "tanggal_mulai": "1 Januari 2025",
+        "durasi": 12
+    })
+
+    if result['success']:
+        print(f"\n✓ Generated: {result['template_name']}")
+        print(f"\n{result['content'][:500]}...")
+    else:
+        print(f"\n✗ Failed: {result['error']}")
+
+    # Test missing fields
+    print("\n" + "-" * 60)
+    print("TEST: Missing Fields (should fail)")
+    print("-" * 60)
+
+    result = generator.generate_form("surat_kuasa", {
+        "pemberi_kuasa": "Test"
+        # Missing required fields
+    })
+
+    if result['success']:
+        print(f"\n✗ Should have failed")
+    else:
+        print(f"\n✓ Correctly failed: {result['error']}")
+
+    print("\n" + "=" * 60)
+    print("TEST COMPLETE")
+    print("=" * 60)

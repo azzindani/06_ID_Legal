@@ -275,3 +275,58 @@ def get_parser() -> DocumentParser:
 def parse_document(file_path: str) -> Dict[str, Any]:
     """Convenience function to parse a document"""
     return get_parser().parse(file_path)
+
+
+if __name__ == "__main__":
+    import tempfile
+
+    print("=" * 60)
+    print("DOCUMENT PARSER TEST")
+    print("=" * 60)
+
+    parser = DocumentParser()
+
+    # Create test file
+    test_content = """
+    Undang-Undang Republik Indonesia
+    Nomor 11 Tahun 2008
+    Tentang Informasi dan Transaksi Elektronik
+
+    BAB I - KETENTUAN UMUM
+
+    Pasal 1
+    Dalam Undang-Undang ini yang dimaksud dengan:
+    1. Informasi Elektronik adalah satu atau sekumpulan data elektronik.
+    2. Transaksi Elektronik adalah perbuatan hukum yang dilakukan dengan menggunakan komputer.
+    """
+
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+        f.write(test_content)
+        test_file = f.name
+
+    print(f"\nTest file: {test_file}")
+
+    # Parse
+    result = parser.parse(test_file)
+
+    if result['success']:
+        print("\n✓ Parse successful!")
+        print(f"\nMetadata:")
+        for key, value in result['metadata'].items():
+            print(f"  {key}: {value}")
+
+        print(f"\nContent preview ({len(result['content'])} chars):")
+        print(result['content'][:300])
+
+        # Test chunking
+        chunks = parser.chunk_content(result['content'], chunk_size=200, overlap=50)
+        print(f"\nChunking: {len(chunks)} chunks")
+    else:
+        print(f"\n✗ Parse failed: {result['error']}")
+
+    # Cleanup
+    os.unlink(test_file)
+
+    print("\n" + "=" * 60)
+    print("TEST COMPLETE")
+    print("=" * 60)
