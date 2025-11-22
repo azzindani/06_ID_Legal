@@ -14,7 +14,9 @@ from config import (
     LLM_MODEL,
     MAX_LENGTH,
     CACHE_DIR,
-    DEVICE
+    DEVICE,
+    get_model_path,
+    USE_LOCAL_MODELS
 )
 
 
@@ -28,8 +30,8 @@ class LLMEngine:
         self.logger = get_logger("LLMEngine")
         self.config = config
         
-        # Model configuration
-        self.model_name = config.get('llm_model', LLM_MODEL)
+        # Model configuration - use get_model_path for local model support
+        self.model_name = config.get('llm_model', get_model_path('llm'))
         self.max_length = config.get('max_length', MAX_LENGTH)
         self.device = torch.device(DEVICE if torch.cuda.is_available() else 'cpu')
         
