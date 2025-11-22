@@ -70,9 +70,19 @@ def change_provider(provider_type: str):
         return f"Failed to switch provider: {e}"
 
 
+def parse_think_tags(text: str) -> Tuple[str, str]:
+    """Extract content from <think> tags and return (thinking, answer)"""
+    import re
+    think_pattern = r'<think>(.*?)</think>'
+    matches = re.findall(think_pattern, text, re.DOTALL)
+    thinking = '\n\n'.join(matches) if matches else ''
+    answer = re.sub(think_pattern, '', text, flags=re.DOTALL).strip()
+    return thinking, answer
+
+
 def chat(message: str, history: List[Tuple[str, str]],
          show_thinking: bool = True, show_sources: bool = True,
-         show_metadata: bool = True) -> Tuple[str, List[Tuple[str, str]]]:
+         show_metadata: bool = True, show_analysis: bool = False) -> Tuple[str, List[Tuple[str, str]]]:
     """Process chat message and return response with display options"""
     global pipeline, manager, current_session
 
@@ -92,11 +102,62 @@ def chat(message: str, history: List[Tuple[str, str]],
         # Build response based on display options with collapsible sections
         response_parts = []
 
+        # Add query analysis in collapsible section
+        if show_analysis and result.get('metadata'):
+            meta = result['metadata']
+            analysis_content = ""
+            if meta.get('query_type'):
+                analysis_content += f"- **Tipe Query:** {meta['query_type']}\n"
+            if meta.get('strategy'):
+                analysis_content += f"- **Strategi:** {meta['strategy']}\n"
+            if meta.get('complexity'):
+                analysis_content += f"- **Kompleksitas:** {meta['complexity']}\n"
+            if meta.get('keywords'):
+                keywords = meta['keywords'][:10] if isinstance(meta['keywords'], list) else meta['keywords']
+                analysis_content += f"- **Keywords:** {', '.join(keywords) if isinstance(keywords, list) else keywords}\n"
+            if meta.get('legal_terms'):
+                terms = meta['legal_terms'][:5] if isinstance(meta['legal_terms'], list) else meta['legal_terms']
+                analysis_content += f"- **Legal Terms:** {', '.join(terms) if isinstance(terms, list) else terms}\n"
+            if meta.get('entities'):
+                analysis_content += f"- **Entities:** {meta['entities']}\n"
+
+            # Search phase details
+            if meta.get('search_phases'):
+                phases = meta['search_phases']
+                analysis_content += f"\n**Search Phases:**\n"
+                for i, phase in enumerate(phases, 1):
+                    if isinstance(phase, dict):
+                        phase_name = phase.get('name', f'Phase {i}')
+                        phase_time = phase.get('time', 0)
+                        phase_results = phase.get('results', 0)
+                        analysis_content += f"- {phase_name}: {phase_results} results ({phase_time:.2f}s)\n"
+
+            if analysis_content:
+                analysis_html = f"""<details><summary>🔍 Analisis Query (klik untuk expand)</summary>
+
+{analysis_content}
+
+</details>
+
+---
+
+"""
+                response_parts.append(analysis_html)
+
+        # Parse <think> tags from answer if present
+        answer_text = result.get('answer', '')
+        thinking_from_tags, clean_answer = parse_think_tags(answer_text)
+
+        # Combine thinking sources
+        thinking_content = result.get('thinking', '')
+        if thinking_from_tags:
+            thinking_content = thinking_from_tags if not thinking_content else f"{thinking_content}\n\n{thinking_from_tags}"
+
         # Add thinking process in collapsible section
-        if show_thinking and result.get('thinking'):
+        if show_thinking and thinking_content:
             thinking_html = f"""<details><summary>🧠 Proses Berpikir (klik untuk expand)</summary>
 
-{result['thinking']}
+{thinking_content}
 
 </details>
 
@@ -105,8 +166,9 @@ def chat(message: str, history: List[Tuple[str, str]],
 """
             response_parts.append(thinking_html)
 
-        # Main answer
-        response_parts.append(f"✅ **Jawaban:**\n\n{result['answer']}")
+        # Main answer (use cleaned answer if think tags were parsed)
+        final_answer = clean_answer if thinking_from_tags else answer_text
+        response_parts.append(f"✅ **Jawaban:**\n\n{final_answer}")
 
         # Add sources in collapsible section
         if show_sources and result.get('sources'):
@@ -182,7 +244,7 @@ def chat(message: str, history: List[Tuple[str, str]],
 
 def chat_streaming(message: str, history: List[Tuple[str, str]],
                    show_thinking: bool = True, show_sources: bool = True,
-                   show_metadata: bool = True):
+                   show_metadata: bool = True, show_analysis: bool = False):
     """
     Streaming chat function that yields partial responses with progress tracking.
 
@@ -231,6 +293,8 @@ def chat_streaming(message: str, history: List[Tuple[str, str]],
         progress = add_progress("Query dianalisis")
         if result.get('metadata', {}).get('query_type'):
             progress = add_progress(f"Tipe: {result['metadata']['query_type']}")
+        if result.get('metadata', {}).get('strategy'):
+            progress = add_progress(f"Strategi: {result['metadata']['strategy']}")
 
         progress = add_progress("Pencarian dokumen selesai")
         if result.get('metadata', {}).get('total_documents_retrieved'):
@@ -252,11 +316,60 @@ def chat_streaming(message: str, history: List[Tuple[str, str]],
 """
         response_parts.append(progress_html)
 
+        # Add query analysis in collapsible section
+        if show_analysis and result.get('metadata'):
+            meta = result['metadata']
+            analysis_content = ""
+            if meta.get('query_type'):
+                analysis_content += f"- **Tipe Query:** {meta['query_type']}\n"
+            if meta.get('strategy'):
+                analysis_content += f"- **Strategi:** {meta['strategy']}\n"
+            if meta.get('complexity'):
+                analysis_content += f"- **Kompleksitas:** {meta['complexity']}\n"
+            if meta.get('keywords'):
+                keywords = meta['keywords'][:10] if isinstance(meta['keywords'], list) else meta['keywords']
+                analysis_content += f"- **Keywords:** {', '.join(keywords) if isinstance(keywords, list) else keywords}\n"
+            if meta.get('legal_terms'):
+                terms = meta['legal_terms'][:5] if isinstance(meta['legal_terms'], list) else meta['legal_terms']
+                analysis_content += f"- **Legal Terms:** {', '.join(terms) if isinstance(terms, list) else terms}\n"
+
+            # Search phase details
+            if meta.get('search_phases'):
+                phases = meta['search_phases']
+                analysis_content += f"\n**Search Phases:**\n"
+                for i, phase in enumerate(phases, 1):
+                    if isinstance(phase, dict):
+                        phase_name = phase.get('name', f'Phase {i}')
+                        phase_time = phase.get('time', 0)
+                        phase_results = phase.get('results', 0)
+                        analysis_content += f"- {phase_name}: {phase_results} results ({phase_time:.2f}s)\n"
+
+            if analysis_content:
+                analysis_html = f"""<details><summary>🔍 Analisis Query (klik untuk expand)</summary>
+
+{analysis_content}
+
+</details>
+
+---
+
+"""
+                response_parts.append(analysis_html)
+
+        # Parse <think> tags from answer if present
+        answer_text = result.get('answer', '')
+        thinking_from_tags, clean_answer = parse_think_tags(answer_text)
+
+        # Combine thinking sources
+        thinking_content = result.get('thinking', '')
+        if thinking_from_tags:
+            thinking_content = thinking_from_tags if not thinking_content else f"{thinking_content}\n\n{thinking_from_tags}"
+
         # Phase 2: Show thinking process
-        if show_thinking and result.get('thinking'):
+        if show_thinking and thinking_content:
             thinking_html = f"""<details><summary>🧠 Proses Berpikir (klik untuk expand)</summary>
 
-{result['thinking']}
+{thinking_content}
 
 </details>
 
@@ -269,7 +382,7 @@ def chat_streaming(message: str, history: List[Tuple[str, str]],
             yield "", history_with_progress
 
         # Phase 3: Stream the main answer
-        answer = result.get('answer', '')
+        answer = clean_answer if thinking_from_tags else answer_text
 
         # If streaming iterator is available, use it
         if hasattr(result, '__iter__') and not isinstance(result, (dict, str)):
@@ -973,6 +1086,7 @@ def create_demo() -> gr.Blocks:
                             show_thinking = gr.Checkbox(label="Show Thinking Process", value=True)
                             show_sources = gr.Checkbox(label="Show Sources", value=True)
                             show_metadata = gr.Checkbox(label="Show Metadata", value=False)
+                            show_analysis = gr.Checkbox(label="Show Query Analysis", value=False, info="Display query analysis, strategy, and search phases")
 
                     with gr.Column(scale=1):
                         with gr.Accordion("Provider Settings", open=False):
@@ -1064,27 +1178,64 @@ def create_demo() -> gr.Blocks:
 
                     with gr.Column(scale=1):
                         with gr.Accordion("Search Phase Control", open=False):
-                            phase_candidates = gr.Slider(
+                            gr.Markdown("**Phase 1: Initial Retrieval**")
+                            phase1_top_k = gr.Slider(
                                 minimum=50,
                                 maximum=500,
                                 value=150,
                                 step=50,
-                                label="Initial Candidates",
-                                info="Documents per search phase"
+                                label="Phase 1 Top-K",
+                                info="Initial candidates per method"
                             )
-                            semantic_threshold = gr.Slider(
+                            phase1_threshold = gr.Slider(
                                 minimum=0.1,
                                 maximum=0.9,
                                 value=0.5,
                                 step=0.05,
-                                label="Semantic Threshold"
+                                label="Phase 1 Similarity Threshold"
                             )
-                            keyword_threshold = gr.Slider(
-                                minimum=0.05,
-                                maximum=0.5,
-                                value=0.15,
+
+                            gr.Markdown("**Phase 2: Fusion & Filtering**")
+                            phase2_top_k = gr.Slider(
+                                minimum=50,
+                                maximum=300,
+                                value=100,
+                                step=25,
+                                label="Phase 2 Top-K",
+                                info="After RRF fusion"
+                            )
+                            phase2_keyword_boost = gr.Slider(
+                                minimum=1.0,
+                                maximum=3.0,
+                                value=1.5,
+                                step=0.1,
+                                label="Keyword Boost Factor"
+                            )
+
+                            gr.Markdown("**Phase 3: Reranking**")
+                            phase3_top_k = gr.Slider(
+                                minimum=10,
+                                maximum=100,
+                                value=50,
+                                step=10,
+                                label="Phase 3 Top-K",
+                                info="After reranking"
+                            )
+
+                            gr.Markdown("**Phase 4: Final Selection**")
+                            phase4_top_k = gr.Slider(
+                                minimum=3,
+                                maximum=20,
+                                value=10,
+                                step=1,
+                                label="Final Top-K Results"
+                            )
+                            phase4_quality = gr.Slider(
+                                minimum=0.3,
+                                maximum=0.9,
+                                value=0.6,
                                 step=0.05,
-                                label="Keyword Threshold"
+                                label="Quality Threshold"
                             )
 
             # Form Generator Tab
@@ -1137,13 +1288,13 @@ def create_demo() -> gr.Blocks:
         # Event handlers
         submit_btn.click(
             chat,
-            inputs=[msg, chatbot, show_thinking, show_sources, show_metadata],
+            inputs=[msg, chatbot, show_thinking, show_sources, show_metadata, show_analysis],
             outputs=[msg, chatbot]
         )
 
         msg.submit(
             chat,
-            inputs=[msg, chatbot, show_thinking, show_sources, show_metadata],
+            inputs=[msg, chatbot, show_thinking, show_sources, show_metadata, show_analysis],
             outputs=[msg, chatbot]
         )
 
