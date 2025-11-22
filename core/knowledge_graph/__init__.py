@@ -16,10 +16,14 @@ def __getattr__(name):
     elif name == 'CommunityDetector':
         from .community_detection import CommunityDetector
         return CommunityDetector
+    elif name == 'DynamicCommunityDetector':
+        from .community_detector import DynamicCommunityDetector
+        return DynamicCommunityDetector
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 __all__ = [
     'KnowledgeGraphCore',
     'RelationshipGraph',
     'CommunityDetector',
+    'DynamicCommunityDetector',
 ]

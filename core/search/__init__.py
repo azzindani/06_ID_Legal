@@ -20,6 +20,9 @@ def __getattr__(name):
     elif name == 'RerankerEngine':
         from .reranking import RerankerEngine
         return RerankerEngine
+    elif name == 'AdvancedQueryAnalyzer':
+        from .advanced_query_analyzer import AdvancedQueryAnalyzer
+        return AdvancedQueryAnalyzer
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 __all__ = [
@@ -27,7 +30,8 @@ __all__ = [
     'HybridSearchEngine',
     'StagesResearchEngine',
     'ConsensusBuilder',
-    'RerankerEngine'
+    'RerankerEngine',
+    'AdvancedQueryAnalyzer'
 ]
 
 __version__ = "1.0.0"
