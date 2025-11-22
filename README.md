@@ -55,6 +55,114 @@ This system provides intelligent legal consultation by combining:
 
 ---
 
+## System Architecture
+
+### High-Level Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        User Interfaces                          │
+├─────────────┬─────────────┬─────────────┬─────────────────────┤
+│   Gradio    │   FastAPI   │     CLI     │   Form Generator    │
+│  (Web UI)   │  (REST API) │  (Terminal) │   & Analytics       │
+└──────┬──────┴──────┬──────┴──────┬──────┴──────────┬──────────┘
+       │             │             │                 │
+       └─────────────┴──────┬──────┴─────────────────┘
+                            │
+┌───────────────────────────▼───────────────────────────────────┐
+│                     RAG Pipeline Layer                        │
+├───────────────────────────────────────────────────────────────┤
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐   │
+│  │   Session   │  │   Context   │  │    Conversation     │   │
+│  │   Manager   │  │    Cache    │  │      Manager        │   │
+│  └─────────────┘  └─────────────┘  └─────────────────────┘   │
+└───────────────────────────┬───────────────────────────────────┘
+                            │
+┌───────────────────────────▼───────────────────────────────────┐
+│                 LangGraph Orchestrator                        │
+├───────────────────────────────────────────────────────────────┤
+│  ┌─────────┐ ┌──────────┐ ┌─────────┐ ┌─────────┐ ┌────────┐ │
+│  │  Query  │→│  Hybrid  │→│ Stages  │→│Consensus│→│Reranker│ │
+│  │Detection│ │  Search  │ │Research │ │ Builder │ │        │ │
+│  └─────────┘ └──────────┘ └─────────┘ └─────────┘ └────────┘ │
+└───────────────────────────┬───────────────────────────────────┘
+                            │
+┌───────────────────────────▼───────────────────────────────────┐
+│                   Generation Engine                           │
+├───────────────────────────────────────────────────────────────┤
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐   │
+│  │   Prompt    │  │     LLM     │  │     Citation        │   │
+│  │   Builder   │  │    Engine   │  │     Formatter       │   │
+│  └─────────────┘  └─────────────┘  └─────────────────────┘   │
+└───────────────────────────┬───────────────────────────────────┘
+                            │
+┌───────────────────────────▼───────────────────────────────────┐
+│                    Core Components                            │
+├─────────────┬─────────────┬─────────────┬────────────────────┤
+│   Model     │    Data     │  Knowledge  │     Hardware       │
+│   Manager   │   Loader    │    Graph    │    Detection       │
+└─────────────┴─────────────┴─────────────┴────────────────────┘
+                            │
+┌───────────────────────────▼───────────────────────────────────┐
+│                   LLM Provider Layer                          │
+├─────────────┬─────────────┬─────────────┬────────────────────┤
+│    Local    │   OpenAI    │  Anthropic  │  Google/OpenRouter │
+│ (HuggingFace)│   (GPT)    │  (Claude)   │  (Gemini/Multi)    │
+└─────────────┴─────────────┴─────────────┴────────────────────┘
+```
+
+### Data Flow
+
+```
+User Query
+    │
+    ▼
+┌─────────────────┐
+│ Query Detection │ ← Analyze query type, extract entities
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Hybrid Search  │ ← Semantic (embeddings) + Keyword (TF-IDF)
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ Stages Research │ ← Multi-stage filtering with quality thresholds
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│    Consensus    │ ← Multi-researcher simulation & voting
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│    Reranking    │ ← Final scoring with reranker model
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│   Generation    │ ← LLM response with citations
+└────────┬────────┘
+         │
+         ▼
+    Response
+```
+
+### Component Relationships
+
+| Layer | Components | Purpose |
+|-------|------------|---------|
+| **Interface** | Gradio, FastAPI, CLI | User interaction |
+| **Pipeline** | RAGPipeline, SessionManager | High-level orchestration |
+| **Search** | HybridSearch, StagesResearch, Consensus | Document retrieval |
+| **Generation** | GenerationEngine, PromptBuilder | Response creation |
+| **Infrastructure** | ModelManager, DataLoader, HardwareDetection | Resource management |
+| **Providers** | Local, OpenAI, Anthropic, Google | LLM abstraction |
+
+---
+
 ## Directory Structure Map
 
 ```
@@ -62,15 +170,19 @@ This system provides intelligent legal consultation by combining:
 │
 ├── config.py                           # ✅ Centralized configuration
 ├── model_manager.py                    # ✅ Model loading and management
+├── hardware_detection.py               # ✅ Multi-GPU auto-detection
 ├── logger_utils.py                     # ✅ Centralized logging
 ├── main.py                             # ✅ Main entry point
+├── conftest.py                         # ✅ Pytest fixtures
 ├── requirements.txt                    # ✅ Dependencies
 ├── setup.py                            # ✅ Package setup
 ├── pyproject.toml                      # ✅ Modern Python packaging
+├── pytest.ini                          # ✅ Pytest configuration
 ├── .env.example                        # ✅ Environment template
 ├── Dockerfile                          # ✅ Docker image
 ├── docker-compose.yml                  # ✅ Docker orchestration
 ├── .dockerignore                       # ✅ Docker build exclusions
+├── WORKFLOW.md                         # ✅ Development methodology
 ├── Kaggle_Demo.ipynb                   # ✅ Original reference
 │
 ├── .github/workflows/                  # ✅ CI/CD
@@ -79,6 +191,10 @@ This system provides intelligent legal consultation by combining:
 │
 ├── core/
 │   ├── __init__.py                     # ✅ Package exports
+│   ├── analytics.py                    # ✅ Usage analytics dashboard
+│   ├── document_parser.py              # ✅ PDF/DOCX parsing
+│   ├── form_generator.py               # ✅ Legal form generation
+│   ├── example_usage.py                # ✅ Usage examples
 │   │
 │   ├── search/
 │   │   ├── __init__.py                 # ✅ Exists
