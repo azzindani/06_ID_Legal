@@ -89,41 +89,75 @@ def chat(message: str, history: List[Tuple[str, str]],
         # Generate response
         result = pipeline.query(message, conversation_history=context, stream=False)
 
-        # Build response based on display options
+        # Build response based on display options with collapsible sections
         response_parts = []
 
-        # Add thinking process if available and enabled
+        # Add thinking process in collapsible section
         if show_thinking and result.get('thinking'):
-            response_parts.append(f"🧠 **Proses Berpikir:**\n{result['thinking']}\n\n---\n")
+            thinking_html = f"""<details><summary>🧠 Proses Berpikir (klik untuk expand)</summary>
+
+{result['thinking']}
+
+</details>
+
+---
+
+"""
+            response_parts.append(thinking_html)
 
         # Main answer
-        response_parts.append(result['answer'])
+        response_parts.append(f"✅ **Jawaban:**\n\n{result['answer']}")
 
-        # Add sources if available and enabled
+        # Add sources in collapsible section
         if show_sources and result.get('sources'):
             sources = result['sources']
             if sources:
-                source_text = "\n\n---\n📚 **Sumber:**\n"
+                source_content = ""
                 for i, src in enumerate(sources[:5], 1):
                     if isinstance(src, dict):
                         title = src.get('title', src.get('regulation', f'Source {i}'))
                         score = src.get('score', 0)
-                        source_text += f"- {title} (skor: {score:.2f})\n"
+                        doc_type = src.get('type', src.get('jenis_peraturan', ''))
+                        source_content += f"**{i}. {title}**\n"
+                        source_content += f"- Skor: {score:.3f}\n"
+                        if doc_type:
+                            source_content += f"- Jenis: {doc_type}\n"
+                        source_content += "\n"
                     else:
-                        source_text += f"- {src}\n"
-                response_parts.append(source_text)
+                        source_content += f"- {src}\n"
 
-        # Add metadata if enabled
+                source_html = f"""
+
+---
+
+<details><summary>📖 Sumber Hukum ({len(sources[:5])} dokumen)</summary>
+
+{source_content}
+</details>"""
+                response_parts.append(source_html)
+
+        # Add metadata in collapsible section
         if show_metadata and result.get('metadata'):
             meta = result['metadata']
-            meta_text = "\n\n---\n📊 **Metadata:**\n"
+            meta_content = ""
             if meta.get('query_type'):
-                meta_text += f"- Tipe: {meta['query_type']}\n"
+                meta_content += f"- **Tipe Query:** {meta['query_type']}\n"
             if meta.get('processing_time'):
-                meta_text += f"- Waktu: {meta['processing_time']:.2f}s\n"
+                meta_content += f"- **Waktu Proses:** {meta['processing_time']:.2f}s\n"
             if meta.get('total_results'):
-                meta_text += f"- Hasil: {meta['total_results']}\n"
-            response_parts.append(meta_text)
+                meta_content += f"- **Total Hasil:** {meta['total_results']}\n"
+            if meta.get('search_phases'):
+                phases = meta['search_phases']
+                meta_content += f"- **Search Phases:** {len(phases)}\n"
+
+            if meta_content:
+                meta_html = f"""
+
+<details><summary>📊 Metadata Pencarian</summary>
+
+{meta_content}
+</details>"""
+                response_parts.append(meta_html)
 
         response = "".join(response_parts)
 
@@ -150,11 +184,13 @@ def chat_streaming(message: str, history: List[Tuple[str, str]],
                    show_thinking: bool = True, show_sources: bool = True,
                    show_metadata: bool = True):
     """
-    Streaming chat function that yields partial responses.
+    Streaming chat function that yields partial responses with progress tracking.
 
     This provides real-time feedback as the response is generated,
-    matching the original Kaggle_Demo.ipynb streaming behavior.
+    matching the original Kaggle_Demo.ipynb streaming behavior with
+    collapsible sections and timestamps.
     """
+    import time
     global pipeline, manager, current_session
 
     if not message.strip():
@@ -165,29 +201,74 @@ def chat_streaming(message: str, history: List[Tuple[str, str]],
         if pipeline is None:
             initialize_system()
 
+        start_time = time.time()
+
         # Get conversation context
         context = manager.get_context_for_query(current_session) if current_session else None
 
-        # Show searching status
-        history_with_status = history + [(message, "🔍 Mencari dokumen relevan...")]
+        # Progress tracking with timestamps
+        progress_lines = []
+
+        def add_progress(msg):
+            elapsed = time.time() - start_time
+            progress_lines.append(f"🔄 [{elapsed:.1f}s] {msg}")
+            return "\n".join(progress_lines)
+
+        # Phase 1: Show initial progress
+        progress = add_progress("Memulai analisis query...")
+        progress_html = f"""<details open><summary>📋 Proses Penelitian</summary>
+
+{progress}
+
+</details>"""
+        history_with_status = history + [(message, progress_html)]
         yield "", history_with_status
 
-        # Generate response with streaming enabled
+        # Generate response
         result = pipeline.query(message, conversation_history=context, stream=True)
+
+        # Update progress
+        progress = add_progress("Query dianalisis")
+        if result.get('metadata', {}).get('query_type'):
+            progress = add_progress(f"Tipe: {result['metadata']['query_type']}")
+
+        progress = add_progress("Pencarian dokumen selesai")
+        if result.get('metadata', {}).get('total_documents_retrieved'):
+            total = result['metadata']['total_documents_retrieved']
+            progress = add_progress(f"Ditemukan {total} dokumen")
 
         # Build response progressively
         response_parts = []
-        current_response = ""
 
-        # Phase 1: Show thinking process
+        # Add progress section (collapsible, closed by default in final)
+        progress_html = f"""<details><summary>📋 Proses Penelitian ({time.time() - start_time:.1f}s)</summary>
+
+{progress}
+
+</details>
+
+---
+
+"""
+        response_parts.append(progress_html)
+
+        # Phase 2: Show thinking process
         if show_thinking and result.get('thinking'):
-            thinking_text = f"🧠 **Proses Berpikir:**\n{result['thinking']}\n\n---\n"
-            response_parts.append(thinking_text)
-            current_response = "".join(response_parts)
-            history_with_progress = history + [(message, current_response + "⏳ Generating answer...")]
+            thinking_html = f"""<details><summary>🧠 Proses Berpikir (klik untuk expand)</summary>
+
+{result['thinking']}
+
+</details>
+
+---
+
+"""
+            response_parts.append(thinking_html)
+            current_display = "".join(response_parts) + "⏳ Generating answer..."
+            history_with_progress = history + [(message, current_display)]
             yield "", history_with_progress
 
-        # Phase 2: Stream the main answer
+        # Phase 3: Stream the main answer
         answer = result.get('answer', '')
 
         # If streaming iterator is available, use it
@@ -199,47 +280,62 @@ def chat_streaming(message: str, history: List[Tuple[str, str]],
                 elif isinstance(chunk, dict) and 'text' in chunk:
                     partial_answer += chunk['text']
 
-                current_display = "".join(response_parts) + partial_answer
+                current_display = "".join(response_parts) + f"✅ **Jawaban:**\n\n{partial_answer}"
                 history_with_progress = history + [(message, current_display)]
                 yield "", history_with_progress
 
-            response_parts.append(partial_answer)
+            response_parts.append(f"✅ **Jawaban:**\n\n{partial_answer}")
         else:
-            # Non-streaming fallback - show answer in chunks for visual effect
-            chunk_size = 50
-            for i in range(0, len(answer), chunk_size):
-                partial = answer[:i + chunk_size]
-                current_display = "".join(response_parts) + partial
-                history_with_progress = history + [(message, current_display)]
-                yield "", history_with_progress
+            # Non-streaming fallback
+            response_parts.append(f"✅ **Jawaban:**\n\n{answer}")
 
-            response_parts.append(answer)
-
-        # Phase 3: Add sources
+        # Phase 4: Add sources in collapsible section
         if show_sources and result.get('sources'):
             sources = result['sources']
             if sources:
-                source_text = "\n\n---\n📚 **Sumber:**\n"
+                source_content = ""
                 for i, src in enumerate(sources[:5], 1):
                     if isinstance(src, dict):
                         title = src.get('title', src.get('regulation', f'Source {i}'))
                         score = src.get('score', 0)
-                        source_text += f"- {title} (skor: {score:.2f})\n"
+                        doc_type = src.get('type', src.get('jenis_peraturan', ''))
+                        source_content += f"**{i}. {title}**\n"
+                        source_content += f"- Skor: {score:.3f}\n"
+                        if doc_type:
+                            source_content += f"- Jenis: {doc_type}\n"
+                        source_content += "\n"
                     else:
-                        source_text += f"- {src}\n"
-                response_parts.append(source_text)
+                        source_content += f"- {src}\n"
 
-        # Phase 4: Add metadata
+                source_html = f"""
+
+---
+
+<details><summary>📖 Sumber Hukum ({len(sources[:5])} dokumen)</summary>
+
+{source_content}
+</details>"""
+                response_parts.append(source_html)
+
+        # Phase 5: Add metadata in collapsible section
         if show_metadata and result.get('metadata'):
             meta = result['metadata']
-            meta_text = "\n\n---\n📊 **Metadata:**\n"
+            meta_content = ""
             if meta.get('query_type'):
-                meta_text += f"- Tipe: {meta['query_type']}\n"
+                meta_content += f"- **Tipe Query:** {meta['query_type']}\n"
             if meta.get('processing_time'):
-                meta_text += f"- Waktu: {meta['processing_time']:.2f}s\n"
+                meta_content += f"- **Waktu Proses:** {meta['processing_time']:.2f}s\n"
             if meta.get('total_results'):
-                meta_text += f"- Hasil: {meta['total_results']}\n"
-            response_parts.append(meta_text)
+                meta_content += f"- **Total Hasil:** {meta['total_results']}\n"
+
+            if meta_content:
+                meta_html = f"""
+
+<details><summary>📊 Metadata Pencarian</summary>
+
+{meta_content}
+</details>"""
+                response_parts.append(meta_html)
 
         # Final response
         final_response = "".join(response_parts)
