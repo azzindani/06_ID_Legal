@@ -138,6 +138,10 @@ class ContextCache:
         if not context:
             return context
 
+        # Handle non-list contexts (e.g., result dicts)
+        if not isinstance(context, list):
+            return context
+
         total_tokens = self._estimate_tokens(context)
 
         if total_tokens <= self.max_tokens:
@@ -209,8 +213,13 @@ class ContextCache:
 
     def _estimate_tokens(self, context: List[Dict[str, str]]) -> int:
         """Estimate token count for context"""
+        # Handle non-list contexts (e.g., result dicts)
+        if not isinstance(context, list):
+            # Estimate based on string representation
+            return len(str(context)) // self._token_ratio
+
         total_chars = sum(
-            len(msg.get('content', ''))
+            len(msg.get('content', '') if isinstance(msg, dict) else str(msg))
             for msg in context
         )
         return total_chars // self._token_ratio
