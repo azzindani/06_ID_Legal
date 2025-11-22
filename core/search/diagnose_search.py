@@ -4,7 +4,8 @@ Quick diagnostic script to identify why search returns 0 results
 
 import sys
 import os
-sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
+# Add project root to path for imports
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
 from logger_utils import initialize_logging, get_logger
 from config import DATASET_NAME, EMBEDDING_DIM, get_default_config
