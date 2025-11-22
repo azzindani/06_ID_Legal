@@ -58,7 +58,22 @@ class EnhancedKGDatasetLoader:
             "dataset": dataset_name,
             "embedding_dim": embedding_dim
         })
-    
+
+    def load(self, progress_callback: Optional[Callable[[str], None]] = None) -> dict:
+        """
+        Load dataset and return data in expected format.
+
+        Args:
+            progress_callback: Optional callback function for progress updates
+
+        Returns:
+            dict: Dictionary with 'documents' key containing all records
+        """
+        success = self.load_from_huggingface(progress_callback)
+        if success:
+            return {'documents': self.all_records}
+        return {'documents': []}
+
     def load_from_huggingface(self, progress_callback: Optional[Callable[[str], None]] = None):
         """
         Load SQLite database from HuggingFace repository
