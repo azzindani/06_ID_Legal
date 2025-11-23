@@ -83,10 +83,23 @@ class LLMEngine:
                 )
                 
                 # Set pad token if not exists
+                # IMPORTANT: Don't use eos_token as pad_token - it causes generation to stop immediately
+                need_resize_embeddings = False
                 if self._tokenizer.pad_token is None:
-                    self._tokenizer.pad_token = self._tokenizer.eos_token
-                    self.logger.debug("Set pad_token to eos_token")
-                
+                    # Try to use unk_token first, or add a new pad token
+                    if self._tokenizer.unk_token is not None:
+                        self._tokenizer.pad_token = self._tokenizer.unk_token
+                        self.logger.debug("Set pad_token to unk_token")
+                    else:
+                        # Add a dedicated pad token
+                        self._tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+                        need_resize_embeddings = True
+                        self.logger.debug("Added new [PAD] token")
+
+                # Set padding side to left for decoder-only models
+                self._tokenizer.padding_side = 'left'
+                self.logger.debug(f"Set padding_side to left, pad_token_id={self._tokenizer.pad_token_id}")
+
                 # Load model
                 self.logger.debug("Loading model weights")
                 self._model = AutoModelForCausalLM.from_pretrained(
@@ -99,7 +112,12 @@ class LLMEngine:
                 
                 if self.device.type != 'cuda':
                     self._model.to(self.device)
-                
+
+                # Resize embeddings if we added new tokens
+                if need_resize_embeddings:
+                    self._model.resize_token_embeddings(len(self._tokenizer))
+                    self.logger.debug(f"Resized token embeddings to {len(self._tokenizer)}")
+
                 self._model.eval()
                 
                 self.logger.success("LLM model loaded successfully", {
