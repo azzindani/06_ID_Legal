@@ -3,24 +3,36 @@ Gradio Interface - Indonesian Legal RAG System
 
 Web-based chat interface for legal consultation with provider selection,
 document upload, and advanced features.
+
+This implementation replicates the Kaggle_Demo architecture with:
+- Generator-based streaming progress
+- Advanced query analysis display
+- Research team settings
+- Community cluster display
+- Phase configuration
 """
 
 import gradio as gr
 import sys
 import os
-from typing import List, Tuple, Optional
+import time
+import torch
+from typing import List, Tuple, Optional, Dict, Any
 from pathlib import Path
+from datetime import datetime
+from threading import Thread
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from pipeline import RAGPipeline
 from conversation import ConversationManager, MarkdownExporter, JSONExporter, HTMLExporter, get_context_cache
 from providers import get_provider, switch_provider, list_providers
-from config import LLM_PROVIDER, EMBEDDING_DEVICE, LLM_DEVICE
+from config import (
+    LLM_PROVIDER, EMBEDDING_DEVICE, LLM_DEVICE,
+    DEFAULT_CONFIG, DEFAULT_SEARCH_PHASES, RESEARCH_TEAM_PERSONAS,
+    EMBEDDING_MODEL, RERANKER_MODEL, LLM_MODEL
+)
 from logger_utils import get_logger
-from core.document_parser import parse_document
-from core.form_generator import get_form_generator
-from core.analytics import get_analytics
 
 logger = get_logger(__name__)
 
@@ -29,11 +41,24 @@ pipeline: Optional[RAGPipeline] = None
 manager: Optional[ConversationManager] = None
 current_session: Optional[str] = None
 current_provider: str = LLM_PROVIDER
+initialization_complete: bool = False
+
+# Direct component references (populated during initialization)
+search_engine = None
+knowledge_graph = None
+reranker = None
+llm_generator = None
+llm_model = None
+llm_tokenizer = None
+conversation_manager = None
+dataset_loader = None
 
 
 def initialize_system(provider_type: str = None):
     """Initialize the RAG system with specified provider"""
-    global pipeline, manager, current_session, current_provider
+    global pipeline, manager, current_session, current_provider, initialization_complete
+    global search_engine, knowledge_graph, reranker, llm_generator, llm_model, llm_tokenizer
+    global conversation_manager, dataset_loader
 
     if provider_type:
         current_provider = provider_type
@@ -45,12 +70,30 @@ def initialize_system(provider_type: str = None):
             return "Failed to initialize pipeline"
         logger.info("Pipeline initialized")
 
+        # Extract component references for direct access
+        if hasattr(pipeline, 'search_orchestrator'):
+            search_engine = pipeline.search_orchestrator
+        if hasattr(pipeline, 'knowledge_graph'):
+            knowledge_graph = pipeline.knowledge_graph
+        if hasattr(pipeline, 'reranker'):
+            reranker = pipeline.reranker
+        if hasattr(pipeline, 'generator'):
+            llm_generator = pipeline.generator
+        if hasattr(pipeline, 'llm_model'):
+            llm_model = pipeline.llm_model
+        if hasattr(pipeline, 'llm_tokenizer'):
+            llm_tokenizer = pipeline.llm_tokenizer
+        if hasattr(pipeline, 'data_loader'):
+            dataset_loader = pipeline.data_loader
+
     if manager is None:
         manager = ConversationManager()
+        conversation_manager = manager
 
     if current_session is None:
         current_session = manager.start_session()
 
+    initialization_complete = True
     device_info = f"Embedding: {EMBEDDING_DEVICE}, LLM: {LLM_DEVICE}"
     return f"Initialized with {current_provider} provider. {device_info}"
 
@@ -80,979 +123,454 @@ def parse_think_tags(text: str) -> Tuple[str, str]:
     return thinking, answer
 
 
-def chat(message: str, history: List[Tuple[str, str]],
-         show_thinking: bool = True, show_sources: bool = True,
-         show_metadata: bool = True, show_analysis: bool = False) -> Tuple[str, List[Tuple[str, str]]]:
-    """Process chat message and return response with display options"""
-    global pipeline, manager, current_session
-
-    if not message.strip():
-        return "", history
-
-    try:
-        if pipeline is None:
-            initialize_system()
-
-        # Get conversation context
-        context = manager.get_context_for_query(current_session) if current_session else None
-
-        # Generate response
-        result = pipeline.query(message, conversation_history=context, stream=False)
-
-        # Build response based on display options with collapsible sections
-        response_parts = []
-
-        # Add query analysis in collapsible section
-        if show_analysis and result.get('metadata'):
-            meta = result['metadata']
-            analysis_content = ""
-            if meta.get('query_type'):
-                analysis_content += f"- **Tipe Query:** {meta['query_type']}\n"
-            if meta.get('strategy'):
-                analysis_content += f"- **Strategi:** {meta['strategy']}\n"
-            if meta.get('complexity'):
-                analysis_content += f"- **Kompleksitas:** {meta['complexity']}\n"
-            if meta.get('keywords'):
-                keywords = meta['keywords'][:10] if isinstance(meta['keywords'], list) else meta['keywords']
-                analysis_content += f"- **Keywords:** {', '.join(keywords) if isinstance(keywords, list) else keywords}\n"
-            if meta.get('legal_terms'):
-                terms = meta['legal_terms'][:5] if isinstance(meta['legal_terms'], list) else meta['legal_terms']
-                analysis_content += f"- **Legal Terms:** {', '.join(terms) if isinstance(terms, list) else terms}\n"
-            if meta.get('entities'):
-                analysis_content += f"- **Entities:** {meta['entities']}\n"
-
-            # Search phase details
-            if meta.get('search_phases'):
-                phases = meta['search_phases']
-                analysis_content += f"\n**Search Phases:**\n"
-                for i, phase in enumerate(phases, 1):
-                    if isinstance(phase, dict):
-                        phase_name = phase.get('name', f'Phase {i}')
-                        phase_time = phase.get('time', 0)
-                        phase_results = phase.get('results', 0)
-                        analysis_content += f"- {phase_name}: {phase_results} results ({phase_time:.2f}s)\n"
-
-            if analysis_content:
-                analysis_html = f"""<details><summary>🔍 Analisis Query (klik untuk expand)</summary>
-
-{analysis_content}
-
-</details>
-
----
-
-"""
-                response_parts.append(analysis_html)
-
-        # Parse <think> tags from answer if present
-        answer_text = result.get('answer', '')
-        thinking_from_tags, clean_answer = parse_think_tags(answer_text)
-
-        # Combine thinking sources
-        thinking_content = result.get('thinking', '')
-        if thinking_from_tags:
-            thinking_content = thinking_from_tags if not thinking_content else f"{thinking_content}\n\n{thinking_from_tags}"
-
-        # Add thinking process in collapsible section
-        if show_thinking and thinking_content:
-            thinking_html = f"""<details><summary>🧠 Proses Berpikir (klik untuk expand)</summary>
-
-{thinking_content}
-
-</details>
-
----
-
-"""
-            response_parts.append(thinking_html)
-
-        # Main answer (use cleaned answer if think tags were parsed)
-        final_answer = clean_answer if thinking_from_tags else answer_text
-        response_parts.append(f"✅ **Jawaban:**\n\n{final_answer}")
-
-        # Add sources in collapsible section with enhanced metadata
-        if show_sources and result.get('sources'):
-            sources = result['sources']
-            if sources:
-                source_content = ""
-                for i, src in enumerate(sources[:5], 1):
-                    if isinstance(src, dict):
-                        title = src.get('title', src.get('regulation', f'Source {i}'))
-                        score = src.get('score', 0)
-                        doc_type = src.get('type', src.get('jenis_peraturan', ''))
-
-                        source_content += f"**{i}. {title}**\n"
-                        source_content += f"- Skor: {score:.3f}\n"
-
-                        # Enhanced regulation metadata
-                        if src.get('regulation_number') or src.get('nomor_peraturan'):
-                            reg_num = src.get('regulation_number', src.get('nomor_peraturan', ''))
-                            year = src.get('year', src.get('tahun', ''))
-                            if reg_num and year:
-                                source_content += f"- Nomor: {reg_num} Tahun {year}\n"
-                            elif reg_num:
-                                source_content += f"- Nomor: {reg_num}\n"
-
-                        if doc_type:
-                            source_content += f"- Jenis: {doc_type}\n"
-
-                        # Legal domain
-                        domain = src.get('kg_primary_domain', src.get('domain', ''))
-                        if domain:
-                            source_content += f"- Domain: {domain}\n"
-
-                        # Authority and complexity scores
-                        authority = src.get('kg_authority_score', src.get('authority_score', 0))
-                        if authority:
-                            auth_level = "Tinggi" if authority > 0.7 else "Sedang" if authority > 0.4 else "Rendah"
-                            source_content += f"- Otoritas: {auth_level} ({authority:.2f})\n"
-
-                        complexity = src.get('kg_legal_complexity', 0)
-                        if complexity:
-                            source_content += f"- Kompleksitas: {complexity:.2f}\n"
-
-                        # Content indicators
-                        indicators = []
-                        if src.get('kg_has_obligations'):
-                            indicators.append("Kewajiban")
-                        if src.get('kg_has_prohibitions'):
-                            indicators.append("Larangan")
-                        if src.get('kg_has_permissions'):
-                            indicators.append("Izin")
-                        if indicators:
-                            source_content += f"- Mengandung: {', '.join(indicators)}\n"
-
-                        # Network importance
-                        pagerank = src.get('kg_pagerank', 0)
-                        if pagerank and pagerank > 0.01:
-                            source_content += f"- Konektivitas: {pagerank:.3f}\n"
-
-                        # Research team consensus info
-                        if src.get('voting_ratio'):
-                            voting = src['voting_ratio']
-                            source_content += f"- Konsensus Tim: {voting:.0%}\n"
-                        if src.get('personas_agreed'):
-                            personas = src['personas_agreed']
-                            if len(personas) > 1:
-                                source_content += f"- Peneliti: {', '.join(personas[:3])}\n"
-
-                        source_content += "\n"
-                    else:
-                        source_content += f"- {src}\n"
-
-                source_html = f"""
-
----
-
-<details><summary>📖 Sumber Hukum ({len(sources[:5])} dokumen)</summary>
-
-{source_content}
-</details>"""
-                response_parts.append(source_html)
-
-        # Add research team consensus display
-        if result.get('consensus_data') or result.get('research_data'):
-            consensus = result.get('consensus_data', {})
-            research = result.get('research_data', {})
-
-            team_content = ""
-
-            # Agreement level
-            if consensus.get('agreement_level'):
-                team_content += f"- **Tingkat Kesepakatan:** {consensus['agreement_level']:.0%}\n"
-
-            # Rounds executed
-            if research.get('rounds_executed'):
-                team_content += f"- **Ronde Penelitian:** {research['rounds_executed']}/5\n"
-
-            # Candidates evaluated
-            if research.get('total_candidates_evaluated'):
-                team_content += f"- **Dokumen Dievaluasi:** {research['total_candidates_evaluated']:,}\n"
-
-            # Results by persona
-            if research.get('persona_results'):
-                team_content += "\n**Hasil per Peneliti:**\n"
-                for persona, results in research['persona_results'].items():
-                    team_content += f"- {persona}: {len(results)} dokumen\n"
-
-            # Devil's advocate flags
-            if consensus.get('devil_advocate_flags'):
-                flags = consensus['devil_advocate_flags']
-                if flags:
-                    team_content += f"\n**⚠️ Catatan Devil's Advocate:** {len(flags)} peringatan\n"
-
-            if team_content:
-                team_html = f"""
-
-<details><summary>👥 Tim Peneliti & Konsensus</summary>
-
-{team_content}
-</details>"""
-                response_parts.append(team_html)
-
-        # Add community clusters display
-        if result.get('communities') or result.get('clusters'):
-            communities = result.get('communities', result.get('clusters', []))
-            if communities:
-                cluster_content = ""
-                for i, community in enumerate(communities[:5], 1):
-                    if isinstance(community, dict):
-                        name = community.get('name', f'Cluster {i}')
-                        size = community.get('size', 0)
-                        theme = community.get('dominant_theme', community.get('theme', ''))
-                        cluster_content += f"**{i}. {name}** ({size} dokumen)\n"
-                        if theme:
-                            cluster_content += f"- Tema: {theme}\n"
-                        if community.get('members'):
-                            members = community['members'][:3]
-                            cluster_content += f"- Anggota: {', '.join(str(m) for m in members)}...\n"
-                        cluster_content += "\n"
-
-                if cluster_content:
-                    cluster_html = f"""
-
-<details><summary>🔗 Cluster Tematik</summary>
-
-{cluster_content}
-</details>"""
-                    response_parts.append(cluster_html)
-
-        # Add metadata in collapsible section
-        if show_metadata and result.get('metadata'):
-            meta = result['metadata']
-            meta_content = ""
-            if meta.get('query_type'):
-                meta_content += f"- **Tipe Query:** {meta['query_type']}\n"
-            if meta.get('processing_time'):
-                meta_content += f"- **Waktu Proses:** {meta['processing_time']:.2f}s\n"
-            if meta.get('total_results'):
-                meta_content += f"- **Total Hasil:** {meta['total_results']}\n"
-            if meta.get('search_phases'):
-                phases = meta['search_phases']
-                meta_content += f"- **Search Phases:** {len(phases)}\n"
-
-            if meta_content:
-                meta_html = f"""
-
-<details><summary>📊 Metadata Pencarian</summary>
-
-{meta_content}
-</details>"""
-                response_parts.append(meta_html)
-
-        response = "".join(response_parts)
-
-        # Save to conversation history
-        if current_session:
-            manager.add_turn(
-                session_id=current_session,
-                query=message,
-                answer=response,
-                metadata=result.get('metadata')
-            )
-
-        history.append((message, response))
-        return "", history
-
-    except Exception as e:
-        logger.error(f"Chat error: {e}")
-        error_msg = f"Error: {str(e)}"
-        history.append((message, error_msg))
-        return "", history
-
-
-def chat_streaming(message: str, history: List[Tuple[str, str]],
-                   show_thinking: bool = True, show_sources: bool = True,
-                   show_metadata: bool = True, show_analysis: bool = False):
-    """
-    Streaming chat function that yields partial responses with progress tracking.
-
-    This provides real-time feedback as the response is generated,
-    matching the original Kaggle_Demo.ipynb streaming behavior with
-    collapsible sections and timestamps.
-    """
-    import time
-    global pipeline, manager, current_session
-
-    if not message.strip():
-        yield "", history
-        return
-
-    try:
-        if pipeline is None:
-            initialize_system()
-
-        start_time = time.time()
-
-        # Get conversation context
-        context = manager.get_context_for_query(current_session) if current_session else None
-
-        # Progress tracking with timestamps
-        progress_lines = []
-
-        def add_progress(msg):
-            elapsed = time.time() - start_time
-            progress_lines.append(f"🔄 [{elapsed:.1f}s] {msg}")
-            return "\n".join(progress_lines)
-
-        # Phase 1: Show initial progress
-        progress = add_progress("Memulai analisis query...")
-        progress_html = f"""<details open><summary>📋 Proses Penelitian</summary>
-
-{progress}
-
-</details>"""
-        history_with_status = history + [(message, progress_html)]
-        yield "", history_with_status
-
-        # Generate response
-        result = pipeline.query(message, conversation_history=context, stream=True)
-
-        # Update progress
-        progress = add_progress("Query dianalisis")
-        if result.get('metadata', {}).get('query_type'):
-            progress = add_progress(f"Tipe: {result['metadata']['query_type']}")
-        if result.get('metadata', {}).get('strategy'):
-            progress = add_progress(f"Strategi: {result['metadata']['strategy']}")
-
-        progress = add_progress("Pencarian dokumen selesai")
-        if result.get('metadata', {}).get('total_documents_retrieved'):
-            total = result['metadata']['total_documents_retrieved']
-            progress = add_progress(f"Ditemukan {total} dokumen")
-
-        # Build response progressively
-        response_parts = []
-
-        # Add progress section (collapsible, closed by default in final)
-        progress_html = f"""<details><summary>📋 Proses Penelitian ({time.time() - start_time:.1f}s)</summary>
-
-{progress}
-
-</details>
-
----
-
-"""
-        response_parts.append(progress_html)
-
-        # Add query analysis in collapsible section
-        if show_analysis and result.get('metadata'):
-            meta = result['metadata']
-            analysis_content = ""
-            if meta.get('query_type'):
-                analysis_content += f"- **Tipe Query:** {meta['query_type']}\n"
-            if meta.get('strategy'):
-                analysis_content += f"- **Strategi:** {meta['strategy']}\n"
-            if meta.get('complexity'):
-                analysis_content += f"- **Kompleksitas:** {meta['complexity']}\n"
-            if meta.get('keywords'):
-                keywords = meta['keywords'][:10] if isinstance(meta['keywords'], list) else meta['keywords']
-                analysis_content += f"- **Keywords:** {', '.join(keywords) if isinstance(keywords, list) else keywords}\n"
-            if meta.get('legal_terms'):
-                terms = meta['legal_terms'][:5] if isinstance(meta['legal_terms'], list) else meta['legal_terms']
-                analysis_content += f"- **Legal Terms:** {', '.join(terms) if isinstance(terms, list) else terms}\n"
-
-            # Search phase details
-            if meta.get('search_phases'):
-                phases = meta['search_phases']
-                analysis_content += f"\n**Search Phases:**\n"
-                for i, phase in enumerate(phases, 1):
-                    if isinstance(phase, dict):
-                        phase_name = phase.get('name', f'Phase {i}')
-                        phase_time = phase.get('time', 0)
-                        phase_results = phase.get('results', 0)
-                        analysis_content += f"- {phase_name}: {phase_results} results ({phase_time:.2f}s)\n"
-
-            if analysis_content:
-                analysis_html = f"""<details><summary>🔍 Analisis Query (klik untuk expand)</summary>
-
-{analysis_content}
-
-</details>
-
----
-
-"""
-                response_parts.append(analysis_html)
-
-        # Parse <think> tags from answer if present
-        answer_text = result.get('answer', '')
-        thinking_from_tags, clean_answer = parse_think_tags(answer_text)
-
-        # Combine thinking sources
-        thinking_content = result.get('thinking', '')
-        if thinking_from_tags:
-            thinking_content = thinking_from_tags if not thinking_content else f"{thinking_content}\n\n{thinking_from_tags}"
-
-        # Phase 2: Show thinking process
-        if show_thinking and thinking_content:
-            thinking_html = f"""<details><summary>🧠 Proses Berpikir (klik untuk expand)</summary>
-
-{thinking_content}
-
-</details>
-
----
-
-"""
-            response_parts.append(thinking_html)
-            current_display = "".join(response_parts) + "⏳ Generating answer..."
-            history_with_progress = history + [(message, current_display)]
-            yield "", history_with_progress
-
-        # Phase 3: Stream the main answer
-        answer = clean_answer if thinking_from_tags else answer_text
-
-        # If streaming iterator is available, use it
-        if hasattr(result, '__iter__') and not isinstance(result, (dict, str)):
-            partial_answer = ""
-            for chunk in result:
-                if isinstance(chunk, str):
-                    partial_answer += chunk
-                elif isinstance(chunk, dict) and 'text' in chunk:
-                    partial_answer += chunk['text']
-
-                current_display = "".join(response_parts) + f"✅ **Jawaban:**\n\n{partial_answer}"
-                history_with_progress = history + [(message, current_display)]
-                yield "", history_with_progress
-
-            response_parts.append(f"✅ **Jawaban:**\n\n{partial_answer}")
-        else:
-            # Non-streaming fallback
-            response_parts.append(f"✅ **Jawaban:**\n\n{answer}")
-
-        # Phase 4: Add sources in collapsible section with enhanced metadata
-        if show_sources and result.get('sources'):
-            sources = result['sources']
-            if sources:
-                source_content = ""
-                for i, src in enumerate(sources[:5], 1):
-                    if isinstance(src, dict):
-                        title = src.get('title', src.get('regulation', f'Source {i}'))
-                        score = src.get('score', 0)
-                        doc_type = src.get('type', src.get('jenis_peraturan', ''))
-
-                        source_content += f"**{i}. {title}**\n"
-                        source_content += f"- Skor: {score:.3f}\n"
-
-                        # Enhanced regulation metadata
-                        if src.get('regulation_number') or src.get('nomor_peraturan'):
-                            reg_num = src.get('regulation_number', src.get('nomor_peraturan', ''))
-                            year = src.get('year', src.get('tahun', ''))
-                            if reg_num and year:
-                                source_content += f"- Nomor: {reg_num} Tahun {year}\n"
-                            elif reg_num:
-                                source_content += f"- Nomor: {reg_num}\n"
-
-                        if doc_type:
-                            source_content += f"- Jenis: {doc_type}\n"
-
-                        # Legal domain
-                        domain = src.get('kg_primary_domain', src.get('domain', ''))
-                        if domain:
-                            source_content += f"- Domain: {domain}\n"
-
-                        # Authority and complexity scores
-                        authority = src.get('kg_authority_score', src.get('authority_score', 0))
-                        if authority:
-                            auth_level = "Tinggi" if authority > 0.7 else "Sedang" if authority > 0.4 else "Rendah"
-                            source_content += f"- Otoritas: {auth_level} ({authority:.2f})\n"
-
-                        complexity = src.get('kg_legal_complexity', 0)
-                        if complexity:
-                            source_content += f"- Kompleksitas: {complexity:.2f}\n"
-
-                        # Content indicators
-                        indicators = []
-                        if src.get('kg_has_obligations'):
-                            indicators.append("Kewajiban")
-                        if src.get('kg_has_prohibitions'):
-                            indicators.append("Larangan")
-                        if src.get('kg_has_permissions'):
-                            indicators.append("Izin")
-                        if indicators:
-                            source_content += f"- Mengandung: {', '.join(indicators)}\n"
-
-                        # Network importance
-                        pagerank = src.get('kg_pagerank', 0)
-                        if pagerank and pagerank > 0.01:
-                            source_content += f"- Konektivitas: {pagerank:.3f}\n"
-
-                        # Research team consensus info
-                        if src.get('voting_ratio'):
-                            voting = src['voting_ratio']
-                            source_content += f"- Konsensus Tim: {voting:.0%}\n"
-                        if src.get('personas_agreed'):
-                            personas = src['personas_agreed']
-                            if len(personas) > 1:
-                                source_content += f"- Peneliti: {', '.join(personas[:3])}\n"
-
-                        source_content += "\n"
-                    else:
-                        source_content += f"- {src}\n"
-
-                source_html = f"""
-
----
-
-<details><summary>📖 Sumber Hukum ({len(sources[:5])} dokumen)</summary>
-
-{source_content}
-</details>"""
-                response_parts.append(source_html)
-
-        # Add research team consensus display
-        if result.get('consensus_data') or result.get('research_data'):
-            consensus = result.get('consensus_data', {})
-            research = result.get('research_data', {})
-
-            team_content = ""
-
-            # Agreement level
-            if consensus.get('agreement_level'):
-                team_content += f"- **Tingkat Kesepakatan:** {consensus['agreement_level']:.0%}\n"
-
-            # Rounds executed
-            if research.get('rounds_executed'):
-                team_content += f"- **Ronde Penelitian:** {research['rounds_executed']}/5\n"
-
-            # Candidates evaluated
-            if research.get('total_candidates_evaluated'):
-                team_content += f"- **Dokumen Dievaluasi:** {research['total_candidates_evaluated']:,}\n"
-
-            # Results by persona
-            if research.get('persona_results'):
-                team_content += "\n**Hasil per Peneliti:**\n"
-                for persona, results in research['persona_results'].items():
-                    team_content += f"- {persona}: {len(results)} dokumen\n"
-
-            # Devil's advocate flags
-            if consensus.get('devil_advocate_flags'):
-                flags = consensus['devil_advocate_flags']
-                if flags:
-                    team_content += f"\n**⚠️ Catatan Devil's Advocate:** {len(flags)} peringatan\n"
-
-            if team_content:
-                team_html = f"""
-
-<details><summary>👥 Tim Peneliti & Konsensus</summary>
-
-{team_content}
-</details>"""
-                response_parts.append(team_html)
-
-        # Add community clusters display
-        if result.get('communities') or result.get('clusters'):
-            communities = result.get('communities', result.get('clusters', []))
-            if communities:
-                cluster_content = ""
-                for i, community in enumerate(communities[:5], 1):
-                    if isinstance(community, dict):
-                        name = community.get('name', f'Cluster {i}')
-                        size = community.get('size', 0)
-                        theme = community.get('dominant_theme', community.get('theme', ''))
-                        cluster_content += f"**{i}. {name}** ({size} dokumen)\n"
-                        if theme:
-                            cluster_content += f"- Tema: {theme}\n"
-                        if community.get('members'):
-                            members = community['members'][:3]
-                            cluster_content += f"- Anggota: {', '.join(str(m) for m in members)}...\n"
-                        cluster_content += "\n"
-
-                if cluster_content:
-                    cluster_html = f"""
-
-<details><summary>🔗 Cluster Tematik</summary>
-
-{cluster_content}
-</details>"""
-                    response_parts.append(cluster_html)
-
-        # Phase 5: Add metadata in collapsible section
-        if show_metadata and result.get('metadata'):
-            meta = result['metadata']
-            meta_content = ""
-            if meta.get('query_type'):
-                meta_content += f"- **Tipe Query:** {meta['query_type']}\n"
-            if meta.get('processing_time'):
-                meta_content += f"- **Waktu Proses:** {meta['processing_time']:.2f}s\n"
-            if meta.get('total_results'):
-                meta_content += f"- **Total Hasil:** {meta['total_results']}\n"
-
-            if meta_content:
-                meta_html = f"""
-
-<details><summary>📊 Metadata Pencarian</summary>
-
-{meta_content}
-</details>"""
-                response_parts.append(meta_html)
-
-        # Final response
-        final_response = "".join(response_parts)
-
-        # Save to conversation history
-        if current_session:
-            manager.add_turn(
-                session_id=current_session,
-                query=message,
-                answer=final_response,
-                metadata=result.get('metadata')
-            )
-
-        history.append((message, final_response))
-        yield "", history
-
-    except Exception as e:
-        logger.error(f"Chat streaming error: {e}")
-        error_msg = f"Error: {str(e)}"
-        history.append((message, error_msg))
-        yield "", history
-
-
-def clear_chat():
-    """Clear chat and start new session"""
-    global manager, current_session
-
-    if manager:
-        current_session = manager.start_session()
-
-    return [], f"New session: {current_session}"
-
-
-def export_conversation(format_type: str) -> str:
-    """Export current conversation"""
-    global manager, current_session
-
-    if not manager or not current_session:
-        return "No active session"
-
-    session_data = manager.get_session(current_session)
-    if not session_data:
-        return "Session not found"
-
-    exporters = {
-        'Markdown': MarkdownExporter,
-        'JSON': JSONExporter,
-        'HTML': HTMLExporter
-    }
-
-    exporter_class = exporters.get(format_type, MarkdownExporter)
-    exporter = exporter_class()
-
-    try:
-        path = exporter.export_and_save(session_data, directory='exports')
-        return f"Exported to: {path}"
-    except Exception as e:
-        return f"Export error: {e}"
-
-
-def get_session_info() -> str:
-    """Get current session information"""
-    global manager, current_session, current_provider
-
-    if not manager or not current_session:
-        return "No active session"
-
-    summary = manager.get_session_summary(current_session)
-    if not summary:
-        return "Session not found"
-
-    cache = get_context_cache()
-    cache_stats = cache.get_stats()
-
-    return f"""Session ID: {summary['session_id']}
-Provider: {current_provider}
-Total Turns: {summary['total_turns']}
-Total Tokens: {summary['total_tokens']}
-Total Time: {summary['total_time']:.2f}s
-Cache Size: {cache_stats['size']}/{cache_stats['max_size']}"""
-
-
-def upload_document(file) -> str:
-    """Handle document upload and parsing"""
-    if file is None:
-        return "No file uploaded"
-
-    try:
-        file_path = file.name
-        result = parse_document(file_path)
-
-        if not result['success']:
-            return f"Parse error: {result['error']}"
-
-        meta = result['metadata']
-        content_preview = result['content'][:500] + "..." if len(result['content']) > 500 else result['content']
-
-        # Build status message
-        status = f"**Document Parsed Successfully**\n\n"
-        status += f"**File:** {meta.get('filename', 'Unknown')}\n"
-        status += f"**Format:** {meta.get('format', 'Unknown')}\n"
-
-        if 'pages' in meta:
-            status += f"**Pages:** {meta['pages']}\n"
-        if 'paragraphs' in meta:
-            status += f"**Paragraphs:** {meta['paragraphs']}\n"
-
-        status += f"**Words:** {meta.get('word_count', 0)}\n"
-        status += f"**Characters:** {meta.get('char_count', 0)}\n"
-
-        if meta.get('title'):
-            status += f"**Title:** {meta['title']}\n"
-        if meta.get('author'):
-            status += f"**Author:** {meta['author']}\n"
-
-        status += f"\n**Content Preview:**\n```\n{content_preview}\n```"
-
-        # Store parsed content for potential use in chat
-        global _uploaded_document
-        _uploaded_document = result
-
-        return status
-
-    except Exception as e:
-        logger.error(f"Upload error: {e}")
-        return f"Upload error: {e}"
-
-
-# Store uploaded document for use in chat
-_uploaded_document = None
-
-
-def generate_legal_form(template_id: str, field_values: str) -> str:
-    """Generate a legal form from template"""
-    try:
-        generator = get_form_generator()
-
-        # Parse field values (simple key=value format)
-        data = {}
-        for line in field_values.strip().split('\n'):
-            if '=' in line:
-                key, value = line.split('=', 1)
-                data[key.strip()] = value.strip()
-
-        result = generator.generate_form(template_id, data)
-
-        if result['success']:
-            return f"**{result['template_name']}**\n\n```\n{result['content']}\n```"
-        else:
-            return f"Error: {result['error']}"
-    except Exception as e:
-        return f"Error generating form: {e}"
-
-
-def get_form_templates() -> str:
-    """Get list of available form templates"""
-    generator = get_form_generator()
-    templates = generator.list_templates()
-
-    result = "**Available Templates:**\n\n"
-    for t in templates:
-        result += f"- **{t['id']}**: {t['name']} ({t['description']})\n"
-
-        # Get template details
-        template = generator.get_template(t['id'])
-        if template:
-            result += f"  Fields: {', '.join(f['name'] for f in template['fields'])}\n\n"
-
-    return result
-
-
-def get_analytics_summary() -> str:
-    """Get analytics dashboard summary"""
-    analytics = get_analytics()
-    summary = analytics.get_summary()
-
-    result = f"""**Analytics Summary**
-
-**Session**
-- Duration: {summary['session']['duration_formatted']}
-
-**Queries**
-- Total: {summary['queries']['total']}
-- Successful: {summary['queries']['successful']}
-- Failed: {summary['queries']['failed']}
-- By Type: {dict(summary['queries']['by_type'])}
-
-**Performance**
-- Avg Response: {summary['performance']['avg_response_time']:.3f}s
-- Min Response: {summary['performance']['min_response_time']:.3f}s
-- Max Response: {summary['performance']['max_response_time']:.3f}s
-
-**Providers Used**: {dict(summary['providers'])}
-
-**Errors**: {summary['errors']['total']}
-"""
-    return result
-
-
-def get_performance_report() -> str:
-    """Get detailed performance report"""
-    analytics = get_analytics()
-    report = analytics.get_performance_report()
-
-    if isinstance(report, dict) and 'message' in report:
-        return report['message']
-
-    result = "**Performance Report**\n\n"
-    for component, ops in report.items():
-        result += f"**{component}**\n"
-        for op, stats in ops.items():
-            result += f"  - {op}: avg={stats['avg']:.3f}s, count={stats['count']}\n"
-        result += "\n"
-
-    return result
-
-
-def get_system_health() -> str:
-    """Get comprehensive system health status"""
-    global pipeline, manager, current_session
-    import torch
+def format_sources_info(results: List[Dict], config_dict: Dict) -> str:
+    """Format source information for display"""
+    if not results:
+        return "No sources available."
+
+    source_content = ""
+    for i, result in enumerate(results[:10], 1):
+        record = result.get('record', result)
+
+        # Get basic info
+        reg_type = record.get('regulation_type', 'N/A')
+        reg_num = record.get('regulation_number', 'N/A')
+        year = record.get('year', 'N/A')
+        about = record.get('about', 'N/A')
+
+        source_content += f"**{i}. {reg_type} No. {reg_num} Tahun {year}**\n"
+        source_content += f"- **Tentang:** {about[:200]}{'...' if len(str(about)) > 200 else ''}\n"
+
+        # Scores
+        if 'final_score' in result:
+            source_content += f"- **Skor Final:** {result['final_score']:.4f}\n"
+        if 'rerank_score' in result:
+            source_content += f"- **Skor Rerank:** {result['rerank_score']:.4f}\n"
+
+        # Authority score
+        authority = record.get('kg_authority_score', record.get('authority_score', 0))
+        if authority:
+            auth_level = "Tinggi" if authority > 0.7 else "Sedang" if authority > 0.4 else "Rendah"
+            source_content += f"- **Otoritas:** {auth_level} ({authority:.2f})\n"
+
+        # Article/Chapter info
+        article = record.get('article', 'N/A')
+        chapter = record.get('chapter', 'N/A')
+        if article != 'N/A':
+            source_content += f"- **Pasal:** {article}\n"
+        if chapter != 'N/A':
+            source_content += f"- **Bab:** {chapter}\n"
+
+        # KG entities
+        entities = record.get('kg_entities', [])
+        if entities and isinstance(entities, list) and len(entities) > 0:
+            entity_names = [e[0] if isinstance(e, tuple) else str(e) for e in entities[:5]]
+            source_content += f"- **Entitas:** {', '.join(entity_names)}\n"
+
+        source_content += "\n"
+
+    return source_content
+
+
+def format_retrieved_metadata(phase_metadata: Dict, config_dict: Dict) -> str:
+    """Format phase metadata for display"""
+    if not phase_metadata:
+        return ""
+
+    content = ""
+    for phase_name, phase_data in phase_metadata.items():
+        if isinstance(phase_data, dict):
+            count = phase_data.get('count', len(phase_data.get('results', [])))
+            content += f"**{phase_name.replace('_', ' ').title()}:** {count} dokumen\n"
+
+            if 'time' in phase_data:
+                content += f"- Waktu: {phase_data['time']:.2f}s\n"
+            if 'semantic_threshold' in phase_data:
+                content += f"- Threshold Semantik: {phase_data['semantic_threshold']:.3f}\n"
+            if 'keyword_threshold' in phase_data:
+                content += f"- Threshold Keyword: {phase_data['keyword_threshold']:.3f}\n"
+
+            content += "\n"
+
+    return content
+
+
+def system_health_check() -> Dict[str, Any]:
+    """Run system health check and return results"""
     import psutil
 
-    report = ["## 🏥 System Health Report\n"]
+    health = {
+        'status': 'healthy',
+        'components': {},
+        'memory': {},
+        'gpu': {},
+        'issues': []
+    }
 
-    # Pipeline status
-    report.append("### Pipeline Status")
-    if pipeline and pipeline._initialized:
-        report.append("✅ **RAG Pipeline:** Initialized and ready")
-        info = pipeline.get_pipeline_info()
-        report.append(f"- Init time: {info.get('initialization_time', 0):.2f}s")
-        if 'dataset_stats' in info:
-            stats = info['dataset_stats']
-            report.append(f"- Total records: {stats.get('total_records', 0)}")
-            report.append(f"- KG enhanced: {stats.get('kg_enhanced_records', 0)}")
-    else:
-        report.append("❌ **RAG Pipeline:** Not initialized")
+    # Check initialization
+    health['components']['pipeline'] = pipeline is not None
+    health['components']['manager'] = manager is not None
+    health['components']['initialization'] = initialization_complete
 
-    # Session status
-    report.append("\n### Session Status")
-    if manager:
-        report.append("✅ **Conversation Manager:** Active")
-        if current_session:
-            report.append(f"- Current session: `{current_session[:8]}...`")
-    else:
-        report.append("❌ **Conversation Manager:** Not initialized")
+    # Memory check
+    mem = psutil.virtual_memory()
+    health['memory']['used_gb'] = mem.used / 1024**3
+    health['memory']['total_gb'] = mem.total / 1024**3
+    health['memory']['percent'] = mem.percent
 
-    # Device status
-    report.append("\n### Device Status")
-    report.append(f"- **Embedding Device:** {EMBEDDING_DEVICE}")
-    report.append(f"- **LLM Device:** {LLM_DEVICE}")
+    if mem.percent > 90:
+        health['issues'].append("Critical: Memory usage above 90%")
+        health['status'] = 'critical'
+    elif mem.percent > 80:
+        health['issues'].append("Warning: Memory usage above 80%")
+        if health['status'] == 'healthy':
+            health['status'] = 'warning'
 
+    # GPU check
     if torch.cuda.is_available():
-        report.append(f"- **CUDA Available:** Yes")
         for i in range(torch.cuda.device_count()):
             mem_used = torch.cuda.memory_allocated(i) / 1024**3
             mem_total = torch.cuda.get_device_properties(i).total_memory / 1024**3
-            report.append(f"- GPU {i}: {mem_used:.1f}/{mem_total:.1f} GB used")
+            health['gpu'][f'gpu_{i}'] = {
+                'used_gb': mem_used,
+                'total_gb': mem_total,
+                'percent': (mem_used / mem_total) * 100 if mem_total > 0 else 0
+            }
     else:
-        report.append("- **CUDA Available:** No (using CPU)")
+        health['gpu']['available'] = False
 
-    # System resources
-    report.append("\n### System Resources")
-    mem = psutil.virtual_memory()
-    report.append(f"- **RAM:** {mem.used/1024**3:.1f}/{mem.total/1024**3:.1f} GB ({mem.percent}%)")
-    cpu_percent = psutil.cpu_percent(interval=0.1)
-    report.append(f"- **CPU:** {cpu_percent}%")
-
-    # Provider status
-    report.append("\n### LLM Provider")
-    report.append(f"- **Current Provider:** {current_provider}")
-    report.append(f"- **Available:** {', '.join(list_providers())}")
-
-    return "\n".join(report)
+    return health
 
 
-def get_about_info() -> str:
-    """Get system documentation and feature information"""
-    return """## 📘 Indonesian Legal RAG System
-
-### Overview
-Advanced Retrieval-Augmented Generation system for Indonesian legal document consultation.
-
-### Key Features
-
-**🔍 Multi-Stage Search**
-- Hybrid search combining semantic + keyword matching
-- Metadata-first search with PERFECT SCORE OVERRIDE for exact regulation matches
-- Citation chain traversal for related documents
-- Dynamic community detection for thematic clustering
-
-**👥 Research Team Approach**
-- 5 specialized research personas (Analis Konstitusi, Spesialis Regulasi, Pakar Prosedural, Spesialis Ketenagakerjaan, Pencari Preseden)
-- Adaptive learning based on performance history
-- Consensus-based result aggregation
-
-**🧠 Advanced Query Analysis**
-- Automatic strategy selection (keyword_first, semantic_first, hybrid_balanced)
-- Query type detection (specific_regulation, procedural, sanctions, etc.)
-- Context-dependent query handling
-
-**📊 Knowledge Graph Integration**
-- Cross-reference extraction and traversal
-- Legal hierarchy understanding
-- Domain classification
-
-**💬 Conversation Features**
-- Multi-turn context awareness
-- Session management with export (Markdown, JSON, HTML)
-- Document upload and parsing
-
-### Configuration
-
-**Advanced Settings:**
-- **Research Team Size:** Number of personas (1-5)
-- **Consensus Threshold:** Agreement level required (0.3-0.9)
-- **Quality Threshold:** Minimum result quality (0.3-0.9)
-- **Temperature:** LLM creativity (0.0-1.0)
-- **Max Tokens:** Response length limit
-
-### Data Source
-Legal documents from Indonesian government regulations indexed with knowledge graph enhancements.
-
-### Version Info
-- **System:** Indonesian Legal RAG v2.0
-- **Architecture:** LangGraph-based orchestration
-- **Models:** Sentence-transformers for embeddings, BGE reranker
-"""
-
-
-def get_export_preview(format_type: str) -> Tuple[str, str]:
-    """Get export preview and prepare file for download"""
-    global manager, current_session
-
-    if not manager or not current_session:
-        return "No active session", ""
-
-    session_data = manager.get_session(current_session)
-    if not session_data:
-        return "Session not found", ""
-
-    exporters = {
-        'Markdown': MarkdownExporter,
-        'JSON': JSONExporter,
-        'HTML': HTMLExporter
+def format_health_report(health: Dict[str, Any]) -> str:
+    """Format health check results for display"""
+    status_emoji = {
+        'healthy': '✅',
+        'warning': '⚠️',
+        'critical': '❌'
     }
 
-    exporter_class = exporters.get(format_type, MarkdownExporter)
-    exporter = exporter_class()
+    report = f"## {status_emoji.get(health['status'], '❓')} System Health: {health['status'].upper()}\n\n"
+
+    # Components
+    report += "### Components\n"
+    for comp, status in health['components'].items():
+        emoji = '✅' if status else '❌'
+        report += f"- {comp}: {emoji}\n"
+
+    # Memory
+    report += f"\n### Memory\n"
+    report += f"- Used: {health['memory']['used_gb']:.1f} / {health['memory']['total_gb']:.1f} GB ({health['memory']['percent']:.1f}%)\n"
+
+    # GPU
+    if health['gpu']:
+        report += f"\n### GPU\n"
+        if 'available' in health['gpu'] and not health['gpu']['available']:
+            report += "- No GPU available\n"
+        else:
+            for gpu_id, gpu_info in health['gpu'].items():
+                if isinstance(gpu_info, dict):
+                    report += f"- {gpu_id}: {gpu_info['used_gb']:.1f} / {gpu_info['total_gb']:.1f} GB ({gpu_info['percent']:.1f}%)\n"
+
+    # Issues
+    if health['issues']:
+        report += f"\n### Issues\n"
+        for issue in health['issues']:
+            report += f"- {issue}\n"
+
+    return report
+
+
+def final_selection_with_kg(candidates: List[Dict], query_type: str, config_dict: Dict) -> List[Dict]:
+    """Final selection of results with KG enhancement"""
+    if not candidates:
+        return []
+
+    top_k = config_dict.get('final_top_k', 3)
+
+    # Sort by final score
+    sorted_candidates = sorted(
+        candidates,
+        key=lambda x: x.get('final_score', x.get('rerank_score', 0)),
+        reverse=True
+    )
+
+    return sorted_candidates[:top_k]
+
+
+# =============================================================================
+# MAIN CHAT FUNCTION - Kaggle_Demo Style with Streaming Progress
+# =============================================================================
+
+def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_sources=True, show_metadata=True):
+    """Main chat function with ADVANCED QUERY ANALYSIS and HYBRID SEARCH"""
+    if not message.strip():
+        return history, ""
 
     try:
-        # Generate content
-        content = exporter.export(session_data)
+        # Ensure system is initialized
+        if pipeline is None:
+            initialize_system()
 
-        # Preview (truncated for display)
-        preview = content[:2000] + "..." if len(content) > 2000 else content
+        current_progress = []
 
-        return preview, content
+        def add_progress(msg):
+            current_progress.append(msg)
+            progress_display = "\n".join([f"🔄 {m}" for m in current_progress])
+            return history + [[message, f"**Mencari dan menganalisis...**\n\n{progress_display}"]]
+
+        yield add_progress("🚀 Memulai analisis query..."), ""
+
+        # Get conversation context
+        context = manager.get_context_for_query(current_session) if current_session else None
+
+        # Generate response using pipeline
+        yield add_progress("🔍 Conducting intelligent search..."), ""
+
+        try:
+            result = pipeline.query(message, conversation_history=context, stream=False)
+
+            yield add_progress(f"✅ Search completed"), ""
+
+        except Exception as e:
+            yield add_progress(f"❌ Error in search: {str(e)}"), ""
+            import traceback
+            traceback.print_exc()
+            result = {'answer': '', 'sources': [], 'metadata': {}}
+
+        # Generate LLM Response
+        yield add_progress("🤖 Generating response..."), ""
+
+        final_progress = "\n".join([msg for msg in current_progress])
+
+        if result and result.get('answer'):
+            try:
+                # Parse think tags
+                answer_text = result.get('answer', '')
+                thinking_from_tags, clean_answer = parse_think_tags(answer_text)
+
+                # Combine thinking sources
+                thinking_content = result.get('thinking', '')
+                if thinking_from_tags:
+                    thinking_content = thinking_from_tags if not thinking_content else f"{thinking_content}\n\n{thinking_from_tags}"
+
+                response_text = clean_answer if thinking_from_tags else answer_text
+
+                # Build final output
+                final_output = f'<details><summary>📋 <b>Proses Penelitian Selesai (klik untuk melihat)</b></summary>\n\n{final_progress}\n</details>\n\n'
+
+                if thinking_content and show_thinking:
+                    final_output += (
+                        '<details><summary>🧠 <b>Proses berfikir (klik untuk melihat)</b></summary>\n\n'
+                        + thinking_content +
+                        '\n</details>\n\n'
+                        + '-----\n✅ **Jawaban:**\n'
+                        + response_text
+                    )
+                else:
+                    final_output += f"✅ **Jawaban:**\n{response_text}"
+
+                # Add community clusters if available
+                if result.get('communities') or result.get('clusters'):
+                    communities = result.get('communities', result.get('clusters', []))
+                    if communities:
+                        final_output += "\n\n---\n\n### 🌐 Discovered Thematic Clusters\n\n"
+                        final_output += "_The research team identified these interconnected legal themes:_\n\n"
+
+                        for cluster_idx, cluster_data in enumerate(communities[:5], 1):
+                            if isinstance(cluster_data, dict):
+                                name = cluster_data.get('name', f'Cluster {cluster_idx}')
+                                size = cluster_data.get('size', 0)
+                                theme = cluster_data.get('dominant_theme', cluster_data.get('theme', ''))
+
+                                final_output += f"**{name}** ({size} documents)\n"
+                                if theme:
+                                    final_output += f"- **Theme:** {theme}\n"
+                                if cluster_data.get('top_keywords'):
+                                    keywords = cluster_data['top_keywords']
+                                    if isinstance(keywords, list):
+                                        keywords_str = ", ".join([f"`{kw}`" for kw in keywords[:8]])
+                                        final_output += f"- **Key Terms:** {keywords_str}\n"
+                                final_output += "\n"
+
+                # Add sources in collapsible section
+                collapsible_sections = []
+
+                if show_sources and result.get('sources'):
+                    sources = result['sources']
+                    if sources:
+                        source_content = ""
+                        for i, src in enumerate(sources[:5], 1):
+                            if isinstance(src, dict):
+                                title = src.get('title', src.get('regulation', f'Source {i}'))
+                                score = src.get('score', 0)
+                                doc_type = src.get('type', src.get('jenis_peraturan', ''))
+
+                                source_content += f"**{i}. {title}**\n"
+                                source_content += f"- Skor: {score:.3f}\n"
+
+                                # Regulation metadata
+                                if src.get('regulation_number') or src.get('nomor_peraturan'):
+                                    reg_num = src.get('regulation_number', src.get('nomor_peraturan', ''))
+                                    year = src.get('year', src.get('tahun', ''))
+                                    if reg_num and year:
+                                        source_content += f"- Nomor: {reg_num} Tahun {year}\n"
+
+                                if doc_type:
+                                    source_content += f"- Jenis: {doc_type}\n"
+
+                                # Domain
+                                domain = src.get('kg_primary_domain', src.get('domain', ''))
+                                if domain:
+                                    source_content += f"- Domain: {domain}\n"
+
+                                # Authority
+                                authority = src.get('kg_authority_score', src.get('authority_score', 0))
+                                if authority:
+                                    auth_level = "Tinggi" if authority > 0.7 else "Sedang" if authority > 0.4 else "Rendah"
+                                    source_content += f"- Otoritas: {auth_level} ({authority:.2f})\n"
+
+                                source_content += "\n"
+
+                        collapsible_sections.append(
+                            f'<details><summary>📖 <b>Sumber Hukum Utama ({len(sources[:5])} dokumen)</b></summary>\n\n{source_content}\n</details>'
+                        )
+
+                # Add research team info
+                if result.get('consensus_data') or result.get('research_data'):
+                    consensus = result.get('consensus_data', {})
+                    research = result.get('research_data', {})
+
+                    team_content = ""
+                    if consensus.get('agreement_level'):
+                        team_content += f"- **Tingkat Kesepakatan:** {consensus['agreement_level']:.0%}\n"
+                    if research.get('rounds_executed'):
+                        team_content += f"- **Ronde Penelitian:** {research['rounds_executed']}/5\n"
+                    if research.get('total_candidates_evaluated'):
+                        team_content += f"- **Dokumen Dievaluasi:** {research['total_candidates_evaluated']:,}\n"
+
+                    if team_content:
+                        collapsible_sections.append(
+                            f'<details><summary>👥 <b>Tim Peneliti & Konsensus</b></summary>\n\n{team_content}\n</details>'
+                        )
+
+                # Add metadata
+                if show_metadata and result.get('metadata'):
+                    meta = result['metadata']
+                    meta_content = ""
+                    if meta.get('query_type'):
+                        meta_content += f"- **Tipe Query:** {meta['query_type']}\n"
+                    if meta.get('processing_time'):
+                        meta_content += f"- **Waktu Proses:** {meta['processing_time']:.2f}s\n"
+                    if meta.get('total_results'):
+                        meta_content += f"- **Total Hasil:** {meta['total_results']}\n"
+                    if meta.get('strategy'):
+                        meta_content += f"- **Strategi:** {meta['strategy']}\n"
+
+                    if meta_content:
+                        collapsible_sections.append(
+                            f'<details><summary>📚 <b>Metadata Pencarian</b></summary>\n\n{meta_content}\n</details>'
+                        )
+
+                if collapsible_sections:
+                    final_output += f"\n\n---\n\n" + "\n\n".join(collapsible_sections)
+
+                yield history + [[message, final_output]], ""
+
+                # Save to conversation history
+                if current_session:
+                    manager.add_turn(
+                        session_id=current_session,
+                        query=message,
+                        answer=final_output,
+                        metadata=result.get('metadata')
+                    )
+
+            except Exception as e:
+                error_output = f'<details><summary>📋 <b>Proses Penelitian Selesai (klik untuk melihat)</b></summary>\n\n{final_progress}\n</details>\n\n'
+                error_output += f"❌ **Error generating response:** {str(e)}\n\n"
+                error_output += "Maaf, terjadi kesalahan saat membuat respons. Silakan coba lagi."
+
+                yield history + [[message, error_output]], ""
+
+                import traceback
+                traceback.print_exc()
+
+        else:
+            final_output = f'<details><summary>📋 <b>Proses Penelitian Selesai (klik untuk melihat)</b></summary>\n\n{final_progress}\n</details>\n\n'
+            final_output += "❌ **Tidak ada hasil ditemukan**\n\n"
+            final_output += "Maaf, tidak ditemukan dokumen hukum yang relevan dengan pertanyaan Anda. Silakan coba:\n"
+            final_output += "- Menggunakan kata kunci yang berbeda\n"
+            final_output += "- Memperjelas pertanyaan Anda\n"
+            final_output += "- Menggunakan istilah hukum yang lebih spesifik"
+
+            yield history + [[message, final_output]], ""
+
     except Exception as e:
-        return f"Export error: {e}", ""
+        error_msg = f"❌ **Terjadi kesalahan sistem:**\n\n{str(e)}\n\n"
+        error_msg += "Silakan coba lagi atau hubungi administrator jika masalah berlanjut."
+        yield history + [[message, error_msg]], ""
+
+        import traceback
+        traceback.print_exc()
 
 
-def create_demo() -> gr.Blocks:
-    """Create Gradio demo interface with all features"""
+def clear_conversation():
+    """Clear conversation history"""
+    global manager, current_session
 
-    # CSS for clean chat interface - responsive to zoom
+    try:
+        if manager:
+            current_session = manager.start_session()
+        return [], ""
+    except Exception as e:
+        print(f"Error clearing conversation: {e}")
+        return [], ""
+
+
+def get_system_info():
+    """Get system information"""
+    if not initialization_complete:
+        return "Sistem belum selesai inisialisasi."
+
+    try:
+        info = f"""## 📊 Enhanced KG Legal RAG System Information
+
+**Enhanced Features:**
+- **Realistic Research Team**: 5 distinct researcher personas with unique expertise
+- **Query-Specific Assembly**: Optimal team selection based on query type
+- **Multi-Stage Process**: Individual → Cross-validation → Devil's Advocate → Consensus
+- **Advanced Customization**: Granular control over all search phases
+
+**Research Team Personas:**
+- **👨‍⚖️ Senior Legal Researcher**: 15 years exp, authority-focused
+- **👩‍⚖️ Junior Legal Researcher**: 3 years exp, comprehensive coverage
+- **📚 Knowledge Graph Specialist**: 8 years exp, relationship-focused
+- **⚖️ Procedural Law Expert**: 12 years exp, methodical analysis
+- **🔍 Devil's Advocate**: 10 years exp, critical challenges
+
+**Models:**
+- **Embedding:** {EMBEDDING_MODEL}
+- **Reranker:** {RERANKER_MODEL}
+- **LLM:** {LLM_MODEL}
+
+**Device Configuration:**
+- **Embedding Device:** {EMBEDDING_DEVICE}
+- **LLM Device:** {LLM_DEVICE}
+- **Provider:** {current_provider}
+"""
+        return info
+    except Exception as e:
+        return f"Error getting system info: {e}"
+
+
+# =============================================================================
+# ENHANCED GRADIO INTERFACE - Kaggle_Demo Style
+# =============================================================================
+
+def create_gradio_interface():
+    """Create enhanced Gradio interface with full customization"""
+
     custom_css = """
     /* Base container - responsive to zoom */
     .gradio-container {
@@ -1066,24 +584,24 @@ def create_demo() -> gr.Blocks:
     /* Main chat area - scalable dimensions */
     .main-chat-area {
         width: 100%;
-        max-width: 75em; /* Changed from rem to em for zoom scaling */
+        max-width: 75em;
         margin: 0 auto;
-        padding: 1.25em; /* Changed from rem to em */
+        padding: 1.25em;
         box-sizing: border-box;
     }
 
     /* Chatbot container - responsive sizing */
     .chat-container {
-        height: 75vh; /* Viewport height scales with zoom */
-        min-height: 25em; /* Reduced and changed to em */
-        max-height: none; /* Remove max-height to allow scaling */
+        height: 75vh;
+        min-height: 25em;
+        max-height: none;
         width: 100%;
         overflow-y: auto;
-        border: 0.0625em solid #e0e0e0; /* Changed to em */
-        border-radius: 0.75em; /* Changed to em */
+        border: 0.0625em solid #e0e0e0;
+        border-radius: 0.75em;
         background: white;
         box-sizing: border-box;
-        resize: vertical; /* Allow manual resizing if needed */
+        resize: vertical;
     }
 
     /* Prevent width changes from content expansion */
@@ -1125,12 +643,12 @@ def create_demo() -> gr.Blocks:
         width: 100%;
         text-align: center;
         color: #666;
-        font-size: 1em; /* Changed to em for scaling */
+        font-size: 1em;
     }
 
     /* Input area styling */
     .input-row {
-        margin-top: 0.9375em; /* Changed to em */
+        margin-top: 0.9375em;
         width: 100%;
     }
 
@@ -1141,23 +659,23 @@ def create_demo() -> gr.Blocks:
     /* Settings panels - scalable */
     .settings-panel {
         background-color: #f8f9fa;
-        padding: 1.25em; /* Changed to em */
-        border-radius: 0.75em; /* Changed to em */
-        margin-bottom: 0.9375em; /* Changed to em */
-        box-shadow: 0 0.125em 0.25em rgba(0,0,0,0.1); /* Changed to em */
+        padding: 1.25em;
+        border-radius: 0.75em;
+        margin-bottom: 0.9375em;
+        box-shadow: 0 0.125em 0.25em rgba(0,0,0,0.1);
         width: 100%;
         box-sizing: border-box;
     }
 
     .status-panel {
         background-color: #e8f4fd;
-        padding: 0.9375em; /* Changed to em */
-        border-radius: 0.5em; /* Changed to em */
-        border-left: 0.25em solid #2196F3; /* Changed to em */
-        margin-bottom: 0.625em; /* Changed to em */
+        padding: 0.9375em;
+        border-radius: 0.5em;
+        border-left: 0.25em solid #2196F3;
+        margin-bottom: 0.625em;
     }
 
-    /* Responsive breakpoints - using em for zoom-friendly breakpoints */
+    /* Responsive breakpoints */
     @media (max-width: 87.5em) {
         .main-chat-area {
             max-width: 95%;
@@ -1168,7 +686,7 @@ def create_demo() -> gr.Blocks:
     @media (max-width: 64em) {
         .chat-container {
             height: 70vh;
-            min-height: 20em; /* Reduced for better mobile experience */
+            min-height: 20em;
         }
 
         .main-chat-area {
@@ -1179,7 +697,7 @@ def create_demo() -> gr.Blocks:
     @media (max-width: 48em) {
         .chat-container {
             height: 65vh;
-            min-height: 18em; /* Further reduced */
+            min-height: 18em;
         }
 
         .main-chat-area {
@@ -1194,7 +712,7 @@ def create_demo() -> gr.Blocks:
     @media (max-width: 30em) {
         .chat-container {
             height: 60vh;
-            min-height: 15em; /* Minimum for usability */
+            min-height: 15em;
         }
 
         .main-chat-area {
@@ -1214,7 +732,7 @@ def create_demo() -> gr.Blocks:
 
     /* Tab content - centered tabs */
     .tab-nav {
-        margin-bottom: 1.25em; /* Changed to em */
+        margin-bottom: 1.25em;
         display: flex;
         justify-content: center;
         align-items: center;
@@ -1231,9 +749,9 @@ def create_demo() -> gr.Blocks:
 
     /* Style the tab buttons - scalable */
     .tab-nav button {
-        margin: 0 0.5em; /* Changed to em */
-        padding: 0.75em 1.5em; /* Changed to em */
-        border-radius: 0.5em; /* Changed to em */
+        margin: 0 0.5em;
+        padding: 0.75em 1.5em;
+        border-radius: 0.5em;
         font-weight: 500;
         transition: all 0.2s ease;
     }
@@ -1241,13 +759,13 @@ def create_demo() -> gr.Blocks:
     /* Center tab container */
     .tabitem {
         width: 100%;
-        max-width: 75em; /* Changed to em */
+        max-width: 75em;
         margin: 0 auto;
     }
 
     /* Examples styling */
     .examples {
-        margin-top: 0.9375em; /* Changed to em */
+        margin-top: 0.9375em;
     }
 
     /* Button styling */
@@ -1259,7 +777,7 @@ def create_demo() -> gr.Blocks:
     .settings-columns {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 1.25em; /* Changed to em */
+        gap: 1.25em;
         width: 100%;
     }
 
@@ -1287,17 +805,7 @@ def create_demo() -> gr.Blocks:
 
     /* Ensure text scales properly with browser zoom */
     body, .gradio-container, .chatbot {
-        font-size: 1em; /* Base font size that scales with zoom */
-    }
-
-    .export-preview {
-        font-family: monospace;
-        white-space: pre-wrap;
-        background: #f5f5f5;
-        padding: 1em;
-        border-radius: 0.5em;
-        max-height: 400px;
-        overflow-y: auto;
+        font-size: 1em;
     }
     """
 
@@ -1305,13 +813,7 @@ def create_demo() -> gr.Blocks:
         title="Enhanced Indonesian Legal Assistant",
         theme=gr.themes.Default(),
         css=custom_css
-    ) as demo:
-
-        # State variables for display options
-        show_thinking = gr.State(True)
-        show_sources = gr.State(True)
-        show_metadata = gr.State(False)
-        show_analysis = gr.State(False)
+    ) as interface:
 
         with gr.Tabs():
             # Main Chat Tab
@@ -1329,7 +831,7 @@ def create_demo() -> gr.Blocks:
                     )
 
                     with gr.Row(elem_classes="input-row"):
-                        msg = gr.Textbox(
+                        msg_input = gr.Textbox(
                             placeholder="Tanyakan tentang hukum Indonesia...",
                             show_label=False,
                             container=False,
@@ -1353,7 +855,7 @@ def create_demo() -> gr.Blocks:
                                     "syarat dan prosedur perceraian menurut hukum Indonesia",
                                     "hak dan kewajiban pekerja dalam UU Ketenagakerjaan"
                                 ],
-                                inputs=msg,
+                                inputs=msg_input,
                                 examples_per_page=2,
                                 label=""
                             )
@@ -1367,28 +869,27 @@ def create_demo() -> gr.Blocks:
                             gr.Markdown("#### 🎯 Basic Settings")
                             final_top_k = gr.Slider(1, 10, value=3, step=1, label="Final Top K Results")
                             temperature = gr.Slider(0.0, 2.0, value=0.7, step=0.1, label="LLM Temperature")
-                            max_tokens = gr.Slider(512, 4096, value=2048, step=256, label="Max New Tokens")
+                            max_new_tokens = gr.Slider(512, 4096, value=2048, step=256, label="Max New Tokens")
 
                         # Research Team Settings
-                        with gr.Group(elem_classes="settings-panel"):
+                        with gr.Group(elem_classes="settings-panel researcher-settings"):
                             gr.Markdown("#### 👥 Research Team Configuration")
-                            team_size = gr.Slider(1, 5, value=4, step=1, label="Team Size")
+                            research_team_size = gr.Slider(1, 5, value=4, step=1, label="Team Size")
                             enable_cross_validation = gr.Checkbox(label="Enable Cross-Validation", value=True)
-                            enable_devils_advocate = gr.Checkbox(label="Enable Devil's Advocate", value=True)
+                            enable_devil_advocate = gr.Checkbox(label="Enable Devil's Advocate", value=True)
                             consensus_threshold = gr.Slider(0.3, 0.9, value=0.6, step=0.05, label="Consensus Threshold")
 
                         # Display Settings
                         with gr.Group(elem_classes="settings-panel"):
                             gr.Markdown("#### 💬 Display Settings")
-                            show_thinking_cb = gr.Checkbox(label="Show Thinking Process", value=True)
-                            show_sources_cb = gr.Checkbox(label="Show Legal Sources", value=True)
-                            show_metadata_cb = gr.Checkbox(label="Show All Retrieved Metadata", value=True)
-                            show_analysis_cb = gr.Checkbox(label="Show Query Analysis", value=False)
+                            show_thinking = gr.Checkbox(label="Show Thinking Process", value=True)
+                            show_sources = gr.Checkbox(label="Show Legal Sources", value=True)
+                            show_metadata = gr.Checkbox(label="Show All Retrieved Metadata", value=True)
 
                         with gr.Group(elem_classes="settings-panel"):
                             gr.Markdown("#### 🧠 LLM Generation Settings")
                             top_p = gr.Slider(0.1, 1.0, value=1.0, step=0.1, label="Top P")
-                            top_k_gen = gr.Slider(1, 100, value=20, step=1, label="Top K")
+                            top_k = gr.Slider(1, 100, value=20, step=1, label="Top K")
                             min_p = gr.Slider(0.01, 0.3, value=0.1, step=0.01, label="Min P")
 
                         with gr.Group(elem_classes="settings-panel"):
@@ -1399,22 +900,18 @@ def create_demo() -> gr.Blocks:
 
                         with gr.Group(elem_classes="settings-panel"):
                             gr.Markdown("#### 🏥 System Health")
-                            health_btn = gr.Button("🔍 Run Health Check", variant="secondary")
-                            health_output = gr.Markdown("")
+                            health_check_btn = gr.Button("🔍 Run Health Check", variant="secondary")
+                            health_report_output = gr.Markdown("")
 
-                        with gr.Group(elem_classes="settings-panel"):
-                            gr.Markdown("#### 🔌 Provider Settings")
-                            provider_dropdown = gr.Dropdown(
-                                choices=['local', 'openai', 'anthropic', 'google', 'openrouter'],
-                                value='local',
-                                label="LLM Provider"
-                            )
-                            provider_btn = gr.Button("Switch Provider")
-                            provider_status = gr.Textbox(label="Provider Status", interactive=False)
+                        # Connect health check button
+                        health_check_btn.click(
+                            lambda: format_health_report(system_health_check()),
+                            outputs=health_report_output
+                        )
 
                     with gr.Column():
                         # Enhanced Search Phase Configuration
-                        with gr.Group(elem_classes="settings-panel"):
+                        with gr.Group(elem_classes="settings-panel phase-settings"):
                             gr.Markdown("#### 🔍 Search Phase Configuration")
 
                             gr.Markdown("**Initial Scan Phase**")
@@ -1447,7 +944,7 @@ def create_demo() -> gr.Blocks:
                             expert_review_semantic = gr.Slider(0.35, 0.75, value=0.50, step=0.05, label="Semantic Threshold")
                             expert_review_keyword = gr.Slider(0.12, 0.3, value=0.20, step=0.01, label="Keyword Threshold")
 
-            # Export Tab
+
             with gr.TabItem("📥 Export Conversation", id="export"):
                 with gr.Column(elem_classes="main-chat-area"):
                     gr.Markdown("""
@@ -1484,12 +981,11 @@ def create_demo() -> gr.Blocks:
                     with gr.Row():
                         export_button = gr.Button("📥 Generate Export", variant="primary", size="lg")
 
-                    export_preview = gr.Textbox(
+                    export_output = gr.Textbox(
                         label="Export Output",
                         lines=20,
                         max_lines=30,
-                        show_copy_button=True,
-                        elem_classes="export-preview"
+                        show_copy_button=True
                     )
 
                     download_file = gr.File(
@@ -1504,6 +1000,52 @@ def create_demo() -> gr.Blocks:
                     - **JSON**: Structured data, perfect for processing or archiving
                     - **HTML**: Styled webpage, best for printing or presentation
                     """)
+
+            # Export function
+            def export_conversation_handler(export_format, include_metadata, include_research, include_full):
+                """Handle export button click"""
+                try:
+                    if not manager or not current_session:
+                        return "No conversation to export.", None
+
+                    session_data = manager.get_session(current_session)
+                    if not session_data:
+                        return "Session not found.", None
+
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+                    exporters = {
+                        'Markdown': MarkdownExporter,
+                        'JSON': JSONExporter,
+                        'HTML': HTMLExporter
+                    }
+
+                    exporter_class = exporters.get(export_format, MarkdownExporter)
+                    exporter = exporter_class()
+
+                    content = exporter.export(session_data)
+
+                    ext_map = {'Markdown': 'md', 'JSON': 'json', 'HTML': 'html'}
+                    extension = ext_map.get(export_format, 'md')
+                    filename = f"legal_consultation_{timestamp}.{extension}"
+
+                    # Save to temporary file
+                    import tempfile
+                    with tempfile.NamedTemporaryFile(mode='w', suffix=f'.{extension}', delete=False, encoding='utf-8') as f:
+                        f.write(content)
+                        temp_path = f.name
+
+                    return content, temp_path
+
+                except Exception as e:
+                    return f"Export failed: {str(e)}", None
+
+            # Connect export button
+            export_button.click(
+                export_conversation_handler,
+                inputs=[export_format, include_metadata_export, include_research_process_export, include_full_content_export],
+                outputs=[export_output, download_file]
+            )
 
             # About Tab
             with gr.TabItem("ℹ️ About Enhanced System", id="about"):
@@ -1581,183 +1123,176 @@ def create_demo() -> gr.Blocks:
                     **Note**: This enhanced system combines human-like legal research methodology with AI efficiency, providing transparency into the research process while maintaining high accuracy and comprehensive coverage.
                     """)
 
-        # Update state from checkboxes
-        show_thinking_cb.change(lambda x: x, inputs=[show_thinking_cb], outputs=[show_thinking])
-        show_sources_cb.change(lambda x: x, inputs=[show_sources_cb], outputs=[show_sources])
-        show_metadata_cb.change(lambda x: x, inputs=[show_metadata_cb], outputs=[show_metadata])
-        show_analysis_cb.change(lambda x: x, inputs=[show_analysis_cb], outputs=[show_analysis])
+        # Hidden state for enhanced configuration
+        config_state = gr.State(DEFAULT_CONFIG)
 
-        # Chat with streaming - shows message immediately then generates
-        def chat_with_streaming(message, history, thinking, sources, metadata, analysis):
-            """Chat function that shows user message immediately then streams response"""
-            if not message.strip():
-                return "", history
-
-            # Add user message immediately
-            history = history + [(message, None)]
-            yield "", history
-
-            # Now generate response
+        def update_enhanced_config(*args):
+            """Update configuration with all enhanced settings"""
             try:
-                if pipeline is None:
-                    initialize_system()
-
-                context = manager.get_context_for_query(current_session) if current_session else None
-                result = pipeline.query(message, conversation_history=context, stream=False)
-
-                # Build response
-                response_parts = []
-
-                # Parse think tags
-                answer_text = result.get('answer', '')
-                thinking_content_from_tags, clean_answer = parse_think_tags(answer_text)
-
-                # Combine thinking
-                thinking_content = result.get('thinking', '')
-                if thinking_content_from_tags:
-                    thinking_content = thinking_content_from_tags if not thinking_content else f"{thinking_content}\n\n{thinking_content_from_tags}"
-
-                # Add thinking
-                if thinking and thinking_content:
-                    response_parts.append(f"""<details><summary>🧠 Proses Berpikir</summary>\n\n{thinking_content}\n\n</details>\n\n---\n\n""")
-
-                # Main answer
-                final_answer = clean_answer if thinking_content_from_tags else answer_text
-                response_parts.append(f"✅ **Jawaban:**\n\n{final_answer}")
-
-                # Add sources
-                if sources and result.get('sources'):
-                    src_list = result['sources']
-                    if src_list:
-                        source_content = ""
-                        for i, src in enumerate(src_list[:5], 1):
-                            if isinstance(src, dict):
-                                title = src.get('title', src.get('regulation', f'Source {i}'))
-                                score = src.get('score', 0)
-                                doc_type = src.get('type', src.get('jenis_peraturan', ''))
-                                source_content += f"**{i}. {title}**\n- Skor: {score:.3f}\n"
-                                if doc_type:
-                                    source_content += f"- Jenis: {doc_type}\n"
-                                source_content += "\n"
-                        response_parts.append(f"""\n\n---\n\n<details><summary>📖 Sumber Hukum ({len(src_list[:5])} dokumen)</summary>\n\n{source_content}</details>""")
-
-                # Add metadata
-                if metadata and result.get('metadata'):
-                    meta = result['metadata']
-                    meta_content = ""
-                    if meta.get('query_type'):
-                        meta_content += f"- **Tipe Query:** {meta['query_type']}\n"
-                    if meta.get('processing_time'):
-                        meta_content += f"- **Waktu Proses:** {meta['processing_time']:.2f}s\n"
-                    if meta_content:
-                        response_parts.append(f"""\n\n<details><summary>📊 Metadata</summary>\n\n{meta_content}</details>""")
-
-                response = "".join(response_parts)
-
-                # Save to history
-                if current_session:
-                    manager.add_turn(current_session, message, response, result.get('metadata'))
-
-                history[-1] = (message, response)
-                yield "", history
-
-            except Exception as e:
-                logger.error(f"Chat error: {e}")
-                history[-1] = (message, f"Error: {str(e)}")
-                yield "", history
-
-        # Export handler function
-        def export_conversation_handler(format_type, include_metadata, include_research, include_full):
-            """Handle export button click"""
-            import tempfile
-            from datetime import datetime
-
-            try:
-                if not manager or not current_session:
-                    return "No conversation to export.", None
-
-                session_data = manager.get_session(current_session)
-                if not session_data:
-                    return "Session not found.", None
-
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
-                exporters = {
-                    'Markdown': MarkdownExporter,
-                    'JSON': JSONExporter,
-                    'HTML': HTMLExporter
+                search_phases = {
+                    'initial_scan': {
+                        'candidates': int(args[5]),
+                        'semantic_threshold': float(args[6]),
+                        'keyword_threshold': float(args[7]),
+                        'description': 'Quick broad scan like human initial reading',
+                        'time_limit': 30,
+                        'focus_areas': ['regulation_type', 'enacting_body'],
+                        'enabled': bool(args[4])
+                    },
+                    'focused_review': {
+                        'candidates': int(args[9]),
+                        'semantic_threshold': float(args[10]),
+                        'keyword_threshold': float(args[11]),
+                        'description': 'Focused review of promising candidates',
+                        'time_limit': 45,
+                        'focus_areas': ['content', 'chapter', 'article'],
+                        'enabled': bool(args[8])
+                    },
+                    'deep_analysis': {
+                        'candidates': int(args[13]),
+                        'semantic_threshold': float(args[14]),
+                        'keyword_threshold': float(args[15]),
+                        'description': 'Deep contextual analysis like careful reading',
+                        'time_limit': 60,
+                        'focus_areas': ['kg_entities', 'cross_references'],
+                        'enabled': bool(args[12])
+                    },
+                    'verification': {
+                        'candidates': int(args[17]),
+                        'semantic_threshold': float(args[18]),
+                        'keyword_threshold': float(args[19]),
+                        'description': 'Final verification and cross-checking',
+                        'time_limit': 30,
+                        'focus_areas': ['authority_score', 'temporal_score'],
+                        'enabled': bool(args[16])
+                    },
+                    'expert_review': {
+                        'candidates': int(args[21]),
+                        'semantic_threshold': float(args[22]),
+                        'keyword_threshold': float(args[23]),
+                        'description': 'Expert specialist review for complex cases',
+                        'time_limit': 40,
+                        'focus_areas': ['legal_richness', 'completeness_score'],
+                        'enabled': bool(args[20])
+                    }
                 }
 
-                exporter_class = exporters.get(format_type, MarkdownExporter)
-                exporter = exporter_class()
+                new_config = {
+                    'final_top_k': int(args[0]),
+                    'temperature': float(args[1]),
+                    'max_new_tokens': int(args[2]),
+                    'research_team_size': int(args[3]),
+                    'enable_cross_validation': bool(args[24]),
+                    'enable_devil_advocate': bool(args[25]),
+                    'consensus_threshold': float(args[26]),
+                    'top_p': float(args[27]),
+                    'top_k': int(args[28]),
+                    'min_p': float(args[29]),
+                    'search_phases': search_phases,
+                    'max_rounds': 5,
+                    'initial_quality': 0.8,
+                    'quality_degradation': 0.15,
+                    'min_quality': 0.3,
+                    'parallel_research': True
+                }
 
-                content = exporter.export(session_data)
-
-                ext_map = {'Markdown': 'md', 'JSON': 'json', 'HTML': 'html'}
-                extension = ext_map.get(format_type, 'md')
-                filename = f"legal_consultation_{timestamp}.{extension}"
-
-                # Save to temporary file
-                with tempfile.NamedTemporaryFile(mode='w', suffix=f'.{extension}', delete=False, encoding='utf-8') as f:
-                    f.write(content)
-                    temp_path = f.name
-
-                return content, temp_path
+                return new_config
 
             except Exception as e:
-                return f"Export failed: {str(e)}", None
+                print(f"Error updating enhanced config: {e}")
+                return DEFAULT_CONFIG
 
-        # Event handlers
-        msg.submit(
-            chat_with_streaming,
-            inputs=[msg, chatbot, show_thinking, show_sources, show_metadata, show_analysis],
-            outputs=[msg, chatbot]
-        )
+        def reset_to_enhanced_defaults():
+            """Reset to enhanced default values"""
+            try:
+                return (
+                    DEFAULT_CONFIG['final_top_k'],  # 0
+                    DEFAULT_CONFIG['temperature'],  # 1
+                    DEFAULT_CONFIG['max_new_tokens'],  # 2
+                    DEFAULT_CONFIG['research_team_size'],  # 3
+                    DEFAULT_SEARCH_PHASES['initial_scan']['enabled'],  # 4
+                    DEFAULT_SEARCH_PHASES['initial_scan']['candidates'],  # 5
+                    DEFAULT_SEARCH_PHASES['initial_scan']['semantic_threshold'],  # 6
+                    DEFAULT_SEARCH_PHASES['initial_scan']['keyword_threshold'],  # 7
+                    DEFAULT_SEARCH_PHASES['focused_review']['enabled'],  # 8
+                    DEFAULT_SEARCH_PHASES['focused_review']['candidates'],  # 9
+                    DEFAULT_SEARCH_PHASES['focused_review']['semantic_threshold'],  # 10
+                    DEFAULT_SEARCH_PHASES['focused_review']['keyword_threshold'],  # 11
+                    DEFAULT_SEARCH_PHASES['deep_analysis']['enabled'],  # 12
+                    DEFAULT_SEARCH_PHASES['deep_analysis']['candidates'],  # 13
+                    DEFAULT_SEARCH_PHASES['deep_analysis']['semantic_threshold'],  # 14
+                    DEFAULT_SEARCH_PHASES['deep_analysis']['keyword_threshold'],  # 15
+                    DEFAULT_SEARCH_PHASES['verification']['enabled'],  # 16
+                    DEFAULT_SEARCH_PHASES['verification']['candidates'],  # 17
+                    DEFAULT_SEARCH_PHASES['verification']['semantic_threshold'],  # 18
+                    DEFAULT_SEARCH_PHASES['verification']['keyword_threshold'],  # 19
+                    DEFAULT_SEARCH_PHASES['expert_review']['enabled'],  # 20
+                    DEFAULT_SEARCH_PHASES['expert_review']['candidates'],  # 21
+                    DEFAULT_SEARCH_PHASES['expert_review']['semantic_threshold'],  # 22
+                    DEFAULT_SEARCH_PHASES['expert_review']['keyword_threshold'],  # 23
+                    DEFAULT_CONFIG['enable_cross_validation'],  # 24
+                    DEFAULT_CONFIG['enable_devil_advocate'],  # 25
+                    DEFAULT_CONFIG['consensus_threshold'],  # 26
+                    DEFAULT_CONFIG['top_p'],  # 27
+                    DEFAULT_CONFIG['top_k'],  # 28
+                    DEFAULT_CONFIG['min_p']   # 29
+                )
+            except Exception as e:
+                print(f"Error resetting to defaults: {e}")
+                return tuple([0.5] * 30)  # Fallback
 
-        # Export button handler
-        export_button.click(
-            export_conversation_handler,
-            inputs=[export_format, include_metadata_export, include_research_process_export, include_full_content_export],
-            outputs=[export_preview, download_file]
-        )
+        # All configuration inputs
+        config_inputs = [
+            final_top_k, temperature, max_new_tokens, research_team_size,  # 0-3
+            initial_scan_enabled, initial_scan_candidates, initial_scan_semantic, initial_scan_keyword,  # 4-7
+            focused_review_enabled, focused_review_candidates, focused_review_semantic, focused_review_keyword,  # 8-11
+            deep_analysis_enabled, deep_analysis_candidates, deep_analysis_semantic, deep_analysis_keyword,  # 12-15
+            verification_enabled, verification_candidates, verification_semantic, verification_keyword,  # 16-19
+            expert_review_enabled, expert_review_candidates, expert_review_semantic, expert_review_keyword,  # 20-23
+            enable_cross_validation, enable_devil_advocate, consensus_threshold,  # 24-26
+            top_p, top_k, min_p  # 27-29
+        ]
 
-        # Provider handler
-        provider_btn.click(change_provider, inputs=[provider_dropdown], outputs=[provider_status])
+        # Connect all inputs to config update
+        for input_component in config_inputs:
+            try:
+                input_component.change(
+                    update_enhanced_config,
+                    inputs=config_inputs,
+                    outputs=config_state
+                )
+            except Exception as e:
+                print(f"Error connecting config input: {e}")
 
-        # System info and health handlers
-        system_info_btn.click(get_about_info, outputs=[system_info_output])
-        health_btn.click(get_system_health, outputs=[health_output])
-
-        # Reset defaults function
-        def reset_to_defaults():
-            return (
-                3,      # final_top_k
-                0.7,    # temperature
-                2048,   # max_tokens
-                4,      # team_size
-                True,   # enable_cross_validation
-                True,   # enable_devils_advocate
-                0.6,    # consensus_threshold
-                True,   # show_thinking_cb
-                True,   # show_sources_cb
-                True,   # show_metadata_cb
-                False,  # show_analysis_cb
-                1.0,    # top_p
-                20,     # top_k_gen
-                0.1,    # min_p
+        # Reset button
+        try:
+            reset_defaults_btn.click(
+                reset_to_enhanced_defaults,
+                outputs=config_inputs
             )
+        except Exception as e:
+            print(f"Error setting up reset button: {e}")
 
-        reset_defaults_btn.click(
-            reset_to_defaults,
-            outputs=[
-                final_top_k, temperature, max_tokens, team_size,
-                enable_cross_validation, enable_devils_advocate, consensus_threshold,
-                show_thinking_cb, show_sources_cb, show_metadata_cb, show_analysis_cb,
-                top_p, top_k_gen, min_p
-            ]
-        )
+        # Chat functionality
+        try:
+            msg_input.submit(
+                chat_with_legal_rag,
+                inputs=[msg_input, chatbot, config_state, show_thinking, show_sources, show_metadata],
+                outputs=[chatbot, msg_input]
+            )
+        except Exception as e:
+            print(f"Error setting up chat: {e}")
 
-    return demo
+        # System info
+        try:
+            system_info_btn.click(
+                get_system_info,
+                outputs=system_info_output
+            )
+        except Exception as e:
+            print(f"Error setting up system info: {e}")
+
+    return interface
 
 
 def launch_app(share: bool = False, server_port: int = 7860):
@@ -1767,29 +1302,13 @@ def launch_app(share: bool = False, server_port: int = 7860):
     # Initialize system BEFORE launching UI
     logger.info("Pre-initializing system before UI launch...")
 
-    # Initialize pipeline
-    if pipeline is None:
-        logger.info(f"Initializing RAG pipeline with provider: {current_provider}")
-        pipeline = RAGPipeline({'llm_provider': current_provider})
-        if not pipeline.initialize():
-            logger.error("Failed to initialize pipeline")
-            raise RuntimeError("Pipeline initialization failed")
-        logger.info("Pipeline initialized successfully")
-
-    # Initialize conversation manager
-    if manager is None:
-        manager = ConversationManager()
-        logger.info("Conversation manager initialized")
-
-    # Start session
-    if current_session is None:
-        current_session = manager.start_session()
-        logger.info(f"Session started: {current_session}")
+    result = initialize_system()
+    logger.info(f"Initialization result: {result}")
 
     logger.info("System fully initialized, launching UI...")
 
     # Now create and launch demo
-    demo = create_demo()
+    demo = create_gradio_interface()
     demo.launch(
         server_name="0.0.0.0",
         server_port=server_port,

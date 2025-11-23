@@ -156,14 +156,30 @@ class RerankerEngine:
             with torch.no_grad():
                 for i in range(0, len(pairs), self.batch_size):
                     batch = pairs[i:i + self.batch_size]
-                    batch_scores = self.reranker_model.compute_score(
-                        batch,
-                        normalize=True
-                    )
-                    # Handle both single score and list of scores
-                    if isinstance(batch_scores, (int, float)):
-                        batch_scores = [batch_scores]
-                    all_scores.extend(batch_scores)
+                    try:
+                        batch_scores = self.reranker_model.compute_score(
+                            batch,
+                            normalize=True
+                        )
+                        # Handle both single score and list of scores
+                        if isinstance(batch_scores, (int, float)):
+                            batch_scores = [batch_scores]
+                        all_scores.extend(batch_scores)
+                    except ValueError as ve:
+                        # Fallback: process items one by one if batch fails (padding issue)
+                        if "padding token" in str(ve).lower() or "batch size" in str(ve).lower():
+                            self.logger.warning(f"Batch processing failed, falling back to individual processing: {ve}")
+                            for pair in batch:
+                                try:
+                                    score = self.reranker_model.compute_score([pair], normalize=True)
+                                    if isinstance(score, (list, tuple)):
+                                        score = score[0]
+                                    all_scores.append(float(score))
+                                except Exception as e:
+                                    self.logger.warning(f"Individual scoring failed: {e}")
+                                    all_scores.append(0.5)  # Default score
+                        else:
+                            raise
 
                     # Clear CUDA cache between batches
                     if torch.cuda.is_available():
