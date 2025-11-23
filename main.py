@@ -156,14 +156,25 @@ def run_single_query(args):
         print(f"\nQuery: {args.query}\n")
         print("-" * 40)
 
-        result = pipeline.query(args.query, stream=not args.no_stream)
-
         if not args.no_stream:
+            # Streaming mode - iterate over generator
+            print("\nAnswer: ", end="", flush=True)
+            result = None
+            for chunk in pipeline.query(args.query, stream=True):
+                if chunk.get('type') == 'token':
+                    print(chunk.get('token', ''), end='', flush=True)
+                elif chunk.get('type') == 'complete':
+                    result = chunk
+                elif chunk.get('type') == 'error':
+                    print(f"\nError: {chunk.get('error')}")
+                    return 1
             print()  # New line after streaming
         else:
+            # Non-streaming mode
+            result = pipeline.query(args.query, stream=False)
             print(f"\n{result['answer']}")
 
-        if args.verbose and result.get('metadata'):
+        if args.verbose and result and result.get('metadata'):
             meta = result['metadata']
             print(f"\n[Time: {meta.get('total_time', 0):.2f}s, "
                   f"Tokens: {meta.get('tokens_generated', 0)}]")
@@ -253,26 +264,49 @@ def run_interactive(args):
                 context = manager.get_context_for_query(session_id)
 
                 # Execute query
-                result = pipeline.query(
-                    user_input,
-                    conversation_history=context,
-                    stream=not args.no_stream
-                )
-
                 if not args.no_stream:
+                    # Streaming mode - iterate over generator
+                    result = None
+                    answer_text = ""
+                    for chunk in pipeline.query(
+                        user_input,
+                        conversation_history=context,
+                        stream=True
+                    ):
+                        if chunk.get('type') == 'token':
+                            token = chunk.get('token', '')
+                            print(token, end='', flush=True)
+                            answer_text += token
+                        elif chunk.get('type') == 'complete':
+                            result = chunk
+                            if not answer_text:
+                                answer_text = chunk.get('answer', '')
+                        elif chunk.get('type') == 'error':
+                            print(f"\nError: {chunk.get('error')}")
+                            continue
                     print()  # New line after streaming
+
+                    # Use the accumulated answer or from result
+                    final_answer = answer_text if answer_text else (result.get('answer', '') if result else '')
                 else:
+                    # Non-streaming mode
+                    result = pipeline.query(
+                        user_input,
+                        conversation_history=context,
+                        stream=False
+                    )
                     print(result['answer'])
+                    final_answer = result['answer']
 
                 # Save to history
                 manager.add_turn(
                     session_id=session_id,
                     query=user_input,
-                    answer=result['answer'],
-                    metadata=result.get('metadata')
+                    answer=final_answer,
+                    metadata=result.get('metadata') if result else None
                 )
 
-                if args.verbose and result.get('metadata'):
+                if args.verbose and result and result.get('metadata'):
                     meta = result['metadata']
                     print(f"\n[Time: {meta.get('total_time', 0):.2f}s, "
                           f"Tokens: {meta.get('tokens_generated', 0)}]")
