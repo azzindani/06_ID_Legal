@@ -57,6 +57,16 @@ class LocalLLMProvider(BaseLLMProvider):
                 trust_remote_code=True
             )
 
+            # IMPORTANT: Set pad_token properly to avoid 1-token generation issue
+            # Don't use eos_token as pad_token - it causes generation to stop immediately
+            if self.tokenizer.pad_token is None:
+                # Use a different special token or add a new one
+                if self.tokenizer.unk_token is not None:
+                    self.tokenizer.pad_token = self.tokenizer.unk_token
+                else:
+                    self.tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+                logger.debug(f"Set pad_token to: {self.tokenizer.pad_token}")
+
             # Configure quantization
             quantization_config = None
             if self.load_in_4bit:
@@ -125,7 +135,8 @@ class LocalLLMProvider(BaseLLMProvider):
                 temperature=temperature,
                 top_p=kwargs.get('top_p', 0.9),
                 do_sample=temperature > 0,
-                pad_token_id=self.tokenizer.eos_token_id
+                pad_token_id=self.tokenizer.pad_token_id,
+                eos_token_id=self.tokenizer.eos_token_id
             )
 
         response = self.tokenizer.decode(
@@ -167,7 +178,8 @@ class LocalLLMProvider(BaseLLMProvider):
                 'temperature': temperature,
                 'top_p': kwargs.get('top_p', 0.9),
                 'do_sample': temperature > 0,
-                'pad_token_id': self.tokenizer.eos_token_id
+                'pad_token_id': self.tokenizer.pad_token_id,
+                'eos_token_id': self.tokenizer.eos_token_id
             }
 
             thread = Thread(target=self.model.generate, kwargs=generation_kwargs)
