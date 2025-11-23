@@ -220,17 +220,16 @@ def format_sources_info(results: List[Dict], config_dict: Dict) -> str:
 
 
 def format_retrieved_metadata(phase_metadata: Dict, config_dict: Dict) -> str:
-    """Format all retrieved documents metadata - MATCHING ORIGINAL"""
+    """Format all retrieved documents metadata with detailed research process info"""
     if not phase_metadata:
         return ""
 
     try:
-        output = ["## 📚 ALL RETRIEVED DOCUMENTS METADATA", ""]
-
         phase_order = ['initial_scan', 'focused_review', 'deep_analysis', 'verification', 'expert_review']
 
         phase_groups = {}
         total_kg_enhanced = 0
+        unique_researchers = set()
 
         for phase_key, phase_data in phase_metadata.items():
             if not isinstance(phase_data, dict):
@@ -238,64 +237,87 @@ def format_retrieved_metadata(phase_metadata: Dict, config_dict: Dict) -> str:
 
             phase_name = phase_data.get('phase', phase_key)
             researcher = phase_data.get('researcher', 'unknown')
+            unique_researchers.add(researcher)
 
             if phase_name not in phase_groups:
                 phase_groups[phase_name] = {}
             if researcher not in phase_groups[phase_name]:
-                phase_groups[phase_name][researcher] = []
+                phase_groups[phase_name][researcher] = {'candidates': [], 'confidence': 100.0}
 
             candidates = phase_data.get('candidates', phase_data.get('results', []))
             kg_candidates = [c for c in candidates if c.get('kg_score', 0) > 0.3]
             total_kg_enhanced += len(kg_candidates)
 
-            phase_groups[phase_name][researcher].extend(candidates)
+            confidence = phase_data.get('confidence', 100.0)
+            phase_groups[phase_name][researcher]['candidates'].extend(candidates)
+            phase_groups[phase_name][researcher]['confidence'] = confidence
 
+        # Calculate totals
         total_retrieved = 0
+        for phase_name in phase_order:
+            if phase_name not in phase_groups:
+                continue
+            for researcher_data in phase_groups[phase_name].values():
+                total_retrieved += len(researcher_data['candidates'])
+
+        # Build output with detailed research process format
+        output = ["### 🔍 Research Process Details", "-" * 80]
+        output.append(f"- **Team Members:** {len(unique_researchers)}")
+        output.append(f"- **Total Documents Retrieved:** {total_retrieved:,}")
+        output.append(f"- **Phases Executed:** {len(phase_groups)}")
+        output.append("")
+
+        # Detailed phase breakdown
         for phase_name in phase_order:
             if phase_name not in phase_groups:
                 continue
 
             researchers = phase_groups[phase_name]
-            output.append(f"### 🔍 PHASE: {phase_name.upper()}")
+            output.append(f"#### 📂 PHASE: {phase_name.upper()}")
             output.append("")
 
-            for researcher, candidates in researchers.items():
-                kg_count = len([c for c in candidates if c.get('kg_score', 0) > 0.3])
-                if researcher in RESEARCH_TEAM_PERSONAS:
-                    researcher_name = RESEARCH_TEAM_PERSONAS[researcher]['name']
-                else:
-                    researcher_name = researcher
-                output.append(f"**{researcher_name}:** {len(candidates)} documents")
-                total_retrieved += len(candidates)
+            for researcher, researcher_data in researchers.items():
+                candidates = researcher_data['candidates']
+                confidence = researcher_data['confidence']
 
+                # Get researcher display name with emoji
+                if researcher in RESEARCH_TEAM_PERSONAS:
+                    persona = RESEARCH_TEAM_PERSONAS[researcher]
+                    researcher_name = persona.get('name', researcher)
+                    emoji = persona.get('emoji', '👤')
+                    full_name = f"**{emoji} {researcher_name}:**"
+                else:
+                    full_name = f"**👤 {researcher}:**"
+
+                output.append(f"{full_name} {len(candidates)} documents (Confidence: {confidence:.2f}%)")
+
+                # List top documents with scores
                 for i, candidate in enumerate(candidates[:5], 1):
                     try:
                         record = candidate.get('record', candidate)
                         score = candidate.get('composite_score', candidate.get('score', 0))
                         kg_score = candidate.get('kg_score', 0)
 
-                        if kg_score > 0:
-                            score_display = f"Score: {score:.3f}, KG: {kg_score:.3f}"
-                        else:
-                            score_display = f"Score: {score:.3f}"
+                        reg_type = record.get('regulation_type', 'N/A')
+                        reg_num = record.get('regulation_number', 'N/A')
+                        year = record.get('year', 'N/A')
 
-                        output.append(f"   {i}. **{record.get('regulation_type', 'N/A')} No. {record.get('regulation_number', 'N/A')}/{record.get('year', 'N/A')}** ({score_display})")
-                        output.append(f"      About: {str(record.get('about', ''))[:80]}...")
-                        output.append("")
+                        output.append(f"   {i}. {reg_type} No. {reg_num}/{year} (Score: {score:.3f}, KG: {kg_score:.3f})")
                     except Exception:
                         continue
 
                 if len(candidates) > 5:
-                    output.append(f"      ... and {len(candidates) - 5} more documents")
+                    output.append(f"   ... and {len(candidates) - 5} more documents")
                 output.append("")
 
-        output.append("### 📈 RETRIEVAL SUMMARY")
-        output.append(f"- **Total Documents Retrieved:** {total_retrieved:,}")
+        # Summary section
+        output.append(f"**Total Documents Retrieved:** {total_retrieved:,}")
         if total_kg_enhanced > 0:
+            output.append("")
+            output.append("### 📈 KG Enhancement Stats")
             output.append(f"- **KG-Enhanced Documents:** {total_kg_enhanced:,}")
-        output.append(f"- **Research Phases Used:** {len(phase_groups)}")
-        if total_retrieved > 0 and total_kg_enhanced > 0:
-            output.append(f"- **KG Enhancement Rate:** {total_kg_enhanced/total_retrieved*100:.1f}%")
+            if total_retrieved > 0:
+                output.append(f"- **KG Enhancement Rate:** {total_kg_enhanced/total_retrieved*100:.1f}%")
 
         return "\n".join(output)
     except Exception as e:
@@ -601,7 +623,7 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                             f'<details><summary>📖 <b>Sumber Hukum Utama ({len(citations)} dokumen)</b></summary>\n\n{sources_info}\n</details>'
                         )
 
-                # *** COMPLETE SEARCH METADATA - MATCHING ORIGINAL ***
+                # *** COMPLETE SEARCH METADATA - DETAILED RESEARCH PROCESS ***
                 if show_metadata and all_phase_metadata:
                     metadata_info = format_retrieved_metadata(all_phase_metadata, config_dict)
                     if metadata_info.strip():

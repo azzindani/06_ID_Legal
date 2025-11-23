@@ -298,12 +298,13 @@ class ResponseValidator:
             if any(word in enhanced.lower() for word in ['sanksi', 'pidana', 'denda', 'gugatan']):
                 enhanced += "\n\n**Catatan**: Untuk kasus atau situasi spesifik, disarankan untuk berkonsultasi dengan ahli hukum atau pengacara profesional."
         
-        # Add reference section if citations exist but no reference list
-        if '[Dokumen' in enhanced and 'REFERENSI' not in enhanced.upper():
-            from .citation_formatter import CitationFormatter
-            formatter = CitationFormatter(self.config)
-            references = formatter.format_reference_list(results, max_items=5)
-            enhanced += f"\n\n{references}"
+        # Reference section is now shown in "Sumber Hukum Utama" collapsible section
+        # No need to add duplicate REFERENSI to the response
+        # if '[Dokumen' in enhanced and 'REFERENSI' not in enhanced.upper():
+        #     from .citation_formatter import CitationFormatter
+        #     formatter = CitationFormatter(self.config)
+        #     references = formatter.format_reference_list(results, max_items=5)
+        #     enhanced += f"\n\n{references}"
         
         return enhanced
     
