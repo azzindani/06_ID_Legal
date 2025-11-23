@@ -6,9 +6,10 @@ File: core/generation/llm_engine.py
 """
 
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, TextIteratorStreamer
 from typing import Dict, Any, List, Optional, Generator
 import time
+from threading import Thread
 from logger_utils import get_logger
 from config import (
     LLM_MODEL,
@@ -309,8 +310,11 @@ class LLMEngine:
         stop_sequences: Optional[List[str]] = None
     ) -> Generator[Dict[str, Any], None, None]:
         """
-        Generate response with streaming (yields tokens as generated)
-        
+        Generate response with streaming using TextIteratorStreamer
+
+        This uses threading for efficient parallel token generation,
+        yielding tokens as they are produced by the model.
+
         Args:
             prompt: Input prompt
             max_new_tokens: Maximum tokens to generate
@@ -318,7 +322,7 @@ class LLMEngine:
             top_p: Nucleus sampling parameter
             top_k: Top-k sampling parameter
             stop_sequences: Optional stop sequences
-            
+
         Yields:
             Dictionary with token and metadata
         """
@@ -331,8 +335,8 @@ class LLMEngine:
                 'success': False
             }
             return
-        
-        self.logger.info("Starting streaming generation")
+
+        self.logger.info("Starting streaming generation with TextIteratorStreamer")
 
         start_time = time.time()
 
@@ -361,10 +365,18 @@ class LLMEngine:
                 max_length=self.max_length
             ).to(self.device)
 
-            input_length = inputs['input_ids'].shape[1]
+            # Create TextIteratorStreamer for efficient streaming
+            streamer = TextIteratorStreamer(
+                self._tokenizer,
+                skip_prompt=True,
+                skip_special_tokens=True
+            )
 
             # Generation parameters
             gen_kwargs = {
+                'input_ids': inputs['input_ids'],
+                'attention_mask': inputs['attention_mask'],
+                'streamer': streamer,
                 'max_new_tokens': max_new_tokens or self.max_new_tokens,
                 'temperature': temperature or self.temperature,
                 'top_p': top_p or self.top_p,
@@ -374,99 +386,72 @@ class LLMEngine:
                 'pad_token_id': self._tokenizer.pad_token_id,
                 'eos_token_id': self._tokenizer.eos_token_id,
             }
-            
-            # Stream generation
+
+            # Start generation in background thread
+            thread = Thread(target=self._model.generate, kwargs=gen_kwargs)
+            thread.start()
+
+            # Stream tokens as they are generated
             tokens_generated = 0
             full_text = ""
-            
-            with torch.no_grad():
-                # Use model.generate with return_dict_in_generate for streaming
-                current_ids = inputs['input_ids']
-                
-                for _ in range(gen_kwargs['max_new_tokens']):
-                    outputs = self._model(
-                        input_ids=current_ids,
-                        attention_mask=inputs['attention_mask']
-                    )
-                    
-                    # Get next token logits
-                    next_token_logits = outputs.logits[:, -1, :]
-                    
-                    # Apply temperature
-                    next_token_logits = next_token_logits / gen_kwargs['temperature']
-                    
-                    # Apply top-k and top-p filtering
-                    filtered_logits = self._top_k_top_p_filtering(
-                        next_token_logits,
-                        top_k=gen_kwargs['top_k'],
-                        top_p=gen_kwargs['top_p']
-                    )
-                    
-                    # Sample next token
-                    probs = torch.softmax(filtered_logits, dim=-1)
-                    next_token = torch.multinomial(probs, num_samples=1)
-                    
-                    # Check for EOS
-                    if next_token.item() == self._tokenizer.eos_token_id:
-                        break
-                    
-                    # Decode token
-                    token_text = self._tokenizer.decode(next_token[0], skip_special_tokens=True)
-                    full_text += token_text
-                    tokens_generated += 1
-                    
-                    # Check stop sequences
-                    if stop_sequences:
-                        should_stop = False
-                        for stop_seq in stop_sequences:
-                            if stop_seq in full_text:
-                                should_stop = True
-                                break
-                        if should_stop:
+
+            for new_text in streamer:
+                full_text += new_text
+                tokens_generated += 1
+
+                # Check stop sequences
+                should_stop = False
+                if stop_sequences:
+                    for stop_seq in stop_sequences:
+                        if stop_seq in full_text:
+                            should_stop = True
                             break
-                    
-                    # Yield token
-                    yield {
-                        'token': token_text,
-                        'tokens_generated': tokens_generated,
-                        'done': False,
-                        'success': True
-                    }
-                    
-                    # Append to current_ids
-                    current_ids = torch.cat([current_ids, next_token], dim=1)
-                    
-                    # Update attention mask
-                    inputs['attention_mask'] = torch.cat([
-                        inputs['attention_mask'],
-                        torch.ones((1, 1), device=self.device, dtype=torch.long)
-                    ], dim=1)
-            
+
+                if should_stop:
+                    break
+
+                # Yield token
+                yield {
+                    'token': new_text,
+                    'tokens_generated': tokens_generated,
+                    'done': False,
+                    'success': True
+                }
+
+            # Wait for generation thread to complete
+            thread.join()
+
             generation_time = time.time() - start_time
             tokens_per_second = tokens_generated / generation_time if generation_time > 0 else 0
-            
+
             self.logger.success("Streaming generation completed", {
                 "tokens_generated": tokens_generated,
                 "generation_time": f"{generation_time:.2f}s",
                 "tokens_per_second": f"{tokens_per_second:.1f}"
             })
-            
+
             # Final yield
             yield {
                 'token': '',
                 'tokens_generated': tokens_generated,
                 'generation_time': generation_time,
                 'tokens_per_second': tokens_per_second,
+                'full_text': full_text,
                 'done': True,
                 'success': True
             }
-            
+
         except Exception as e:
             self.logger.error("Streaming generation failed", {
                 "error": str(e),
                 "error_type": type(e).__name__
             })
-            
+
+            import traceback
+            self.logger.debug("Traceback", {
+                "traceback": traceback.format_exc()[:500]
+            })
+
             yield {
                 'token': '',
                 'error': str(e),
