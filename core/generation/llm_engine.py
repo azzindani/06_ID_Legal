@@ -86,19 +86,26 @@ class LLMEngine:
                 # IMPORTANT: Don't use eos_token as pad_token - it causes generation to stop immediately
                 need_resize_embeddings = False
                 if self._tokenizer.pad_token is None:
-                    # Try to use unk_token first, or add a new pad token
-                    if self._tokenizer.unk_token is not None:
+                    # Try to use unk_token first, but verify it's different from eos
+                    if (self._tokenizer.unk_token is not None and
+                        self._tokenizer.unk_token_id != self._tokenizer.eos_token_id):
                         self._tokenizer.pad_token = self._tokenizer.unk_token
                         self.logger.debug("Set pad_token to unk_token")
                     else:
-                        # Add a dedicated pad token
+                        # Add a dedicated pad token - safest option
                         self._tokenizer.add_special_tokens({'pad_token': '[PAD]'})
                         need_resize_embeddings = True
                         self.logger.debug("Added new [PAD] token")
 
+                # Extra safety check: if pad_token_id equals eos_token_id, force add new token
+                if self._tokenizer.pad_token_id == self._tokenizer.eos_token_id:
+                    self.logger.warning(f"pad_token_id ({self._tokenizer.pad_token_id}) equals eos_token_id, adding dedicated [PAD] token")
+                    self._tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+                    need_resize_embeddings = True
+
                 # Set padding side to left for decoder-only models
                 self._tokenizer.padding_side = 'left'
-                self.logger.debug(f"Set padding_side to left, pad_token_id={self._tokenizer.pad_token_id}")
+                self.logger.debug(f"Set padding_side to left, pad_token_id={self._tokenizer.pad_token_id}, eos_token_id={self._tokenizer.eos_token_id}")
 
                 # Load model
                 self.logger.debug("Loading model weights")
@@ -222,7 +229,18 @@ class LLMEngine:
                 generated_ids,
                 skip_special_tokens=True
             )
-            
+
+            # Debug logging for short generations
+            tokens_generated = len(generated_ids)
+            if tokens_generated <= 5:
+                self.logger.warning(f"Very short generation detected: {tokens_generated} tokens")
+                raw_tokens = [self._tokenizer.decode([tid], skip_special_tokens=False) for tid in generated_ids.tolist()]
+                self.logger.debug(f"Generated token IDs: {generated_ids.tolist()}")
+                self.logger.debug(f"Generated tokens (raw): {raw_tokens}")
+                self.logger.debug(f"EOS token ID: {self._tokenizer.eos_token_id}, PAD token ID: {self._tokenizer.pad_token_id}")
+                if len(generated_ids) > 0 and generated_ids[0].item() == self._tokenizer.eos_token_id:
+                    self.logger.error("First generated token is EOS - model may have wrong config or prompt issue")
+
             # Post-process
             if stop_sequences:
                 for stop_seq in stop_sequences:
