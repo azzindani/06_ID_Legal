@@ -386,13 +386,13 @@ class GenerationEngine:
         self,
         results: List[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
-        """Extract citation information from results"""
-        
+        """Extract citation information from results with complete metadata"""
+
         citations = []
-        
+
         for idx, result in enumerate(results, 1):
             record = result.get('record', {})
-            
+
             citation = {
                 'id': idx,
                 'regulation_type': record.get('regulation_type', ''),
@@ -405,11 +405,36 @@ class GenerationEngine:
                 'citation_text': self.citation_formatter.format_citation(
                     record,
                     style='standard'
-                )
+                ),
+                # Include all scores for detailed display
+                'final_score': result.get('final_score', result.get('rerank_score', 0)),
+                'rerank_score': result.get('rerank_score', 0),
+                'composite_score': result.get('composite_score', 0),
+                'kg_score': result.get('kg_score', 0),
+                'semantic_score': result.get('semantic_score', 0),
+                'keyword_score': result.get('keyword_score', 0),
+                # KG metadata
+                'kg_primary_domain': record.get('kg_primary_domain', ''),
+                'kg_hierarchy_level': record.get('kg_hierarchy_level', 0),
+                'kg_authority_score': record.get('kg_authority_score', 0),
+                'kg_cross_ref_count': record.get('kg_cross_ref_count', 0),
+                'kg_pagerank': record.get('kg_pagerank', 0),
+                'kg_connectivity_score': record.get('kg_connectivity_score', 0),
+                # Team consensus
+                'team_consensus': result.get('team_consensus', False),
+                'researcher_agreement': result.get('researcher_agreement', 0),
+                'supporting_researchers': result.get('supporting_researchers', []),
+                # Devil's advocate
+                'devils_advocate_challenged': result.get('devils_advocate_challenged', False),
+                'challenge_points': result.get('challenge_points', []),
+                # Content
+                'content': record.get('content', ''),
+                # Pass through the full result for additional metadata
+                'record': record
             }
-            
+
             citations.append(citation)
-        
+
         return citations
     
     def _format_sources(
