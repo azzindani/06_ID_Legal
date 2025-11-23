@@ -208,11 +208,13 @@ class ModelManager:
                     original_predict = self._reranker_model.predict
                     
                     def compute_score(pairs, normalize=True):
+                        import numpy as np
                         scores = original_predict(pairs)
+                        scores = np.array(scores)
                         if normalize:
-                            # Normalize to 0-1 range
-                            import numpy as np
-                            scores = (scores - scores.min()) / (scores.max() - scores.min() + 1e-8)
+                            # Use sigmoid for normalization to avoid 0 scores with single items
+                            # Sigmoid maps any score to (0, 1) range
+                            scores = 1 / (1 + np.exp(-scores))
                         return scores.tolist()
                     
                     self._reranker_model.compute_score = compute_score
