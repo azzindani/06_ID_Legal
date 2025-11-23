@@ -187,23 +187,39 @@ class LLMEngine:
         })
         
         start_time = time.time()
-        
+
         try:
+            # Apply chat template if available (required for instruction-tuned models)
+            formatted_prompt = prompt
+            if hasattr(self._tokenizer, 'chat_template') and self._tokenizer.chat_template:
+                try:
+                    # Structure as chat messages
+                    messages = [{"role": "user", "content": prompt}]
+                    formatted_prompt = self._tokenizer.apply_chat_template(
+                        messages,
+                        tokenize=False,
+                        add_generation_prompt=True
+                    )
+                    self.logger.debug("Applied chat template to prompt")
+                except Exception as e:
+                    self.logger.warning(f"Failed to apply chat template: {e}, using raw prompt")
+                    formatted_prompt = prompt
+
             # Tokenize input
             inputs = self._tokenizer(
-                prompt,
+                formatted_prompt,
                 return_tensors='pt',
                 padding=True,
                 truncation=True,
                 max_length=self.max_length
             ).to(self.device)
-            
+
             input_length = inputs['input_ids'].shape[1]
-            
+
             self.logger.debug("Input tokenized", {
                 "input_tokens": input_length
             })
-            
+
             # Generation parameters
             gen_kwargs = {
                 'max_new_tokens': max_new_tokens or self.max_new_tokens,
@@ -317,21 +333,36 @@ class LLMEngine:
             return
         
         self.logger.info("Starting streaming generation")
-        
+
         start_time = time.time()
-        
+
         try:
+            # Apply chat template if available (required for instruction-tuned models)
+            formatted_prompt = prompt
+            if hasattr(self._tokenizer, 'chat_template') and self._tokenizer.chat_template:
+                try:
+                    messages = [{"role": "user", "content": prompt}]
+                    formatted_prompt = self._tokenizer.apply_chat_template(
+                        messages,
+                        tokenize=False,
+                        add_generation_prompt=True
+                    )
+                    self.logger.debug("Applied chat template to prompt (stream)")
+                except Exception as e:
+                    self.logger.warning(f"Failed to apply chat template: {e}, using raw prompt")
+                    formatted_prompt = prompt
+
             # Tokenize input
             inputs = self._tokenizer(
-                prompt,
+                formatted_prompt,
                 return_tensors='pt',
                 padding=True,
                 truncation=True,
                 max_length=self.max_length
             ).to(self.device)
-            
+
             input_length = inputs['input_ids'].shape[1]
-            
+
             # Generation parameters
             gen_kwargs = {
                 'max_new_tokens': max_new_tokens or self.max_new_tokens,

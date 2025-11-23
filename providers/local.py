@@ -141,7 +141,21 @@ class LocalLLMProvider(BaseLLMProvider):
 
         import torch
 
-        inputs = self.tokenizer(prompt, return_tensors="pt")
+        # Apply chat template if available
+        formatted_prompt = prompt
+        if hasattr(self.tokenizer, 'chat_template') and self.tokenizer.chat_template:
+            try:
+                messages = [{"role": "user", "content": prompt}]
+                formatted_prompt = self.tokenizer.apply_chat_template(
+                    messages,
+                    tokenize=False,
+                    add_generation_prompt=True
+                )
+            except Exception as e:
+                logger.warning(f"Failed to apply chat template: {e}")
+                formatted_prompt = prompt
+
+        inputs = self.tokenizer(formatted_prompt, return_tensors="pt")
         inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
 
         with torch.no_grad():
@@ -178,7 +192,21 @@ class LocalLLMProvider(BaseLLMProvider):
             from threading import Thread
             import torch
 
-            inputs = self.tokenizer(prompt, return_tensors="pt")
+            # Apply chat template if available
+            formatted_prompt = prompt
+            if hasattr(self.tokenizer, 'chat_template') and self.tokenizer.chat_template:
+                try:
+                    messages = [{"role": "user", "content": prompt}]
+                    formatted_prompt = self.tokenizer.apply_chat_template(
+                        messages,
+                        tokenize=False,
+                        add_generation_prompt=True
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to apply chat template: {e}")
+                    formatted_prompt = prompt
+
+            inputs = self.tokenizer(formatted_prompt, return_tensors="pt")
             inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
 
             streamer = TextIteratorStreamer(
