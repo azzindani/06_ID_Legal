@@ -14,10 +14,10 @@ _import_map = {
     # Search components
     'QueryDetector': ('.search.query_detection', 'QueryDetector'),
     'HybridSearchEngine': ('.search.hybrid_search', 'HybridSearchEngine'),
-    'StagesResearch': ('.search.stages_research', 'StagesResearch'),
+    'StagesResearchEngine': ('.search.stages_research', 'StagesResearchEngine'),
     'ConsensusBuilder': ('.search.consensus', 'ConsensusBuilder'),
-    'Reranker': ('.search.reranking', 'Reranker'),
-    'LangGraphOrchestrator': ('.search.langgraph_orchestrator', 'LangGraphOrchestrator'),
+    'RerankerEngine': ('.search.reranking', 'RerankerEngine'),
+    'LangGraphRAGOrchestrator': ('.search.langgraph_orchestrator', 'LangGraphRAGOrchestrator'),
     # Generation components
     'LLMEngine': ('.generation.llm_engine', 'LLMEngine'),
     'GenerationEngine': ('.generation.generation_engine', 'GenerationEngine'),
@@ -38,10 +38,10 @@ __all__ = [
     # Search components
     'QueryDetector',
     'HybridSearchEngine',
-    'StagesResearch',
+    'StagesResearchEngine',
     'ConsensusBuilder',
-    'Reranker',
-    'LangGraphOrchestrator',
+    'RerankerEngine',
+    'LangGraphRAGOrchestrator',
 
     # Generation components
     'LLMEngine',

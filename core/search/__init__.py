@@ -23,6 +23,9 @@ def __getattr__(name):
     elif name == 'AdvancedQueryAnalyzer':
         from .advanced_query_analyzer import AdvancedQueryAnalyzer
         return AdvancedQueryAnalyzer
+    elif name == 'LangGraphRAGOrchestrator':
+        from .langgraph_orchestrator import LangGraphRAGOrchestrator
+        return LangGraphRAGOrchestrator
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 __all__ = [
@@ -31,7 +34,8 @@ __all__ = [
     'StagesResearchEngine',
     'ConsensusBuilder',
     'RerankerEngine',
-    'AdvancedQueryAnalyzer'
+    'AdvancedQueryAnalyzer',
+    'LangGraphRAGOrchestrator'
 ]
 
 __version__ = "1.0.0"
