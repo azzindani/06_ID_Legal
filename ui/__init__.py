@@ -8,7 +8,10 @@ Two interfaces available:
 - search_app: Search engine UI focused on document retrieval
 """
 
-from .gradio_app import create_demo, launch_app
+from .gradio_app import create_gradio_interface, launch_app
+
+# Alias for backwards compatibility
+create_demo = create_gradio_interface
 from .search_app import create_search_demo, launch_search_app
 
 __all__ = [
