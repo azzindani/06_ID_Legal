@@ -290,9 +290,68 @@ class RAGPipeline:
                         "answer_length": len(generation_result['answer'])
                     })
 
+                    # Extract phase metadata from orchestrator result
+                    phase_metadata = {}
+                    consensus_data = rag_result.get('consensus_data', {})
+                    research_data = rag_result.get('research_data', {})
+
+                    # Transform research_data into format expected by UI
+                    # The UI expects: {key: {phase, researcher, researcher_name, candidates, confidence}}
+                    if research_data:
+                        # Get phase_results and persona_results
+                        phase_results = research_data.get('phase_results', {})
+                        persona_results = research_data.get('persona_results', {})
+                        rounds = research_data.get('rounds', [])
+
+                        # Build phase metadata by combining phase and persona info
+                        from config import RESEARCH_TEAM_PERSONAS
+
+                        entry_idx = 0
+                        for phase_name, results in phase_results.items():
+                            # Group results by persona within each phase
+                            persona_groups = {}
+                            for result in results:
+                                persona = result.get('metadata', {}).get('persona', 'unknown')
+                                if persona not in persona_groups:
+                                    persona_groups[persona] = []
+                                persona_groups[persona].append(result)
+
+                            # Create entry for each persona in this phase
+                            for persona_name, persona_results_list in persona_groups.items():
+                                key = f"{entry_idx}_{phase_name}_{persona_name}"
+                                researcher_info = RESEARCH_TEAM_PERSONAS.get(persona_name, {})
+
+                                # Transform results to candidates format
+                                candidates = []
+                                for r in persona_results_list:
+                                    candidates.append({
+                                        'record': r.get('record', {}),
+                                        'composite_score': r.get('scores', {}).get('final', 0),
+                                        'semantic_score': r.get('scores', {}).get('semantic', 0),
+                                        'keyword_score': r.get('scores', {}).get('keyword', 0),
+                                        'kg_score': r.get('scores', {}).get('kg', 0),
+                                        'team_consensus': r.get('team_consensus', False),
+                                        'researcher_agreement': r.get('researcher_agreement', 0)
+                                    })
+
+                                phase_metadata[key] = {
+                                    'phase': phase_name,
+                                    'researcher': persona_name,
+                                    'researcher_name': researcher_info.get('name', persona_name),
+                                    'candidates': candidates,
+                                    'confidence': 1.0,  # Default confidence
+                                    'results': candidates  # Alias
+                                }
+                                entry_idx += 1
+
+                    # Also include from metadata if available
+                    if rag_result.get('metadata', {}).get('research_phases'):
+                        phase_metadata.update(rag_result['metadata']['research_phases'])
+
                     result = {
                         'success': True,
                         'answer': generation_result['answer'],
+                        'thinking': generation_result.get('thinking', ''),  # Pass through thinking
                         'sources': generation_result.get('sources', []),
                         'citations': generation_result.get('citations', []),
                         'metadata': {
@@ -305,7 +364,14 @@ class RAGPipeline:
                             'query_type': query_analysis.get('query_type', 'general'),
                             'rag_metadata': rag_result.get('metadata', {}),
                             'from_cache': False
-                        }
+                        },
+                        # Include research process metadata for detailed display
+                        'phase_metadata': phase_metadata,
+                        'all_retrieved_metadata': phase_metadata,  # Alias for compatibility
+                        'consensus_data': consensus_data,
+                        'research_data': research_data,
+                        'communities': rag_result.get('communities', []),
+                        'clusters': rag_result.get('clusters', [])
                     }
 
                     # Store in cache
