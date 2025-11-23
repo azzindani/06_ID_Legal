@@ -593,12 +593,12 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                 # Add sources in collapsible section
                 collapsible_sections = []
 
-                if show_sources and result.get('sources'):
-                    sources = result['sources']
-                    if sources:
-                        sources_info = format_sources_info(sources, config_dict)
+                if show_sources and result.get('citations'):
+                    citations = result['citations']
+                    if citations:
+                        sources_info = format_sources_info(citations, config_dict)
                         collapsible_sections.append(
-                            f'<details><summary>📖 <b>Sumber Hukum Utama ({len(sources)} dokumen)</b></summary>\n\n{sources_info}\n</details>'
+                            f'<details><summary>📖 <b>Sumber Hukum Utama ({len(citations)} dokumen)</b></summary>\n\n{sources_info}\n</details>'
                         )
 
                 # *** COMPLETE SEARCH METADATA - MATCHING ORIGINAL ***

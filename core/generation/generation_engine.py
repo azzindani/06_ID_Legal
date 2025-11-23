@@ -132,6 +132,17 @@ class GenerationEngine:
                 # Step 4: Extract thinking and answer separately
                 thinking, answer_only = self._extract_thinking(raw_answer)
 
+                # Step 4.5: Handle incomplete generation (only thinking, no answer)
+                if not answer_only or len(answer_only.strip()) < 20:
+                    self.logger.warning("Incomplete generation detected, providing fallback response", {
+                        "answer_length": len(answer_only) if answer_only else 0
+                    })
+                    # Provide a helpful fallback message
+                    answer_only = (
+                        "Mohon maaf, saya tidak dapat memberikan jawaban yang lengkap berdasarkan dokumen yang tersedia. "
+                        "Silakan lihat sumber hukum di bawah untuk informasi lebih lanjut, atau coba ajukan pertanyaan dengan cara yang berbeda."
+                    )
+
                 # Step 5: Post-process response
                 processed_answer = self._post_process_response(answer_only)
 
@@ -330,12 +341,44 @@ class GenerationEngine:
         import re
         think_pattern = r'<think>(.*?)</think>'
 
-        # Find thinking content
+        # Find thinking content in <think> tags
         thinking_match = re.search(think_pattern, response, flags=re.DOTALL | re.IGNORECASE)
         thinking = thinking_match.group(1).strip() if thinking_match else ''
 
         # Remove thinking tags from answer
         answer = re.sub(think_pattern, '', response, flags=re.DOTALL | re.IGNORECASE).strip()
+
+        # Also detect untagged thinking patterns (numbered steps at the start)
+        # Pattern: Langkah/Step followed by number and colon at the beginning of lines
+        untagged_thinking_pattern = r'^(?:Langkah|Langka|Step)\s*\d+\s*:\s*.+?(?=\n|$)'
+
+        # Find all untagged thinking lines
+        untagged_matches = re.findall(untagged_thinking_pattern, answer, flags=re.MULTILINE | re.IGNORECASE)
+
+        if untagged_matches:
+            # Check if the entire response is just thinking steps (no actual answer)
+            # This happens when model outputs planning without actual content
+            remaining_after_removal = re.sub(untagged_thinking_pattern, '', answer, flags=re.MULTILINE | re.IGNORECASE).strip()
+
+            # If what remains is very short or empty, the model failed to generate actual answer
+            if len(remaining_after_removal) < 50:
+                # Add untagged thinking to thinking section
+                if thinking:
+                    thinking = thinking + '\n\n' + '\n'.join(untagged_matches)
+                else:
+                    thinking = '\n'.join(untagged_matches)
+
+                # Log warning about incomplete generation
+                self.logger.warning("LLM generated only thinking steps without actual answer", {
+                    "thinking_steps": len(untagged_matches),
+                    "remaining_length": len(remaining_after_removal)
+                })
+
+                # Return empty answer to trigger fallback
+                answer = remaining_after_removal
+            else:
+                # There's actual content after the thinking steps, just remove the steps
+                answer = remaining_after_removal
 
         return thinking, answer
     
@@ -358,6 +401,7 @@ class GenerationEngine:
                 'about': record.get('about', ''),
                 'article': record.get('article', ''),
                 'chapter': record.get('chapter', ''),
+                'enacting_body': record.get('enacting_body', ''),
                 'citation_text': self.citation_formatter.format_citation(
                     record,
                     style='standard'
