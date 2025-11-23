@@ -59,13 +59,24 @@ class LocalLLMProvider(BaseLLMProvider):
 
             # IMPORTANT: Set pad_token properly to avoid 1-token generation issue
             # Don't use eos_token as pad_token - it causes generation to stop immediately
+            need_resize = False
             if self.tokenizer.pad_token is None:
-                # Use a different special token or add a new one
-                if self.tokenizer.unk_token is not None:
+                # Use unk_token only if it's different from eos_token
+                if (self.tokenizer.unk_token is not None and
+                    self.tokenizer.unk_token_id != self.tokenizer.eos_token_id):
                     self.tokenizer.pad_token = self.tokenizer.unk_token
                 else:
                     self.tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+                    need_resize = True
                 logger.debug(f"Set pad_token to: {self.tokenizer.pad_token}")
+
+            # Extra safety: ensure pad_token_id != eos_token_id
+            if self.tokenizer.pad_token_id == self.tokenizer.eos_token_id:
+                logger.warning(f"pad_token_id equals eos_token_id ({self.tokenizer.pad_token_id}), adding dedicated [PAD]")
+                self.tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+                need_resize = True
+
+            logger.debug(f"Final token IDs - pad: {self.tokenizer.pad_token_id}, eos: {self.tokenizer.eos_token_id}")
 
             # Configure quantization
             quantization_config = None
@@ -103,6 +114,11 @@ class LocalLLMProvider(BaseLLMProvider):
 
             if self.device == 'cpu' and not quantization_config:
                 self.model = self.model.to('cpu')
+
+            # Resize embeddings if we added new tokens
+            if need_resize:
+                self.model.resize_token_embeddings(len(self.tokenizer))
+                logger.debug(f"Resized token embeddings to {len(self.tokenizer)}")
 
             self._initialized = True
             logger.info(f"Model loaded successfully on {self.device}")
