@@ -333,20 +333,47 @@ class GenerationEngine:
         return processed
 
     def _extract_thinking(self, response: str) -> tuple:
-        """Extract thinking process from response
+        """Extract thinking process from response - FIXED: More robust parsing
 
         Returns:
             Tuple of (thinking_content, answer_content)
         """
         import re
-        think_pattern = r'<think>(.*?)</think>'
 
-        # Find thinking content in <think> tags
-        thinking_match = re.search(think_pattern, response, flags=re.DOTALL | re.IGNORECASE)
-        thinking = thinking_match.group(1).strip() if thinking_match else ''
+        # FIXED: More robust XML-like tag extraction with proper handling
+        # Match opening tag, capture content, match closing tag (non-greedy, case-insensitive)
+        think_pattern = r'<think\s*>(.*?)</think\s*>'
 
-        # Remove thinking tags from answer
-        answer = re.sub(think_pattern, '', response, flags=re.DOTALL | re.IGNORECASE).strip()
+        thinking = ''
+        answer = response
+
+        try:
+            # Find all thinking blocks (in case there are multiple)
+            thinking_matches = re.findall(think_pattern, response, flags=re.DOTALL | re.IGNORECASE)
+            if thinking_matches:
+                # Combine all thinking blocks
+                thinking = '\n\n'.join(match.strip() for match in thinking_matches)
+
+            # Remove all thinking tags from answer (more conservative removal)
+            answer = re.sub(think_pattern, '', response, flags=re.DOTALL | re.IGNORECASE).strip()
+
+        except Exception as e:
+            # FIXED: Graceful fallback if regex fails
+            self.logger.warning("Failed to extract thinking tags with regex", {
+                "error": str(e)
+            })
+            # Try simple string-based extraction as fallback
+            if '<think>' in response.lower() and '</think>' in response.lower():
+                try:
+                    start_idx = response.lower().index('<think>')
+                    end_idx = response.lower().index('</think>') + len('</think>')
+                    thinking = response[start_idx+7:end_idx-8].strip()  # Extract between tags
+                    answer = response[:start_idx] + response[end_idx:]
+                    answer = answer.strip()
+                except Exception:
+                    # Complete fallback: treat entire response as answer
+                    thinking = ''
+                    answer = response
 
         # Also detect untagged thinking patterns (numbered steps at the start)
         # Pattern: Langkah/Step followed by number and colon at the beginning of lines
