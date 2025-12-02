@@ -68,7 +68,6 @@ This system provides intelligent legal consultation by combining:
 - [ ] Restrict CORS to known domains
 
 #### Phase 8C: Testing & Quality (Week 4)
-- [ ] Create real simulation/demo scripts for all features
 - [ ] Add API endpoint tests
 - [ ] Add load/performance tests
 - [ ] Increase test coverage to 80%+
@@ -90,30 +89,31 @@ This system provides intelligent legal consultation by combining:
 
 ### 📊 Test Coverage Status
 
-| Component | Unit Tests | Integration Tests | Demo Scripts | Coverage |
-|-----------|-----------|------------------|--------------|----------|
-| Query Detection | ✅ Good | ❌ Missing | ❌ Missing | 70% |
-| Hybrid Search | ⚠️ Basic | ❌ Missing | ❌ Missing | 40% |
-| Knowledge Graph | ✅ Good | ❌ Missing | ❌ Missing | 50% |
-| Generation | ⚠️ Basic | ⚠️ Basic | ❌ Missing | 40% |
-| Providers | ✅ Good | ❌ Missing | ❌ Missing | 70% |
-| RAG Pipeline | ⚠️ Basic | ✅ Good | ⚠️ Basic | 60% |
-| API Routes | ❌ **None** | ❌ **None** | ❌ Missing | **0%** |
-| Gradio UI | ❌ **None** | ❌ **None** | ❌ Missing | **0%** |
+| Component | Unit Tests | Integration Tests | Coverage |
+|-----------|-----------|------------------|----------|
+| Query Detection | ✅ Good | ❌ Missing | 70% |
+| Hybrid Search | ⚠️ Basic | ❌ Missing | 40% |
+| Knowledge Graph | ✅ Good | ❌ Missing | 50% |
+| Generation | ⚠️ Basic | ⚠️ Basic | 40% |
+| Providers | ✅ Good | ❌ Missing | 70% |
+| RAG Pipeline | ⚠️ Basic | ✅ Good | 60% |
+| API Routes | ❌ **None** | ❌ **None** | **0%** |
+| Gradio UI | ❌ **None** | ❌ **None** | **0%** |
 
-**Action Required:** Create `demos/` directory with runnable simulation scripts for each feature.
+### 🔍 How to Validate
 
-### 🔍 How to Validate (Real Tests)
+Run existing tests to verify functionality:
 
-See [demos/README.md](demos/README.md) for step-by-step validation scripts for:
-- ✅ Basic RAG query (end-to-end)
-- ✅ Multi-researcher simulation
-- ✅ Knowledge graph enhancement
-- ✅ Streaming responses
-- ✅ Session management and export
-- ✅ All 5 LLM providers
-- ✅ API endpoints
-- ✅ Gradio UI features
+```bash
+# Run unit tests
+pytest tests/unit/ -v
+
+# Run integration tests (requires GPU)
+pytest tests/integration/ -v -m integration
+
+# Run all tests
+pytest -v
+```
 
 ---
 
@@ -181,11 +181,11 @@ The feature documentation below doesn't mention these **7 critical issues** foun
 
 ### How to Verify Reality
 
-See the **"Current Status & Roadmap"** section at the top for accurate assessment, or run:
+See the **"Current Status & Roadmap"** section at the top for accurate assessment, or:
 
 ```bash
-# Test what actually works
-python demos/08_full_system_test.py
+# Run existing tests
+pytest tests/ -v
 
 # Read comprehensive review
 cat REVIEW_2025-12-02.md
