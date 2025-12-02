@@ -115,7 +115,87 @@ See [demos/README.md](demos/README.md) for step-by-step validation scripts for:
 
 ---
 
+## ⚠️ Important Note: README Accuracy
+
+**Question:** Does the information below align with the actual program state?
+
+**Answer:** PARTIALLY - The sections below are technically accurate (all features exist in code) but may be misleading about production-readiness.
+
+### What IS Accurate ✅
+- **Architecture diagrams** - Match actual code structure perfectly
+- **All features DO exist** - Code files verified and functional
+- **Directory structure** - Matches reality exactly
+- **Component descriptions** - Accurate technical documentation
+
+### What Can Be Misleading ⚠️
+
+The sections below mark many features as "✅ Complete" which is true in that:
+- ✅ The code exists and works functionally
+- ✅ The features can be used and tested
+
+**However**, "Complete" does NOT mean "Production-Ready" because:
+
+| Feature Status | What It Actually Means |
+|----------------|----------------------|
+| Phase 3: Test Infrastructure ✅ Complete | Infrastructure exists BUT 0% coverage for API/UI, no load/security tests |
+| Phase 4: API Layer ✅ Complete | Works BUT no auth, rate limiting, has critical bugs |
+| Core RAG ✅ Complete | Works BUT has division by zero bug |
+| Multi-Researcher ✅ Complete | Works BUT has memory leak |
+| Session Management ✅ Complete | Works BUT no persistence (in-memory only) |
+| Multi-GPU/Analytics/Forms ✅ Complete | Code exists BUT not tested |
+
+### Critical Issues Not Mentioned Below
+
+The feature documentation below doesn't mention these **7 critical issues** found in the code review:
+
+1. 🔴 Division by zero in `hybrid_search.py:145` (app crash risk)
+2. 🔴 XML parsing failure in `generation_engine.py:470` (data loss)
+3. 🔴 Global state in `api/server.py:18` (won't scale)
+4. ⚠️ Memory leak in `stages_research.py:284` (stability issue)
+5. ⚠️ No session persistence (data lost on restart)
+6. ⚠️ No API rate limiting (DoS vulnerability)
+7. ⚠️ No authentication (security risk)
+
+### Security Gaps Not Mentioned Below
+
+- ❌ No authentication or authorization
+- ❌ No rate limiting
+- ❌ No input validation
+- ❌ CORS wide open (`allow_origins=["*"]`)
+- ❌ No HTTPS enforcement
+
+### Actual Production Readiness: 7/10
+
+**Ready for:**
+- ✅ Single-user deployments
+- ✅ Development/testing environments
+- ✅ Proof of concept demos
+- ✅ Internal use
+
+**Needs 2-3 weeks of fixes for:**
+- ⚠️ Multi-user production (persistence, auth)
+- ⚠️ High-scale deployments (bug fixes, caching)
+- ⚠️ Public APIs (security, rate limiting)
+
+### How to Verify Reality
+
+See the **"Current Status & Roadmap"** section at the top for accurate assessment, or run:
+
+```bash
+# Test what actually works
+python demos/08_full_system_test.py
+
+# Read comprehensive review
+cat REVIEW_2025-12-02.md
+```
+
+> 💡 **Recommendation:** Treat features below as "implemented and functional" rather than "production-ready". The "Current Status & Roadmap" section at the top provides the honest production readiness assessment.
+
+---
+
 ## Project Phases & Status
+
+> ⚠️ **Note:** Features listed as "Complete" below exist in code and work functionally, but may have bugs or missing production features. See "Current Status & Roadmap" and "README Accuracy" sections above for true production readiness.
 
 | Phase | Description | Status |
 |-------|-------------|--------|
