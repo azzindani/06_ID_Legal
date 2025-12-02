@@ -13,6 +13,108 @@ This system provides intelligent legal consultation by combining:
 
 ---
 
+## 📋 Current Status & Roadmap
+
+**Last Updated:** 2025-12-02
+**Production Readiness:** 7/10 (see [REVIEW_2025-12-02.md](REVIEW_2025-12-02.md))
+
+### ✅ What Works (Ready to Use)
+
+| Feature | Status | Documentation |
+|---------|--------|---------------|
+| **Core RAG Pipeline** | ✅ Fully Functional | [Quick Start](#quick-start) |
+| **Semantic + Keyword Search** | ✅ Production Ready | [core/search/README.md](core/search/README.md) |
+| **Knowledge Graph Enhancement** | ✅ Production Ready | [core/knowledge_graph/README.md](core/knowledge_graph/README.md) |
+| **Multi-Researcher Simulation** | ✅ Working | [core/search/README.md](core/search/README.md) |
+| **LLM Generation (5 Providers)** | ✅ Production Ready | [providers/README.md](providers/README.md) |
+| **Streaming Responses** | ✅ Production Ready | [pipeline/README.md](pipeline/README.md) |
+| **Session Management** | ✅ Functional (in-memory) | [conversation/README.md](conversation/README.md) |
+| **Export (MD/JSON/HTML)** | ✅ Production Ready | [conversation/README.md](conversation/README.md) |
+| **REST API** | ✅ Basic Functional | [api/README.md](api/README.md) |
+| **Gradio Web UI** | ✅ Fully Functional | [ui/README.md](ui/README.md) |
+| **CLI Interface** | ✅ Fully Functional | [main.py](main.py) |
+| **Docker Deployment** | ✅ Ready | [docs/deployment.md](docs/deployment.md) |
+
+### 🔴 Critical Issues (Must Fix Before Production)
+
+| Priority | Issue | Impact | Location | Fix ETA |
+|----------|-------|--------|----------|---------|
+| **🔴 CRITICAL** | Division by zero in hybrid search | **App crash** | `core/search/hybrid_search.py:145` | 1 day |
+| **🔴 CRITICAL** | XML parsing failure in thinking | **Data loss** | `core/generation/generation_engine.py:470` | 1 day |
+| **🔴 CRITICAL** | Global state in API (won't scale) | **Race conditions** | `api/server.py:18` | 3 days |
+| **⚠️ HIGH** | Memory leak in persona tracking | **Long-term stability** | `core/search/stages_research.py:284` | 2 days |
+| **⚠️ HIGH** | No session persistence | **Data loss on restart** | `conversation/manager.py` | 1 week |
+| **⚠️ HIGH** | No API rate limiting | **DoS vulnerability** | `api/server.py` | 2 days |
+| **⚠️ HIGH** | No authentication | **Security risk** | `api/server.py` | 1 week |
+
+**Total Fix Time:** ~2-3 weeks
+
+### 🎯 Next Steps (Prioritized)
+
+#### Phase 8A: Critical Bug Fixes (Week 1)
+- [ ] Fix division by zero in hybrid search
+- [ ] Fix XML parsing with proper parser + fallback
+- [ ] Add input validation and length limits
+- [ ] Add basic rate limiting
+- [ ] Fix memory leak in persona tracking
+
+#### Phase 8B: Security & Stability (Weeks 2-3)
+- [ ] Add JWT authentication or API keys
+- [ ] Implement session persistence (SQLite/Redis)
+- [ ] Fix global state in API server (dependency injection)
+- [ ] Add comprehensive input sanitization
+- [ ] Restrict CORS to known domains
+
+#### Phase 8C: Testing & Quality (Week 4)
+- [ ] Create real simulation/demo scripts for all features
+- [ ] Add API endpoint tests
+- [ ] Add load/performance tests
+- [ ] Increase test coverage to 80%+
+- [ ] Add security penetration tests
+
+#### Phase 9: Production Enhancements (Months 2-3)
+- [ ] Add Redis caching layer
+- [ ] Implement monitoring/metrics (Prometheus)
+- [ ] Add distributed tracing (OpenTelemetry)
+- [ ] External prompt templates
+- [ ] Improved factual consistency (NLI model)
+
+#### Phase 10: Advanced Features (Months 3-6)
+- [ ] Multi-database RAG support
+- [ ] Contract database integration
+- [ ] Advanced analytics dashboard
+- [ ] Multi-language support (ID ↔ EN)
+- [ ] Compliance checker
+
+### 📊 Test Coverage Status
+
+| Component | Unit Tests | Integration Tests | Demo Scripts | Coverage |
+|-----------|-----------|------------------|--------------|----------|
+| Query Detection | ✅ Good | ❌ Missing | ❌ Missing | 70% |
+| Hybrid Search | ⚠️ Basic | ❌ Missing | ❌ Missing | 40% |
+| Knowledge Graph | ✅ Good | ❌ Missing | ❌ Missing | 50% |
+| Generation | ⚠️ Basic | ⚠️ Basic | ❌ Missing | 40% |
+| Providers | ✅ Good | ❌ Missing | ❌ Missing | 70% |
+| RAG Pipeline | ⚠️ Basic | ✅ Good | ⚠️ Basic | 60% |
+| API Routes | ❌ **None** | ❌ **None** | ❌ Missing | **0%** |
+| Gradio UI | ❌ **None** | ❌ **None** | ❌ Missing | **0%** |
+
+**Action Required:** Create `demos/` directory with runnable simulation scripts for each feature.
+
+### 🔍 How to Validate (Real Tests)
+
+See [demos/README.md](demos/README.md) for step-by-step validation scripts for:
+- ✅ Basic RAG query (end-to-end)
+- ✅ Multi-researcher simulation
+- ✅ Knowledge graph enhancement
+- ✅ Streaming responses
+- ✅ Session management and export
+- ✅ All 5 LLM providers
+- ✅ API endpoints
+- ✅ Gradio UI features
+
+---
+
 ## Project Phases & Status
 
 | Phase | Description | Status |
