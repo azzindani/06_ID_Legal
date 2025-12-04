@@ -276,30 +276,45 @@ python -m pytest tests/unit/ -v --cov=. --cov-report=html
 python -m pytest tests/unit/test_generation.py -v
 ```
 
-### Run All Integration Tests
+### Run Comprehensive Integration Tests (NEW - Production-Ready)
+
+These tests show REAL output and initialize the full system like production:
 
 ```bash
-# Run comprehensive test (tests all major components)
-python tests/integration/comprehensive_test.py
+# 1. Production Readiness Test (Complete System)
+# Tests: Simple queries, complex queries, multi-turn, bug fixes, performance
+python tests/integration/test_production_ready.py
 
-# Run end-to-end test
-python tests/integration/test_end_to_end.py
+# 2. API Endpoints Test (Full API Testing)
+# Tests: Health, search, generate, sessions, validation, rate limiting
+python tests/integration/test_api_endpoints.py
 
-# Run complete RAG test
+# 3. Session & Export Test (Conversation Management)
+# Tests: Sessions, history, Markdown/JSON/HTML export
+python tests/integration/test_session_export.py
+
+# 4. Complete RAG Pipeline Test
 python tests/integration/test_complete_rag.py
 
-# Run integrated system test
+# 5. Integrated System Test
 python tests/integration/test_integrated_system.py
+
+# 6. End-to-End Test (with pytest)
+python -m pytest tests/integration/test_end_to_end.py -v -s
 ```
 
-### Run Diagnostic Tests
+### Run All Integration Tests at Once
 
 ```bash
-# Diagnose search functionality
-python tests/integration/diagnose_search.py
+# Run specific comprehensive tests
+python tests/integration/test_production_ready.py && \
+python tests/integration/test_session_export.py
 
-# Diagnose full pipeline
-python tests/integration/diagnose_pipeline.py
+# Or run all Python-based tests (shows real output)
+for test in tests/integration/test_*.py; do
+    echo "Running $test..."
+    python "$test" || echo "Failed: $test"
+done
 ```
 
 ## 🌐 Testing the API
