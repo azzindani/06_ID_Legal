@@ -320,13 +320,32 @@ python tests/integration/test_audit_metadata.py --query "Apa sanksi UU ITE?"
 # Compare multiple queries
 python tests/integration/test_audit_metadata.py --multi
 
-# 6. Complete RAG Pipeline Test
+# 6. Performance & Load Testing (BENCHMARKS) 📊
+# Tests: Response times, concurrent handling, memory usage, throughput
+# Output includes:
+#   - Query response times by type (simple, sanction, procedural, complex)
+#   - P50/P90/P99 latency percentiles
+#   - Throughput (queries per second)
+#   - Memory profiling
+#   - Concurrent load testing
+python tests/integration/test_performance.py
+
+# Full benchmark suite (all query types)
+python tests/integration/test_performance.py --full
+
+# Concurrent load test
+python tests/integration/test_performance.py --concurrent --threads 3 --queries 2
+
+# Memory profiling
+python tests/integration/test_performance.py --memory
+
+# 7. Complete RAG Pipeline Test
 python tests/integration/test_complete_rag.py
 
-# 7. Integrated System Test
+# 8. Integrated System Test
 python tests/integration/test_integrated_system.py
 
-# 8. End-to-End Test (with pytest)
+# 9. End-to-End Test (with pytest)
 python -m pytest tests/integration/test_end_to_end.py -v -s
 ```
 
@@ -505,6 +524,84 @@ Each document shows 6 individual scores that combine into final score:
 - **Legal Completeness** (0-1): Document comprehensiveness
 
 Final Score = weighted sum of above (default weights: 0.25, 0.15, 0.20, 0.20, 0.10, 0.10)
+
+## 📊 Performance & Load Testing
+
+The performance test (`test_performance.py`) provides benchmarks for system performance and scalability.
+
+### What It Measures
+
+**1. Response Time Benchmarks**
+- Tests 4 query categories: simple, sanction, procedural, complex
+- Calculates: average, min, max, P50, P90, P99 latencies
+- Tracks success rate per query type
+
+**2. Concurrent Load Testing**
+- Multi-threaded query execution
+- Configurable threads (default: 3) and queries per thread
+- Measures true throughput (QPS) under load
+
+**3. Memory Profiling**
+- Tracks memory delta per query
+- Monitors peak memory usage
+- Identifies potential memory leaks
+
+### Running Performance Tests
+
+```bash
+# Quick performance test (simple + sanction queries only)
+python tests/integration/test_performance.py
+
+# Full benchmark (all 4 query types)
+python tests/integration/test_performance.py --full
+
+# Concurrent load test (3 threads, 2 queries each)
+python tests/integration/test_performance.py --concurrent
+
+# Custom concurrent settings
+python tests/integration/test_performance.py --concurrent --threads 5 --queries 3
+
+# Memory profiling only
+python tests/integration/test_performance.py --memory
+
+# Minimal output (quiet mode)
+python tests/integration/test_performance.py --quiet
+```
+
+### Example Output
+
+```
+  OVERALL PERFORMANCE
+======================================================================
+
+  Queries:
+    Total:      12
+    Successful: 12 (100.0%)
+    Failed:     0
+
+  Response Times:
+    Average:    3.45s
+    Min:        2.12s
+    Max:        5.87s
+    P50:        3.21s
+    P90:        4.98s
+    P99:        5.87s
+
+  Throughput:
+    QPS:        0.289 queries/second
+    Total Time: 41.42s
+```
+
+### Performance Baselines
+
+Expected performance on typical hardware:
+
+| Metric | CPU-only | Single GPU |
+|--------|----------|------------|
+| Simple Query | 3-5s | 1-2s |
+| Complex Query | 8-15s | 3-5s |
+| Concurrent QPS | 0.2-0.3 | 0.5-1.0 |
+| Memory per Query | <100MB | <500MB |
 
 ## 📊 Verification Checklist
 
