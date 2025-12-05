@@ -301,13 +301,32 @@ python tests/integration/test_streaming.py
 # Optional: Test API streaming endpoints too (requires starting server)
 python tests/integration/test_streaming.py --api
 
-# 5. Complete RAG Pipeline Test
+# 5. Comprehensive Audit & Metadata Test (FULL TRANSPARENCY) 🔍
+# Shows ALL internal details: scores, calculations, metadata, references
+# Perfect for: auditing, debugging, UI development, understanding ranking
+# Output includes:
+#   - All scoring details (semantic, keyword, KG, authority, temporal, completeness)
+#   - Weight calculations and final scores
+#   - Complete document metadata with entities & relationships
+#   - Phase-by-phase research results
+#   - Persona contributions
+#   - Timing breakdowns
+#   - Full JSON metadata dump
+python tests/integration/test_audit_metadata.py
+
+# Custom query
+python tests/integration/test_audit_metadata.py --query "Apa sanksi UU ITE?"
+
+# Compare multiple queries
+python tests/integration/test_audit_metadata.py --multi
+
+# 6. Complete RAG Pipeline Test
 python tests/integration/test_complete_rag.py
 
-# 6. Integrated System Test
+# 7. Integrated System Test
 python tests/integration/test_integrated_system.py
 
-# 7. End-to-End Test (with pytest)
+# 8. End-to-End Test (with pytest)
 python -m pytest tests/integration/test_end_to_end.py -v -s
 ```
 
@@ -398,6 +417,94 @@ Then open your browser to `http://localhost:7860` and test:
 2. **Complex Query**: "Bagaimana prosedur pelaporan pelanggaran data pribadi menurut UU PDP?"
 3. **Session Testing**: Create a session and ask follow-up questions
 4. **Export Testing**: Try exporting conversation to different formats
+
+## 🔍 Audit & Transparency Testing
+
+The audit test (`test_audit_metadata.py`) provides complete transparency into the RAG system's decision-making process.
+
+### Use Cases
+
+**1. Auditing Search Results**
+```bash
+# See exactly how documents are scored and ranked
+python tests/integration/test_audit_metadata.py --query "Apa sanksi UU ITE?"
+```
+
+Output shows:
+- Individual scores: semantic (0.8234), keyword (0.6521), KG (0.7123), etc.
+- Weight calculations: how final score is computed
+- Visual score bars for quick assessment
+- Complete document metadata
+
+**2. Debugging Unexpected Results**
+```bash
+# Compare scoring across multiple queries
+python tests/integration/test_audit_metadata.py --multi
+```
+
+Helps identify:
+- Why certain documents rank higher than others
+- Which scoring components contribute most
+- Query type classification accuracy
+- Performance variations
+
+**3. UI Development Reference**
+```bash
+# Get complete JSON metadata for UI implementation
+python tests/integration/test_audit_metadata.py --query "Your query" > audit_output.txt
+```
+
+Provides:
+- All metadata fields available
+- Score breakdowns for display
+- Citation formatting examples
+- Phase-by-phase research data
+
+**4. Verifying Multi-Researcher Consensus**
+
+The audit shows:
+- Which researchers (personas) contributed
+- Confidence scores per researcher
+- Top candidates from each phase
+- Consensus building process
+
+**5. Understanding Knowledge Graph Impact**
+
+Shows detailed KG metrics:
+- Authority scores (regulatory hierarchy)
+- Temporal scores (recency/relevance)
+- Completeness scores (coverage)
+- Extracted entities and relationships
+- Document references
+
+### Example Output Sections
+
+The audit test displays **11 comprehensive sections**:
+
+1. **Generated Answer** - Final response
+2. **Thinking Process** - Internal reasoning (if available)
+3. **Timing Breakdown** - Where time is spent (retrieval vs generation)
+4. **Query Analysis** - Query type, results count, cache status
+5. **Research Phases** - Multi-researcher analysis details
+6. **Source Documents** - Full scoring for each source
+7. **Citations** - Formatted legal references
+8. **Complete Metadata** - JSON dump for programmatic use
+9. **Scoring Breakdown** - Visual bars and percentages for all score types
+10. **Document Metadata** - Entities, relationships, references
+11. **Audit Summary** - High-level statistics
+
+### Scoring Details Explained
+
+Each document shows 6 individual scores that combine into final score:
+
+- **Semantic Match** (0-1): Embedding similarity to query
+- **Keyword Precision** (0-1): TF-IDF keyword matching
+- **Knowledge Graph** (0-1): Entity/relationship relevance
+- **Authority Hierarchy** (0-1): Regulatory importance level
+- **Temporal Relevance** (0-1): Recency and validity
+- **Legal Completeness** (0-1): Document comprehensiveness
+
+Final Score = weighted sum of above (default weights: 0.25, 0.15, 0.20, 0.20, 0.10, 0.10)
 
 ## 📊 Verification Checklist
 

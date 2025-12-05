@@ -91,7 +91,9 @@ This system provides intelligent legal consultation by combining:
 
 #### Phase 8C: Testing & Quality (Current - Next)
 - [x] Add API endpoint tests ✅ (6 endpoints tested)
-- [x] Add integration tests ✅ (3 comprehensive tests)
+- [x] Add integration tests ✅ (4 comprehensive tests)
+- [x] Add streaming LLM test ✅ (test_streaming.py - real-time output)
+- [x] Add audit/transparency test ✅ (test_audit_metadata.py - full scoring details)
 - [ ] Add load/performance tests
 - [ ] Add security penetration tests
 - [ ] Increase unit test coverage to 80%+
@@ -123,6 +125,8 @@ This system provides intelligent legal consultation by combining:
 | **API Routes** | ❌ None | ✅ **~80%** | **80%** | **test_api_endpoints.py** |
 | **Session Mgmt** | ❌ None | ✅ **Full** | **90%** | **test_session_export.py** |
 | **Export (MD/JSON/HTML)** | ❌ None | ✅ **All formats** | **100%** | **test_session_export.py** |
+| **Streaming Output** | ❌ None | ✅ **Full** | **100%** | **test_streaming.py** |
+| **Audit/Metadata** | ❌ None | ✅ **Complete** | **100%** | **test_audit_metadata.py** |
 | Gradio UI | ❌ None | ❌ None | 0% | Manual only |
 
 ### 🔍 How to Validate Bug Fixes
@@ -146,8 +150,21 @@ pytest tests/unit/ -v
 # Run integration tests (requires GPU)
 pytest tests/integration/ -v -m integration
 
-# Run comprehensive system test
-python tests/integration/comprehensive_test.py
+# Run production-ready tests (show REAL output, initialize like production)
+python tests/integration/test_production_ready.py    # Complete system test
+python tests/integration/test_api_endpoints.py       # API endpoints
+python tests/integration/test_session_export.py      # Sessions & export
+python tests/integration/test_streaming.py           # Real-time streaming
+python tests/integration/test_audit_metadata.py      # Full audit with all scores
+
+# Streaming with API tests (slower, starts server)
+python tests/integration/test_streaming.py --api
+
+# Audit with custom query
+python tests/integration/test_audit_metadata.py --query "Your question"
+
+# Compare multiple queries (for debugging)
+python tests/integration/test_audit_metadata.py --multi
 ```
 
 **See full testing guide:** [TESTING_GUIDE.md](TESTING_GUIDE.md)
