@@ -1,19 +1,26 @@
 #!/usr/bin/env python3
 """
-Streaming Test - Real-time LLM Output Testing
+Streaming Test - Real-time LLM Output Testing using TextIteratorStreamer
 
-Tests the streaming capabilities of the RAG system:
-1. Direct pipeline streaming (token-by-token output)
-2. API SSE (Server-Sent Events) streaming endpoint
-3. Session-based streaming with conversation context
+Tests the streaming capabilities of the RAG system using TextIteratorStreamer:
+1. Direct LLM streaming (llm_engine.generate_stream with TextIteratorStreamer)
+2. Pipeline streaming (RAGPipeline.query with stream=True)
+3. API SSE (Server-Sent Events) streaming endpoint
+4. Session-based streaming with conversation context
 
-This test shows REAL streaming output like ChatGPT interface -
-you can see tokens appearing in real-time.
+IMPORTANT: This system uses HuggingFace's TextIteratorStreamer for REAL
+token-by-token streaming, exactly like ChatGPT. Tokens are yielded as the
+model generates them in a background thread.
+
+The streaming implementation is in:
+- core/generation/llm_engine.py:303-460 (TextIteratorStreamer)
+- core/generation/generation_engine.py:217-280 (_generate_streaming_answer)
 
 Run with:
     python tests/integration/test_streaming.py
     python tests/integration/test_streaming.py --api  # Test API endpoint
     python tests/integration/test_streaming.py --query "Your custom question"
+    python tests/integration/test_streaming.py --llm   # Test LLM directly (skip RAG)
 """
 
 import sys
@@ -69,25 +76,104 @@ class StreamingTester:
             traceback.print_exc()
             return False
 
-    def test_direct_streaming(self, query: str = None) -> bool:
+    def test_llm_direct_streaming(self, prompt: str = None) -> bool:
         """
-        Test 1: Direct Pipeline Streaming
+        Test 0: Direct LLM TextIteratorStreamer Test
 
-        Shows real-time token generation from the LLM.
-        This is like watching ChatGPT type out a response.
+        Tests the LLM engine directly using TextIteratorStreamer.
+        This bypasses RAG and tests pure LLM streaming.
+
+        The LLM uses:
+        - TextIteratorStreamer from transformers
+        - Background thread for generation
+        - Real token-by-token yielding
         """
         self.logger.info("\n" + "=" * 80)
-        self.logger.info("TEST 1: Direct Pipeline Streaming")
+        self.logger.info("TEST 0: Direct LLM TextIteratorStreamer Streaming")
+        self.logger.info("=" * 80)
+
+        prompt = prompt or "Jelaskan secara singkat apa itu hukum perdata di Indonesia."
+        self.logger.info(f"Prompt: {prompt}")
+        self.logger.info("Using: TextIteratorStreamer + Background Thread")
+        self.logger.info("\n" + "-" * 40)
+        self.logger.info("RAW LLM STREAMING (token-by-token):")
+        self.logger.info("-" * 40 + "\n")
+
+        try:
+            # Access LLM engine directly
+            llm_engine = self.pipeline.generation_engine.llm_engine
+
+            start_time = time.time()
+            first_token_time = None
+            total_tokens = 0
+            full_response = ""
+
+            print(">>> ", end="", flush=True)
+
+            # Use generate_stream which uses TextIteratorStreamer
+            for chunk in llm_engine.generate_stream(prompt, max_new_tokens=256):
+                if chunk.get('success'):
+                    if not chunk.get('done'):
+                        token = chunk.get('token', '')
+                        if token:
+                            if first_token_time is None:
+                                first_token_time = time.time() - start_time
+
+                            print(token, end="", flush=True)
+                            full_response += token
+                            total_tokens = chunk.get('tokens_generated', total_tokens + 1)
+                    else:
+                        # Final chunk with stats
+                        total_tokens = chunk.get('tokens_generated', total_tokens)
+
+            print("\n")
+
+            elapsed = time.time() - start_time
+
+            self.logger.info("-" * 40)
+            self.logger.info("TextIteratorStreamer STATISTICS:")
+            self.logger.info(f"  Time to First Token: {first_token_time:.3f}s" if first_token_time else "  Time to First Token: N/A")
+            self.logger.info(f"  Total Time: {elapsed:.2f}s")
+            self.logger.info(f"  Tokens Generated: {total_tokens}")
+            self.logger.info(f"  Response Length: {len(full_response)} characters")
+
+            if total_tokens > 0 and elapsed > 0:
+                tokens_per_sec = total_tokens / elapsed
+                self.logger.info(f"  Speed: {tokens_per_sec:.1f} tokens/sec")
+
+            self.logger.success("Direct LLM streaming test passed")
+            return True
+
+        except Exception as e:
+            self.logger.error(f"Direct LLM streaming test failed: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    def test_direct_streaming(self, query: str = None) -> bool:
+        """
+        Test 1: Pipeline Streaming (RAG + TextIteratorStreamer)
+
+        Shows real-time token generation through the full RAG pipeline.
+        Uses TextIteratorStreamer under the hood via:
+        - RAGPipeline.query(stream=True)
+        - GenerationEngine._generate_streaming_answer()
+        - LLMEngine.generate_stream() with TextIteratorStreamer
+        """
+        self.logger.info("\n" + "=" * 80)
+        self.logger.info("TEST 1: Pipeline Streaming (RAG + TextIteratorStreamer)")
         self.logger.info("=" * 80)
 
         query = query or "Apa sanksi pelanggaran UU ITE?"
         self.logger.info(f"Query: {query}")
+        self.logger.info("Pipeline: RAGPipeline -> GenerationEngine -> LLMEngine.generate_stream()")
         self.logger.info("\n" + "-" * 40)
         self.logger.info("STREAMING RESPONSE (real-time):")
         self.logger.info("-" * 40 + "\n")
 
         try:
             start_time = time.time()
+            first_token_time = None
             total_tokens = 0
             full_response = ""
 
@@ -96,12 +182,23 @@ class StreamingTester:
 
             for chunk in self.pipeline.query(query, stream=True):
                 if isinstance(chunk, dict):
+                    # Check for streaming token
+                    if chunk.get('type') == 'token':
+                        token = chunk.get('token', '')
+                        if token:
+                            if first_token_time is None:
+                                first_token_time = time.time() - start_time
+                            print(token, end="", flush=True)
+                            full_response += token
+                            total_tokens = chunk.get('tokens_generated', total_tokens + 1)
                     # Final result with metadata
-                    if 'answer' in chunk:
+                    elif 'answer' in chunk:
                         full_response = chunk['answer']
                         total_tokens = chunk.get('metadata', {}).get('tokens_generated', 0)
                 else:
                     # Text chunk - print in real-time
+                    if first_token_time is None:
+                        first_token_time = time.time() - start_time
                     print(chunk, end="", flush=True)
                     full_response += str(chunk)
                     total_tokens += 1
@@ -112,15 +209,16 @@ class StreamingTester:
 
             self.logger.info("-" * 40)
             self.logger.info("STREAMING STATISTICS:")
+            self.logger.info(f"  Time to First Token: {first_token_time:.3f}s" if first_token_time else "  Time to First Token: N/A")
             self.logger.info(f"  Total Time: {elapsed:.2f}s")
             self.logger.info(f"  Response Length: {len(full_response)} characters")
             self.logger.info(f"  Tokens Generated: {total_tokens}")
 
-            if total_tokens > 0:
+            if total_tokens > 0 and elapsed > 0:
                 tokens_per_sec = total_tokens / elapsed
                 self.logger.info(f"  Speed: {tokens_per_sec:.1f} tokens/sec")
 
-            self.logger.success("Direct streaming test passed")
+            self.logger.success("Pipeline streaming test passed")
             return True
 
         except Exception as e:
@@ -423,11 +521,11 @@ class StreamingTester:
             self.pipeline.shutdown()
             self.logger.success("Shutdown complete")
 
-    def run_all_tests(self, query: str = None) -> bool:
+    def run_all_tests(self, query: str = None, include_llm_direct: bool = True) -> bool:
         """Run all streaming tests"""
-        self.logger.info("\n" + "STREAMING TEST SUITE".center(80))
+        self.logger.info("\n" + "STREAMING TEST SUITE (TextIteratorStreamer)".center(80))
         self.logger.info("=" * 80)
-        self.logger.info("Testing real-time streaming output capabilities")
+        self.logger.info("Testing real-time streaming using TextIteratorStreamer")
         self.logger.info("=" * 80)
 
         # Initialize
@@ -439,7 +537,9 @@ class StreamingTester:
 
         try:
             # Run tests
-            results.append(("Direct Streaming", self.test_direct_streaming(query)))
+            if include_llm_direct:
+                results.append(("Direct LLM (TextIteratorStreamer)", self.test_llm_direct_streaming()))
+            results.append(("Pipeline Streaming", self.test_direct_streaming(query)))
             results.append(("Streaming with Sources", self.test_streaming_with_sources(query)))
             results.append(("Session Streaming", self.test_session_streaming(query)))
             results.append(("Streaming Comparison", self.test_streaming_comparison(query)))
@@ -468,6 +568,23 @@ class StreamingTester:
 
         return passed == total
 
+    def run_llm_only_test(self, prompt: str = None) -> bool:
+        """Run only the direct LLM TextIteratorStreamer test"""
+        self.logger.info("\n" + "DIRECT LLM STREAMING TEST".center(80))
+        self.logger.info("=" * 80)
+        self.logger.info("Testing TextIteratorStreamer directly (bypassing RAG)")
+        self.logger.info("=" * 80)
+
+        # Initialize
+        if not self.initialize_pipeline():
+            self.logger.error("Cannot proceed without pipeline")
+            return False
+
+        try:
+            return self.test_llm_direct_streaming(prompt)
+        finally:
+            self.shutdown()
+
     def run_api_test(self, query: str = None) -> bool:
         """Run only API streaming test (no pipeline init needed)"""
         self.logger.info("\n" + "API STREAMING TEST".center(80))
@@ -479,7 +596,7 @@ class StreamingTester:
 def main():
     """Main entry point with argument parsing"""
     parser = argparse.ArgumentParser(
-        description="Test streaming capabilities of the Legal RAG system"
+        description="Test streaming capabilities using TextIteratorStreamer"
     )
     parser.add_argument(
         '--query', '-q',
@@ -491,6 +608,11 @@ def main():
         '--api',
         action='store_true',
         help='Only test API streaming endpoint (requires running server)'
+    )
+    parser.add_argument(
+        '--llm',
+        action='store_true',
+        help='Only test direct LLM TextIteratorStreamer (bypasses RAG pipeline)'
     )
     parser.add_argument(
         '--comparison',
@@ -505,6 +627,8 @@ def main():
     try:
         if args.api:
             success = tester.run_api_test(args.query)
+        elif args.llm:
+            success = tester.run_llm_only_test(args.query)
         elif args.comparison:
             if tester.initialize_pipeline():
                 success = tester.test_streaming_comparison(args.query)
