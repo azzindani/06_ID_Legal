@@ -36,7 +36,7 @@ class ProductionReadyTester:
     """
 
     def __init__(self):
-        initialize_logging(level="INFO")
+        initialize_logging()
         self.logger = get_logger("ProductionTest")
         self.pipeline: Optional[RAGPipeline] = None
 

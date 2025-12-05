@@ -24,7 +24,7 @@ class SessionExportTester:
     """Comprehensive session and export tester"""
 
     def __init__(self):
-        initialize_logging(level="INFO")
+        initialize_logging()
         self.logger = get_logger("SessionExportTest")
         self.manager: ConversationManager = None
 
