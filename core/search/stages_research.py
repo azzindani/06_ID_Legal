@@ -289,7 +289,7 @@ class StagesResearchEngine:
         result_count: int
     ) -> None:
         """
-        Update persona performance metrics for adaptive learning.
+        Update persona performance metrics for adaptive learning - FIXED: Bounded memory
 
         Args:
             persona_name: Name of the research persona
@@ -297,6 +297,9 @@ class StagesResearchEngine:
             success_score: Score indicating success (0.0 to 1.0)
             result_count: Number of results contributed
         """
+        # FIXED: Maximum history size to prevent unbounded memory growth
+        MAX_HISTORY_SIZE = 100
+
         if not hasattr(self, '_persona_performance'):
             self._persona_performance = defaultdict(lambda: defaultdict(lambda: {
                 'total_queries': 0,
@@ -308,7 +311,12 @@ class StagesResearchEngine:
         perf = self._persona_performance[persona_name][query_type]
         perf['total_queries'] += 1
         perf['success_sum'] += success_score
+
+        # FIXED: Limit result_counts list size to prevent memory leak
         perf['result_counts'].append(result_count)
+        if len(perf['result_counts']) > MAX_HISTORY_SIZE:
+            # Keep only most recent entries (rolling window)
+            perf['result_counts'] = perf['result_counts'][-MAX_HISTORY_SIZE:]
 
         # Update rolling average
         perf['avg_success'] = perf['success_sum'] / perf['total_queries']
@@ -318,7 +326,8 @@ class StagesResearchEngine:
             "query_type": query_type,
             "success_score": f"{success_score:.3f}",
             "avg_success": f"{perf['avg_success']:.3f}",
-            "total_queries": perf['total_queries']
+            "total_queries": perf['total_queries'],
+            "history_size": len(perf['result_counts'])
         })
 
     def get_adjusted_persona(

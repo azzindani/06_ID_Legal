@@ -4,15 +4,26 @@ Session Routes
 Endpoints for conversation session management.
 """
 
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel, Field, validator
 from typing import List, Dict, Any, Optional
+import re
 
 router = APIRouter()
 
 
 class SessionCreateRequest(BaseModel):
-    session_id: Optional[str] = Field(None, description="Custom session ID")
+    session_id: Optional[str] = Field(None, max_length=100, description="Custom session ID")
+
+    @validator('session_id')
+    def validate_session_id(cls, v):
+        """Validate session ID format"""
+        if v is None:
+            return v
+        # Session ID should be alphanumeric with hyphens/underscores only
+        if not re.match(r'^[a-zA-Z0-9_-]+$', v):
+            raise ValueError("Session ID must contain only alphanumeric characters, hyphens, and underscores")
+        return v
 
 
 class SessionResponse(BaseModel):
@@ -44,9 +55,20 @@ class SessionHistory(BaseModel):
 class ExportRequest(BaseModel):
     format: str = Field("json", description="Export format: md, json, html")
 
+    @validator('format')
+    def validate_format(cls, v):
+        """Enforce whitelist of export formats"""
+        allowed_formats = ['md', 'json', 'html', 'markdown']
+        if v.lower() not in allowed_formats:
+            raise ValueError(f"Export format must be one of: {', '.join(allowed_formats)}")
+        # Normalize markdown variants
+        if v.lower() == 'markdown':
+            return 'md'
+        return v.lower()
+
 
 @router.post("/sessions", response_model=SessionResponse)
-async def create_session(request: SessionCreateRequest):
+async def create_session(session_request: SessionCreateRequest, request: Request):
     """
     Create a new conversation session
 
@@ -55,8 +77,8 @@ async def create_session(request: SessionCreateRequest):
     from ..server import get_conversation_manager
 
     try:
-        manager = get_conversation_manager()
-        session_id = manager.start_session(request.session_id)
+        manager = get_conversation_manager(request)
+        session_id = manager.start_session(session_request.session_id)
 
         session = manager.get_session(session_id)
 
@@ -71,7 +93,7 @@ async def create_session(request: SessionCreateRequest):
 
 
 @router.get("/sessions", response_model=List[SessionSummary])
-async def list_sessions():
+async def list_sessions(request: Request):
     """
     List all active sessions
 
@@ -80,7 +102,7 @@ async def list_sessions():
     from ..server import get_conversation_manager
 
     try:
-        manager = get_conversation_manager()
+        manager = get_conversation_manager(request)
         sessions = manager.list_sessions()
 
         return [
@@ -99,7 +121,7 @@ async def list_sessions():
 
 
 @router.get("/sessions/{session_id}", response_model=SessionSummary)
-async def get_session(session_id: str):
+async def get_session(session_id: str, request: Request):
     """
     Get session summary
 
@@ -108,7 +130,7 @@ async def get_session(session_id: str):
     from ..server import get_conversation_manager
 
     try:
-        manager = get_conversation_manager()
+        manager = get_conversation_manager(request)
         summary = manager.get_session_summary(session_id)
 
         if not summary:
@@ -129,7 +151,7 @@ async def get_session(session_id: str):
 
 
 @router.get("/sessions/{session_id}/history", response_model=SessionHistory)
-async def get_session_history(session_id: str, max_turns: Optional[int] = None):
+async def get_session_history(session_id: str, request: Request, max_turns: Optional[int] = None):
     """
     Get conversation history
 
@@ -138,7 +160,7 @@ async def get_session_history(session_id: str, max_turns: Optional[int] = None):
     from ..server import get_conversation_manager
 
     try:
-        manager = get_conversation_manager()
+        manager = get_conversation_manager(request)
         history = manager.get_history(session_id, max_turns)
 
         if history is None:
@@ -166,7 +188,7 @@ async def get_session_history(session_id: str, max_turns: Optional[int] = None):
 
 
 @router.delete("/sessions/{session_id}")
-async def delete_session(session_id: str):
+async def delete_session(session_id: str, request: Request):
     """
     End and delete a session
 
@@ -175,7 +197,7 @@ async def delete_session(session_id: str):
     from ..server import get_conversation_manager
 
     try:
-        manager = get_conversation_manager()
+        manager = get_conversation_manager(request)
         result = manager.end_session(session_id)
 
         if not result:
@@ -190,7 +212,7 @@ async def delete_session(session_id: str):
 
 
 @router.post("/sessions/{session_id}/export")
-async def export_session(session_id: str, request: ExportRequest):
+async def export_session(session_id: str, export_request: ExportRequest, request: Request):
     """
     Export session to file
 
@@ -200,7 +222,7 @@ async def export_session(session_id: str, request: ExportRequest):
     from conversation import MarkdownExporter, JSONExporter, HTMLExporter
 
     try:
-        manager = get_conversation_manager()
+        manager = get_conversation_manager(request)
         session_data = manager.get_session(session_id)
 
         if not session_data:
@@ -212,13 +234,13 @@ async def export_session(session_id: str, request: ExportRequest):
             'html': HTMLExporter
         }
 
-        exporter_class = exporters.get(request.format, JSONExporter)
+        exporter_class = exporters.get(export_request.format, JSONExporter)
         exporter = exporter_class()
 
         content = exporter.export(session_data)
 
         return {
-            "format": request.format,
+            "format": export_request.format,
             "content": content,
             "session_id": session_id
         }

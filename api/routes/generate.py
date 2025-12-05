@@ -4,19 +4,44 @@ Generate Routes
 Endpoints for answer generation.
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 from typing import List, Dict, Any, Optional
 import json
+import re
 
 router = APIRouter()
 
 
 class GenerateRequest(BaseModel):
-    query: str = Field(..., min_length=1, description="Question to answer")
-    session_id: Optional[str] = Field(None, description="Session ID for context")
+    query: str = Field(..., min_length=1, max_length=2000, description="Question to answer")
+    session_id: Optional[str] = Field(None, max_length=100, description="Session ID for context")
     stream: bool = Field(False, description="Enable streaming response")
+
+    @validator('query')
+    def validate_query(cls, v):
+        """Enhanced validation for query input"""
+        v = v.strip()
+        if len(v) == 0:
+            raise ValueError("Query cannot be empty or only whitespace")
+        # Check for suspicious patterns
+        dangerous_patterns = ['<script', 'javascript:', 'onerror=', 'onclick=']
+        v_lower = v.lower()
+        for pattern in dangerous_patterns:
+            if pattern in v_lower:
+                raise ValueError("Query contains potentially dangerous content")
+        return v
+
+    @validator('session_id')
+    def validate_session_id(cls, v):
+        """Validate session ID format"""
+        if v is None:
+            return v
+        # Session ID should be alphanumeric with hyphens/underscores only
+        if not re.match(r'^[a-zA-Z0-9_-]+$', v):
+            raise ValueError("Session ID must contain only alphanumeric characters, hyphens, and underscores")
+        return v
 
 
 class Citation(BaseModel):
@@ -35,7 +60,7 @@ class GenerateResponse(BaseModel):
 
 
 @router.post("/generate", response_model=GenerateResponse)
-async def generate_answer(request: GenerateRequest):
+async def generate_answer(gen_request: GenerateRequest, request: Request):
     """
     Generate answer for a legal question
 
@@ -44,17 +69,17 @@ async def generate_answer(request: GenerateRequest):
     from ..server import get_pipeline, get_conversation_manager
 
     try:
-        pipeline = get_pipeline()
-        manager = get_conversation_manager()
+        pipeline = get_pipeline(request)
+        manager = get_conversation_manager(request)
 
         # Get conversation context if session provided
         context = None
-        if request.session_id:
-            context = manager.get_context_for_query(request.session_id)
+        if gen_request.session_id:
+            context = manager.get_context_for_query(gen_request.session_id)
 
         # Generate answer
         result = pipeline.query(
-            request.query,
+            gen_request.query,
             conversation_history=context,
             stream=False
         )
@@ -70,18 +95,18 @@ async def generate_answer(request: GenerateRequest):
             ))
 
         # Add to conversation history if session provided
-        if request.session_id:
+        if gen_request.session_id:
             manager.add_turn(
-                session_id=request.session_id,
-                query=request.query,
+                session_id=gen_request.session_id,
+                query=gen_request.query,
                 answer=result['answer'],
                 metadata=result.get('metadata')
             )
 
         return GenerateResponse(
             answer=result['answer'],
-            query=request.query,
-            session_id=request.session_id,
+            query=gen_request.query,
+            session_id=gen_request.session_id,
             citations=citations,
             metadata=result.get('metadata', {})
         )
@@ -91,7 +116,7 @@ async def generate_answer(request: GenerateRequest):
 
 
 @router.post("/generate/stream")
-async def generate_answer_stream(request: GenerateRequest):
+async def generate_answer_stream(gen_request: GenerateRequest, request: Request):
     """
     Generate answer with streaming response
 
@@ -101,18 +126,18 @@ async def generate_answer_stream(request: GenerateRequest):
 
     async def generate():
         try:
-            pipeline = get_pipeline()
-            manager = get_conversation_manager()
+            pipeline = get_pipeline(request)
+            manager = get_conversation_manager(request)
 
             # Get conversation context
             context = None
-            if request.session_id:
-                context = manager.get_context_for_query(request.session_id)
+            if gen_request.session_id:
+                context = manager.get_context_for_query(gen_request.session_id)
 
             # Stream response
             full_answer = ""
             for chunk in pipeline.query(
-                request.query,
+                gen_request.query,
                 conversation_history=context,
                 stream=True
             ):
@@ -126,10 +151,10 @@ async def generate_answer_stream(request: GenerateRequest):
                     yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
 
             # Save to history
-            if request.session_id and full_answer:
+            if gen_request.session_id and full_answer:
                 manager.add_turn(
-                    session_id=request.session_id,
-                    query=request.query,
+                    session_id=gen_request.session_id,
+                    query=gen_request.query,
                     answer=full_answer
                 )
 

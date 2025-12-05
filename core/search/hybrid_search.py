@@ -96,28 +96,33 @@ class HybridSearchEngine:
         persona: Dict[str, Any]
     ) -> Dict[str, float]:
         """Apply persona's search style to base weights"""
-        
+
         persona_style = persona['search_style']
         weights = base_weights.copy()
-        
+
         # Apply persona preferences
         if 'semantic_weight' in persona_style:
             weights['semantic_match'] = persona_style['semantic_weight']
-        
+
         if 'authority_weight' in persona_style:
             weights['authority_hierarchy'] = persona_style['authority_weight']
-        
+
         if 'kg_weight' in persona_style:
             weights['knowledge_graph'] = persona_style['kg_weight']
-        
+
         if 'temporal_weight' in persona_style:
             weights['temporal_relevance'] = persona_style['temporal_weight']
-        
-        # Normalize
+
+        # Normalize - FIXED: Add fallback for zero total
         total = sum(weights.values())
         if total > 0:
             weights = {k: v/total for k, v in weights.items()}
-        
+        else:
+            # Fallback to equal weights if all weights are zero
+            self.logger.warning("All weights are zero, using equal distribution")
+            num_weights = len(weights)
+            weights = {k: 1.0/num_weights for k in weights.keys()}
+
         return weights
     
     def _get_query_embedding(self, query: str) -> Optional[torch.Tensor]:
