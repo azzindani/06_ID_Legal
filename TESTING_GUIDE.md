@@ -276,7 +276,7 @@ python -m pytest tests/unit/ -v --cov=. --cov-report=html
 python -m pytest tests/unit/test_generation.py -v
 ```
 
-### Run Comprehensive Integration Tests (NEW - Production-Ready)
+### Run Comprehensive Integration Tests (Production-Ready)
 
 These tests show REAL output and initialize the full system like production:
 
@@ -293,13 +293,24 @@ python tests/integration/test_api_endpoints.py
 # Tests: Sessions, history, Markdown/JSON/HTML export
 python tests/integration/test_session_export.py
 
-# 4. Complete RAG Pipeline Test
+# 4. Streaming Test (Real-Time LLM Output)
+# Tests: Direct streaming, API SSE, session-based streaming
+python tests/integration/test_streaming.py
+python tests/integration/test_streaming.py --api  # API endpoint only
+
+# 5. Audit Metadata Test (Full Scoring Transparency)
+# Tests: All 6 scores, research phases, consensus analysis
+python tests/integration/test_audit_metadata.py
+python tests/integration/test_audit_metadata.py --json  # Full JSON dump
+python tests/integration/test_audit_metadata.py --multi  # Compare queries
+
+# 6. Complete RAG Pipeline Test
 python tests/integration/test_complete_rag.py
 
-# 5. Integrated System Test
+# 7. Integrated System Test
 python tests/integration/test_integrated_system.py
 
-# 6. End-to-End Test (with pytest)
+# 8. End-to-End Test (with pytest)
 python -m pytest tests/integration/test_end_to_end.py -v -s
 ```
 
@@ -473,3 +484,146 @@ chmod +x quick_validation.sh
 ```
 
 This comprehensive testing approach will verify that all 7 critical bugs have been fixed correctly!
+
+---
+
+## Real-Time Streaming Test
+
+Test the streaming capabilities for a ChatGPT-like experience:
+
+```bash
+# Run all streaming tests
+python tests/integration/test_streaming.py
+
+# Custom query
+python tests/integration/test_streaming.py --query "Apa sanksi UU ITE?"
+
+# Test only API streaming (requires running server)
+python tests/integration/test_streaming.py --api
+
+# Run streaming comparison (streaming vs non-streaming)
+python tests/integration/test_streaming.py --comparison
+```
+
+### What It Tests
+
+| Test | Description |
+|------|-------------|
+| Direct Streaming | Token-by-token output from LLM (like ChatGPT typing) |
+| Streaming with Sources | Sources shown first, then answer streams |
+| Session Streaming | Multi-turn with conversation context |
+| API SSE Streaming | Server-Sent Events via `/generate/stream` |
+| Comparison | Timing comparison: streaming vs non-streaming |
+
+### Example Output
+
+```
+>>> Undang-Undang ITE (UU No. 11 Tahun 2008) mengatur tentang...
+[tokens appear in real-time as LLM generates]
+
+STREAMING STATISTICS:
+  Total Time: 12.34s
+  Response Length: 1024 characters
+  Tokens Generated: 256
+  Speed: 20.7 tokens/sec
+```
+
+---
+
+## Audit Metadata Test - Full Scoring Transparency
+
+Get complete visibility into RAG scoring and decision-making:
+
+```bash
+# Run full audit
+python tests/integration/test_audit_metadata.py
+
+# Custom query
+python tests/integration/test_audit_metadata.py --query "Your question"
+
+# Get full JSON dump
+python tests/integration/test_audit_metadata.py --json
+
+# Compare multiple queries
+python tests/integration/test_audit_metadata.py --multi
+```
+
+### All 6 Scoring Dimensions
+
+Each document receives scores on 6 dimensions:
+
+| Score | Description | Weight |
+|-------|-------------|--------|
+| **Semantic** | Embedding similarity (how well document matches semantically) | ~25% |
+| **Keyword** | TF-IDF precision (exact keyword matches) | ~15% |
+| **KG** | Knowledge graph relevance (entities, relationships) | ~20% |
+| **Authority** | Legal hierarchy (UU > PP > Peraturan Menteri) | ~20% |
+| **Temporal** | Recency and time relevance | ~10% |
+| **Completeness** | Document structure and completeness | ~10% |
+
+### Example Output
+
+```
+1. UNDANG-UNDANG No. 27/2022
+   About: Perlindungan Data Pribadi...
+
+   SCORES (with visual bars):
+   ├─ Semantic:    ████████████████░░░░ 82.5%
+   ├─ Keyword:     ██████████░░░░░░░░░░ 51.2%
+   ├─ KG:          ████████████████████ 95.0%
+   ├─ Authority:   ████████████████████ 100.0%
+   ├─ Temporal:    ██████████████░░░░░░ 70.0%
+   ├─ Completeness:████████████░░░░░░░░ 60.0%
+   └─ FINAL:       █████████████████░░░ 85.3%
+
+   CONSENSUS:
+   ├─ Voting Ratio: 80.0%
+   └─ Personas: Senior, Junior, KG Specialist
+
+   KG METADATA:
+   ├─ Entities: 12
+   ├─ Cross-References: 5
+   ├─ Domain: data_privacy
+   ├─ Has Obligations: True
+   ├─ Has Prohibitions: True
+   └─ Has Permissions: False
+```
+
+### Research Phase Breakdown
+
+Shows which researcher found what in each phase:
+
+```
+Phase: initial_scan
+  Researcher: Senior Legal Researcher
+  Confidence: 95.0%
+  Candidates Found: 150
+  Top 3 Findings:
+    1. UU 27/2022 (score: 82.5%)
+    2. PP 71/2019 (score: 78.3%)
+    3. UU 11/2008 (score: 75.1%)
+```
+
+### Use Cases
+
+1. **Reference Checking**: Verify that the system found the correct regulations
+2. **UI Development**: Build rich UIs showing score breakdowns and sources
+3. **Quality Assurance**: Audit why certain documents were ranked higher
+4. **Debugging**: Understand why certain documents weren't retrieved
+
+---
+
+## Test Coverage Summary
+
+| Test File | Purpose | Run Command |
+|-----------|---------|-------------|
+| `test_production_ready.py` | Complete system test | `python tests/integration/test_production_ready.py` |
+| `test_api_endpoints.py` | Full API testing | `python tests/integration/test_api_endpoints.py` |
+| `test_session_export.py` | Sessions & export | `python tests/integration/test_session_export.py` |
+| `test_streaming.py` | Real-time streaming | `python tests/integration/test_streaming.py` |
+| `test_audit_metadata.py` | Full scoring transparency | `python tests/integration/test_audit_metadata.py` |
+
+All tests:
+- Initialize properly (like production startup)
+- Show REAL output (not just pass/fail)
+- Can run directly with `python tests/integration/test_*.py`
