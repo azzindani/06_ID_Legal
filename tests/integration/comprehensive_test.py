@@ -5,7 +5,8 @@ Run this to verify all fixes are working correctly
 
 import sys
 import os
-sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
+# Add project root to path (go up 2 levels from tests/integration/)
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from logger_utils import initialize_logging, get_logger, log_session_end
 from config import DATASET_NAME, EMBEDDING_DIM, get_default_config
