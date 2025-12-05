@@ -293,13 +293,21 @@ python tests/integration/test_api_endpoints.py
 # Tests: Sessions, history, Markdown/JSON/HTML export
 python tests/integration/test_session_export.py
 
-# 4. Complete RAG Pipeline Test
+# 4. Streaming LLM Output Test (REAL-TIME STREAMING) ⭐
+# Tests: Direct pipeline streaming, API SSE streaming, session-based streaming
+# Watch the LLM response appear in REAL-TIME as it generates!
+python tests/integration/test_streaming.py
+
+# Optional: Test API streaming endpoints too (requires starting server)
+python tests/integration/test_streaming.py --api
+
+# 5. Complete RAG Pipeline Test
 python tests/integration/test_complete_rag.py
 
-# 5. Integrated System Test
+# 6. Integrated System Test
 python tests/integration/test_integrated_system.py
 
-# 6. End-to-End Test (with pytest)
+# 7. End-to-End Test (with pytest)
 python -m pytest tests/integration/test_end_to_end.py -v -s
 ```
 
@@ -360,7 +368,15 @@ curl -X POST "http://localhost:8000/api/v1/sessions" \
 # 5. List sessions
 curl http://localhost:8000/api/v1/sessions
 
-# 6. View API documentation
+# 6. STREAMING endpoint (Server-Sent Events - watch real-time output!)
+curl -N -X POST "http://localhost:8000/api/v1/generate/stream" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "Jelaskan tentang hak konsumen",
+    "stream": true
+  }'
+
+# 7. View API documentation
 # Open browser: http://localhost:8000/docs
 ```
 
