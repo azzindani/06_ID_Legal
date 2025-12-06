@@ -735,42 +735,95 @@ Apa saja hak-hak pekerja menurut UU Ketenagakerjaan?
 [Streamed answer appears in real-time]
 [Streamed: 145 chunks in 8.23s]
 
-## LEGAL REFERENCES (All Retrieved Documents)
+## LEGAL REFERENCES (All Retrieved Documents - FULL DETAILS)
 --------------------------------------------------------------------------------
 Total Documents Retrieved: 12
 
 ### 1. Undang-Undang No. 13/2003
+   Global ID: uu-13-2003-ketenagakerjaan
    About: Ketenagakerjaan
-   Score: 0.8934
-   - Semantic: 0.8521
-   - Keyword: 0.7823
-   - KG Score: 0.9012
-   - Authority: 0.9500
-   - Temporal: 0.8200
-   Domain: ketenagakerjaan | Hierarchy Level: 1
-   Team Consensus: Yes (3 researchers agreed)
-   Content: Pasal 1 ayat (1) Ketenagakerjaan adalah...
+   Enacting Body: Presiden Republik Indonesia
+   Location in Document:
+      Chapter/Bab: X
+      Section/Bagian: Kesatu
+      Article/Pasal: 77
+      Paragraph/Ayat: 1
+   Relevance Scores:
+      Final Score: 0.8934
+      Semantic: 0.8521
+      Keyword: 0.7823
+      KG Score: 0.9012
+      Authority: 0.9500
+      Temporal: 0.8200
+      Completeness: 0.8750
+   Knowledge Graph Metadata:
+      Domain: ketenagakerjaan
+      Hierarchy Level: 1
+      Cross References: 15
+   Research Team Analysis:
+      Team Consensus: Yes
+      Researcher Agreement: 3
+      Personas Agreed: analyst, expert, generalist
+   Full Content (2543 chars):
+   ------------------------------------------------------------
+      Pasal 77 ayat (1) Setiap pengusaha wajib melaksanakan
+      ketentuan waktu kerja...
+   ------------------------------------------------------------
 
-[... more documents ...]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-## RESEARCH PROCESS DETAILS
+[... more documents with full details ...]
+
+## RESEARCH PROCESS DETAILS (FULL)
 --------------------------------------------------------------------------------
-Team Members: 3
+
+### Research Team
+Team Size: 3
    - Legal Analyst
    - Regulatory Expert
    - Generalist
-Total Documents Retrieved: 12
 
-Phases Executed: 3
-   Phase: initial_search
+### Summary Statistics
+Total Documents Retrieved: 12
+Total Phases: 3
+
+### Phase-by-Phase Breakdown (ALL Documents)
+================================================================================
+
+#### PHASE: initial_search
    Researcher: Legal Analyst
-   Documents: 8
+   Documents Found: 8
    Confidence: 85.00%
 
-   Phase: refinement
+   Documents Retrieved in This Phase:
+   ----------------------------------------------------------------------
+
+   [1] Undang-Undang No. 13/2003
+       ID: uu-13-2003-ketenagakerjaan
+       About: Ketenagakerjaan
+       Location: Bab X > Bagian Kesatu > Pasal 77 > Ayat 1
+       Scores: Final=0.8934 | Semantic=0.8521 | Keyword=0.7823 | KG=0.9012 | Authority=0.9500 | Temporal=0.8200
+       Content Preview: Pasal 77 ayat (1) Setiap pengusaha wajib melaksanakan...
+
+   [2] Peraturan Pemerintah No. 35/2021
+       ID: pp-35-2021-pkwt
+       About: Perjanjian Kerja Waktu Tertentu
+       Location: Bab II > Pasal 4
+       Scores: Final=0.8521 | Semantic=0.8234 | Keyword=0.7654 | KG=0.8890 | Authority=0.9200 | Temporal=0.9100
+       Content Preview: Pasal 4 PKWT dapat dibuat untuk pekerjaan yang...
+
+   [... all documents in this phase ...]
+
+   ----------------------------------------------------------------------
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+#### PHASE: refinement
    Researcher: Regulatory Expert
-   Documents: 5
+   Documents Found: 5
    Confidence: 92.00%
+
+   [... all documents in this phase with full details ...]
 
 ## TIMING
 --------------------------------------------------------------------------------
