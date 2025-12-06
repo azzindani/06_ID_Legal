@@ -635,11 +635,53 @@ Expected performance on typical hardware:
 
 The complete output test (`test_complete_output.py`) provides full transparency into ALL retrieved documents with streaming output - essential for legal auditing.
 
+### Streaming Mode Metadata
+
+Streaming mode now includes **full metadata** for audit transparency. The `complete` chunk contains:
+
+```python
+{
+    'type': 'complete',
+    'answer': '...',                    # Final answer text
+    'thinking': '...',                  # LLM reasoning process (extracted from <think> tags)
+    'sources': [...],                   # Formatted source documents
+    'citations': [...],                 # Citation references
+    'phase_metadata': {                 # ALL documents from each research phase
+        '0_initial_search_analyst': {
+            'phase': 'initial_search',
+            'researcher': 'analyst',
+            'researcher_name': 'Legal Analyst',
+            'candidates': [             # Documents with full scores
+                {
+                    'record': {...},    # Full document record
+                    'scores': {
+                        'final': 0.85,
+                        'semantic': 0.82,
+                        'keyword': 0.78,
+                        'kg': 0.90,
+                        'authority': 0.95,
+                        'temporal': 0.80
+                    }
+                }
+            ],
+            'confidence': 1.0
+        }
+    },
+    'research_log': {                   # Summary of research process
+        'team_members': ['analyst', 'expert', 'generalist'],
+        'total_documents_retrieved': 15,
+        'phase_results': {...}
+    },
+    'consensus_data': {...},            # Team consensus information
+    'research_data': {...}              # Raw research data
+}
+```
+
 ### What It Shows
 
 **1. Complete Document Retrieval**
 - Shows ALL documents retrieved by RAG (not just cited sources)
-- Full scoring breakdown for each document
+- Full scoring breakdown for each document (semantic, keyword, KG, authority, temporal)
 - Perfect for verifying no relevant regulations were missed
 
 **2. Streaming Answer Output**
@@ -647,9 +689,15 @@ The complete output test (`test_complete_output.py`) provides full transparency 
 - Watch the LLM generate answers live
 - Chunk count and timing statistics
 
-**3. Research Process Transparency**
+**3. Thinking Process Display**
+- Shows LLM reasoning extracted from `<think>` tags
+- Helps understand how the answer was formulated
+- Essential for debugging and quality assurance
+
+**4. Research Process Transparency**
 - Team members (researcher personas) involved
 - Phase-by-phase breakdown with document counts
+- Per-phase document lists with scores
 - Confidence levels per researcher
 
 ### Running Complete Output Tests
