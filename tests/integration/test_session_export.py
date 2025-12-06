@@ -186,11 +186,13 @@ class SessionExportTester:
             for line in lines[:20]:  # Show first 20 lines
                 self.logger.info(f"  {line}")
 
-            if len(md_content) > 0 and '# Conversation' in md_content:
+            # Check for Indonesian headers used by the exporter
+            if len(md_content) > 0 and ('# Konsultasi' in md_content or '## Percakapan' in md_content):
                 self.logger.success("✅ Markdown export passed")
                 return True
             else:
                 self.logger.error("❌ Markdown export empty or invalid")
+                self.logger.debug(f"Content preview: {md_content[:200] if md_content else 'empty'}")
                 return False
 
         except Exception as e:
@@ -224,16 +226,21 @@ class SessionExportTester:
             # Parse to verify
             parsed = json.loads(json_content)
 
-            self.logger.info("JSON Export Structure:")
-            self.logger.info(f"  Session ID: {parsed.get('session_id')}")
-            self.logger.info(f"  Turns: {len(parsed.get('turns', []))}")
-            self.logger.info(f"  Created: {parsed.get('created_at')}")
+            # JSON exporter wraps data under 'session' key
+            session_export = parsed.get('session', {})
 
-            if parsed.get('session_id') == session_id and len(parsed.get('turns', [])) == 1:
+            self.logger.info("JSON Export Structure:")
+            self.logger.info(f"  Session ID: {session_export.get('id')}")
+            self.logger.info(f"  Turns: {len(session_export.get('turns', []))}")
+            self.logger.info(f"  Created: {session_export.get('created_at')}")
+            self.logger.info(f"  Export Info: {parsed.get('export_info', {}).get('format')}")
+
+            if session_export.get('id') == session_id and len(session_export.get('turns', [])) == 1:
                 self.logger.success("✅ JSON export passed")
                 return True
             else:
                 self.logger.error("❌ JSON export data incorrect")
+                self.logger.debug(f"Expected session_id: {session_id}, got: {session_export.get('id')}")
                 return False
 
         except Exception as e:
@@ -269,11 +276,13 @@ class SessionExportTester:
             for line in lines[:15]:  # Show first 15 lines
                 self.logger.info(f"  {line[:80]}")
 
-            if len(html_content) > 0 and '<html>' in html_content.lower():
+            # HTML exporter outputs <html lang="id">, so check for '<html' prefix
+            if len(html_content) > 0 and '<html' in html_content.lower():
                 self.logger.success("✅ HTML export passed")
                 return True
             else:
                 self.logger.error("❌ HTML export empty or invalid")
+                self.logger.debug(f"Content preview: {html_content[:200] if html_content else 'empty'}")
                 return False
 
         except Exception as e:
