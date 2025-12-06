@@ -171,38 +171,75 @@ class CompleteOutputTester:
         lines.append(f"\n## RESEARCH PROCESS DETAILS")
         lines.append("-" * 80)
 
-        research_log = metadata.get('research_log', metadata.get('research_data', {}))
+        # Try multiple sources for research data
+        research_log = metadata.get('research_log', {})
+        phase_metadata = metadata.get('phase_metadata', metadata.get('all_retrieved_metadata', {}))
 
-        if research_log:
-            # Team members
+        has_research_info = False
+
+        if research_log or phase_metadata:
+            has_research_info = True
+
+            # Team members from research_log
             team_members = research_log.get('team_members', [])
-            lines.append(f"Team Members: {len(team_members)}")
-            for member in team_members:
-                if isinstance(member, dict):
-                    lines.append(f"   - {member.get('name', member.get('persona', 'Unknown'))}")
-                else:
-                    lines.append(f"   - {member}")
+            if team_members:
+                lines.append(f"Team Members: {len(team_members)}")
+                for member in team_members:
+                    if isinstance(member, dict):
+                        lines.append(f"   - {member.get('name', member.get('persona', 'Unknown'))}")
+                    else:
+                        lines.append(f"   - {member}")
+            else:
+                # Extract team members from phase_metadata
+                unique_researchers = set()
+                for phase_key, phase_data in phase_metadata.items():
+                    if isinstance(phase_data, dict):
+                        researcher = phase_data.get('researcher_name', phase_data.get('researcher', ''))
+                        if researcher:
+                            unique_researchers.add(researcher)
+                if unique_researchers:
+                    lines.append(f"Team Members: {len(unique_researchers)}")
+                    for member in unique_researchers:
+                        lines.append(f"   - {member}")
 
             # Total documents
             total_docs = research_log.get('total_documents_retrieved', 0)
+            if not total_docs and phase_metadata:
+                total_docs = sum(
+                    len(pm.get('candidates', pm.get('results', [])))
+                    for pm in phase_metadata.values() if isinstance(pm, dict)
+                )
             lines.append(f"Total Documents Retrieved: {total_docs}")
 
-            # Phase results
-            phase_results = research_log.get('phase_results', research_log.get('phases', {}))
-            if phase_results:
-                lines.append(f"\nPhases Executed: {len(phase_results)}")
+            # Phase results from phase_metadata
+            if phase_metadata:
+                lines.append(f"\nPhases Executed: {len(phase_metadata)}")
 
-                for phase_name, phase_data in phase_results.items():
+                for phase_key, phase_data in phase_metadata.items():
                     if isinstance(phase_data, dict):
+                        phase_name = phase_data.get('phase', phase_key)
                         researcher = phase_data.get('researcher_name', phase_data.get('researcher', 'Unknown'))
                         candidates = phase_data.get('candidates', phase_data.get('results', []))
-                        confidence = phase_data.get('confidence', 0)
+                        confidence = phase_data.get('confidence', 1.0)
 
                         lines.append(f"\n   Phase: {phase_name}")
                         lines.append(f"   Researcher: {researcher}")
                         lines.append(f"   Documents: {len(candidates)}")
                         lines.append(f"   Confidence: {confidence:.2%}")
-        else:
+
+                        # Show document summaries in this phase
+                        if candidates:
+                            lines.append(f"   Documents in this phase:")
+                            for i, doc in enumerate(candidates[:5], 1):  # Show first 5
+                                record = doc.get('record', doc)
+                                reg_type = record.get('regulation_type', 'N/A')
+                                reg_num = record.get('regulation_number', 'N/A')
+                                score = doc.get('scores', {}).get('final', doc.get('composite_score', 0))
+                                lines.append(f"      {i}. {reg_type} No. {reg_num} (score: {score:.4f})")
+                            if len(candidates) > 5:
+                                lines.append(f"      ... and {len(candidates) - 5} more")
+
+        if not has_research_info:
             lines.append("Research process details not available")
 
         # Timing Information
@@ -270,6 +307,26 @@ class CompleteOutputTester:
                     seen_ids.add(doc_id)
                     all_docs.append(doc)
 
+        # Try sources/citations at top level (fallback)
+        if not all_docs:
+            sources = metadata.get('sources', metadata.get('citations', []))
+            for doc in sources:
+                doc_id = doc.get('global_id', doc.get('regulation_number', str(hash(str(doc)))))
+                if doc_id not in seen_ids:
+                    seen_ids.add(doc_id)
+                    # Convert source format to document format
+                    all_docs.append({
+                        'record': doc,
+                        'scores': {
+                            'final': doc.get('score', 0),
+                            'semantic': doc.get('semantic_score', 0),
+                            'keyword': doc.get('keyword_score', 0),
+                            'kg': doc.get('kg_score', 0),
+                            'authority': doc.get('authority_score', 0),
+                            'temporal': doc.get('temporal_score', 0)
+                        }
+                    })
+
         return all_docs
 
     def run_query_with_streaming(self, query: str, query_num: int) -> Dict[str, Any]:
@@ -300,6 +357,12 @@ class CompleteOutputTester:
             final_metadata = {}
 
             # Stream the response
+            thinking_content = ""
+            phase_metadata = {}
+            research_log = {}
+            sources = []
+            citations = []
+
             for chunk in self.pipeline.query(query, stream=True):
                 chunk_type = chunk.get('type', '')
 
@@ -312,6 +375,15 @@ class CompleteOutputTester:
                 elif chunk_type == 'complete':
                     full_answer = chunk.get('answer', full_answer)
                     final_metadata = chunk.get('metadata', {})
+                    # Extract ALL metadata from the complete chunk
+                    thinking_content = chunk.get('thinking', '')
+                    phase_metadata = chunk.get('phase_metadata', chunk.get('all_retrieved_metadata', {}))
+                    research_log = chunk.get('research_log', {})
+                    sources = chunk.get('sources', [])
+                    citations = chunk.get('citations', [])
+                    # Also include consensus and research data
+                    final_metadata['consensus_data'] = chunk.get('consensus_data', {})
+                    final_metadata['research_data'] = chunk.get('research_data', {})
 
                 elif chunk_type == 'error':
                     error_msg = chunk.get('error', 'Unknown error')
@@ -329,18 +401,28 @@ class CompleteOutputTester:
                 'chars_per_second': len(full_answer) / duration if duration > 0 else 0
             }
 
+            # Merge all metadata for formatting
+            full_metadata = {
+                **final_metadata,
+                'thinking': thinking_content,
+                'phase_metadata': phase_metadata,
+                'research_log': research_log,
+                'sources': sources,
+                'citations': citations
+            }
+
             # Display complete formatted output
             complete_output = self.format_complete_output(
                 query=query,
                 answer=full_answer,
-                metadata=final_metadata,
+                metadata=full_metadata,
                 streaming_stats=streaming_stats
             )
             print(complete_output)
 
             result['success'] = True
             result['answer'] = full_answer
-            result['metadata'] = final_metadata
+            result['metadata'] = full_metadata  # Use full metadata with all research info
             result['streaming_stats'] = streaming_stats
             result['formatted_output'] = complete_output
 
