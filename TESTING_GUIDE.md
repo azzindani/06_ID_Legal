@@ -339,13 +339,41 @@ python tests/integration/test_performance.py --concurrent --threads 3 --queries 
 # Memory profiling
 python tests/integration/test_performance.py --memory
 
-# 7. Complete RAG Pipeline Test
+# 7. Complete RAG Output Test (5 QUERIES WITH FULL METADATA) 📋
+# Tests: Multiple queries with streaming, ALL retrieved documents, full scoring
+# Output includes:
+#   - Question, Query Type, Thinking Process
+#   - Streamed answer (real-time token output)
+#   - ALL legal references with complete scoring metadata
+#   - Research process details (team members, phases, document counts)
+#   - Export to JSON for further analysis
+python tests/integration/test_complete_output.py
+
+# With JSON export for parsing
+python tests/integration/test_complete_output.py --export
+
+# 8. Output Parser & Validator (AUDIT REPORTS) 📊
+# Parses JSON exports and generates audit reports
+# Output includes:
+#   - Structured extraction of all legal references
+#   - Validation of output completeness
+#   - Per-query audit breakdown
+#   - CSV export for spreadsheet analysis
+python tests/integration/test_output_parser.py --file <export.json>
+
+# Generate test data and parse in one command
+python tests/integration/test_output_parser.py --generate
+
+# Export references to CSV
+python tests/integration/test_output_parser.py --file <export.json> --csv references.csv
+
+# 9. Complete RAG Pipeline Test
 python tests/integration/test_complete_rag.py
 
-# 8. Integrated System Test
+# 10. Integrated System Test
 python tests/integration/test_integrated_system.py
 
-# 9. End-to-End Test (with pytest)
+# 11. End-to-End Test (with pytest)
 python -m pytest tests/integration/test_end_to_end.py -v -s
 ```
 
@@ -602,6 +630,159 @@ Expected performance on typical hardware:
 | Complex Query | 8-15s | 3-5s |
 | Concurrent QPS | 0.2-0.3 | 0.5-1.0 |
 | Memory per Query | <100MB | <500MB |
+
+## 📋 Complete RAG Output Testing
+
+The complete output test (`test_complete_output.py`) provides full transparency into ALL retrieved documents with streaming output - essential for legal auditing.
+
+### What It Shows
+
+**1. Complete Document Retrieval**
+- Shows ALL documents retrieved by RAG (not just cited sources)
+- Full scoring breakdown for each document
+- Perfect for verifying no relevant regulations were missed
+
+**2. Streaming Answer Output**
+- Real-time token-by-token streaming using TextIteratorStreamer
+- Watch the LLM generate answers live
+- Chunk count and timing statistics
+
+**3. Research Process Transparency**
+- Team members (researcher personas) involved
+- Phase-by-phase breakdown with document counts
+- Confidence levels per researcher
+
+### Running Complete Output Tests
+
+```bash
+# Run 5 queries with full metadata display
+python tests/integration/test_complete_output.py
+
+# Export results to JSON for parsing
+python tests/integration/test_complete_output.py --export
+
+# Specify custom output path
+python tests/integration/test_complete_output.py --export --output my_results.json
+```
+
+### Example Output Format
+
+```
+====================================================================================================
+COMPLETE RAG OUTPUT
+====================================================================================================
+
+## QUESTION
+--------------------------------------------------------------------------------
+Apa saja hak-hak pekerja menurut UU Ketenagakerjaan?
+
+## QUERY TYPE: procedural
+
+## THINKING PROCESS
+--------------------------------------------------------------------------------
+[Full reasoning process displayed here]
+
+## ANSWER
+--------------------------------------------------------------------------------
+[Streamed answer appears in real-time]
+[Streamed: 145 chunks in 8.23s]
+
+## LEGAL REFERENCES (All Retrieved Documents)
+--------------------------------------------------------------------------------
+Total Documents Retrieved: 12
+
+### 1. Undang-Undang No. 13/2003
+   About: Ketenagakerjaan
+   Score: 0.8934
+   - Semantic: 0.8521
+   - Keyword: 0.7823
+   - KG Score: 0.9012
+   - Authority: 0.9500
+   - Temporal: 0.8200
+   Domain: ketenagakerjaan | Hierarchy Level: 1
+   Team Consensus: Yes (3 researchers agreed)
+   Content: Pasal 1 ayat (1) Ketenagakerjaan adalah...
+
+[... more documents ...]
+
+## RESEARCH PROCESS DETAILS
+--------------------------------------------------------------------------------
+Team Members: 3
+   - Legal Analyst
+   - Regulatory Expert
+   - Generalist
+Total Documents Retrieved: 12
+
+Phases Executed: 3
+   Phase: initial_search
+   Researcher: Legal Analyst
+   Documents: 8
+   Confidence: 85.00%
+
+   Phase: refinement
+   Researcher: Regulatory Expert
+   Documents: 5
+   Confidence: 92.00%
+
+## TIMING
+--------------------------------------------------------------------------------
+Total Time: 12.345s
+Retrieval Time: 4.123s
+Generation Time: 8.222s
+```
+
+### Parsing Exported Results
+
+Use `test_output_parser.py` to parse and analyze exported JSON:
+
+```bash
+# Parse existing export file
+python tests/integration/test_output_parser.py --file complete_output_results_1234567890.json
+
+# Generate and parse in one command
+python tests/integration/test_output_parser.py --generate
+
+# Export all references to CSV for spreadsheet analysis
+python tests/integration/test_output_parser.py --file export.json --csv all_references.csv
+
+# Save audit report to file
+python tests/integration/test_output_parser.py --file export.json --report audit_report.txt
+```
+
+### Output Parser Features
+
+The parser extracts structured data from RAG output:
+
+**LegalReference dataclass:**
+- `regulation_type`, `regulation_number`, `year`, `about`
+- All scores: `final_score`, `semantic_score`, `keyword_score`, `kg_score`, etc.
+- `domain`, `hierarchy_level`
+- `team_consensus`, `researcher_agreement`, `personas_agreed`
+- `content_snippet`
+
+**QueryResult dataclass:**
+- Query information and success status
+- Streaming statistics (chunks, duration)
+- List of all `LegalReference` objects
+- Research phases with researcher details
+- Timing breakdown
+
+### Use Cases
+
+**1. Legal Audit Compliance**
+- Verify all relevant regulations were considered
+- Check scoring justification for each document
+- Validate research process transparency
+
+**2. Quality Assurance**
+- Compare results across multiple queries
+- Identify scoring anomalies
+- Verify team consensus accuracy
+
+**3. Data Export**
+- CSV export for Excel/spreadsheet analysis
+- JSON for programmatic processing
+- Text reports for documentation
 
 ## 📊 Verification Checklist
 
