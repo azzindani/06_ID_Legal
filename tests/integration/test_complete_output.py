@@ -93,8 +93,8 @@ class CompleteOutputTester:
         lines.append(answer)
         lines.append(f"\n[Streamed: {streaming_stats.get('chunk_count', 0)} chunks in {streaming_stats.get('duration', 0):.2f}s]")
 
-        # Legal References - ALL retrieved documents
-        lines.append(f"\n## LEGAL REFERENCES (All Retrieved Documents)")
+        # Legal References - ALL retrieved documents with FULL details
+        lines.append(f"\n## LEGAL REFERENCES (All Retrieved Documents - FULL DETAILS)")
         lines.append("-" * 80)
 
         # Get all retrieved documents from phase_metadata or research_data
@@ -113,45 +113,96 @@ class CompleteOutputTester:
                 reg_num = record.get('regulation_number', 'N/A')
                 year = record.get('year', 'N/A')
                 about = record.get('about', 'N/A')
+                enacting_body = record.get('enacting_body', 'N/A')
+                global_id = record.get('global_id', 'N/A')
 
                 lines.append(f"### {idx}. {reg_type} No. {reg_num}/{year}")
-                lines.append(f"   About: {about[:150]}..." if len(about) > 150 else f"   About: {about}")
+                lines.append(f"   Global ID: {global_id}")
+                lines.append(f"   About: {about}")  # Full about, not truncated
+                lines.append(f"   Enacting Body: {enacting_body}")
 
-                # Scores
+                # Article/Chapter/Section details if available
+                chapter = record.get('chapter', record.get('bab', ''))
+                article = record.get('article', record.get('pasal', ''))
+                section = record.get('section', record.get('bagian', ''))
+                paragraph = record.get('paragraph', record.get('ayat', ''))
+
+                if chapter or article or section or paragraph:
+                    lines.append(f"   Location in Document:")
+                    if chapter:
+                        lines.append(f"      Chapter/Bab: {chapter}")
+                    if section:
+                        lines.append(f"      Section/Bagian: {section}")
+                    if article:
+                        lines.append(f"      Article/Pasal: {article}")
+                    if paragraph:
+                        lines.append(f"      Paragraph/Ayat: {paragraph}")
+
+                # Scores - FULL breakdown
                 final_score = scores.get('final', doc.get('final_score', doc.get('composite_score', 0)))
                 semantic_score = scores.get('semantic', doc.get('semantic_score', 0))
                 keyword_score = scores.get('keyword', doc.get('keyword_score', 0))
                 kg_score = scores.get('kg', doc.get('kg_score', 0))
                 authority_score = scores.get('authority', doc.get('authority_score', 0))
                 temporal_score = scores.get('temporal', doc.get('temporal_score', 0))
+                completeness_score = scores.get('completeness', doc.get('completeness_score', 0))
 
-                lines.append(f"   Score: {final_score:.4f}")
-                lines.append(f"   - Semantic: {semantic_score:.4f}")
-                lines.append(f"   - Keyword: {keyword_score:.4f}")
-                lines.append(f"   - KG Score: {kg_score:.4f}")
-                lines.append(f"   - Authority: {authority_score:.4f}")
-                lines.append(f"   - Temporal: {temporal_score:.4f}")
+                lines.append(f"   Relevance Scores:")
+                lines.append(f"      Final Score: {final_score:.4f}")
+                lines.append(f"      Semantic: {semantic_score:.4f}")
+                lines.append(f"      Keyword: {keyword_score:.4f}")
+                lines.append(f"      KG Score: {kg_score:.4f}")
+                lines.append(f"      Authority: {authority_score:.4f}")
+                lines.append(f"      Temporal: {temporal_score:.4f}")
+                lines.append(f"      Completeness: {completeness_score:.4f}")
 
-                # KG Metadata
+                # KG Metadata - FULL details
                 kg_domain = record.get('kg_primary_domain', record.get('primary_domain', ''))
                 kg_hierarchy = record.get('kg_hierarchy_level', record.get('hierarchy_level', 0))
-                if kg_domain or kg_hierarchy:
-                    lines.append(f"   Domain: {kg_domain} | Hierarchy Level: {kg_hierarchy}")
+                kg_cross_refs = record.get('kg_cross_ref_count', record.get('cross_ref_count', 0))
+                kg_communities = record.get('kg_communities', record.get('communities', []))
 
-                # Team Consensus
-                if doc.get('team_consensus'):
-                    agreement = doc.get('researcher_agreement', 0)
-                    personas = doc.get('personas_agreed', [])
-                    lines.append(f"   Team Consensus: Yes ({agreement} researchers agreed)")
-                    if personas:
-                        lines.append(f"   Personas: {', '.join(personas[:3])}")
+                if kg_domain or kg_hierarchy or kg_cross_refs:
+                    lines.append(f"   Knowledge Graph Metadata:")
+                    lines.append(f"      Domain: {kg_domain or 'N/A'}")
+                    lines.append(f"      Hierarchy Level: {kg_hierarchy}")
+                    lines.append(f"      Cross References: {kg_cross_refs}")
+                    if kg_communities:
+                        lines.append(f"      Communities: {kg_communities[:5]}")
 
-                # Content snippet
+                # Team Consensus - FULL details
+                team_consensus = doc.get('team_consensus', False)
+                researcher_agreement = doc.get('researcher_agreement', 0)
+                personas_agreed = doc.get('personas_agreed', [])
+
+                lines.append(f"   Research Team Analysis:")
+                lines.append(f"      Team Consensus: {'Yes' if team_consensus else 'No'}")
+                lines.append(f"      Researcher Agreement: {researcher_agreement}")
+                if personas_agreed:
+                    lines.append(f"      Personas Agreed: {', '.join(str(p) for p in personas_agreed)}")
+
+                # Phase info if available
+                phase = doc.get('_phase', '')
+                researcher = doc.get('_researcher', '')
+                if phase or researcher:
+                    lines.append(f"   Discovery Info:")
+                    if phase:
+                        lines.append(f"      Phase: {phase}")
+                    if researcher:
+                        lines.append(f"      Discovered By: {researcher}")
+
+                # FULL Content - not truncated
                 content = record.get('content', '')
                 if content:
-                    snippet = content[:200] + "..." if len(content) > 200 else content
-                    lines.append(f"   Content: {snippet}")
+                    lines.append(f"   Full Content ({len(content)} chars):")
+                    lines.append(f"   " + "-" * 60)
+                    # Indent content for readability
+                    for content_line in content.split('\n'):
+                        lines.append(f"      {content_line}")
+                    lines.append(f"   " + "-" * 60)
 
+                lines.append("")  # Blank line between documents
+                lines.append("~" * 80)  # Separator
                 lines.append("")
         else:
             # Fall back to sources/citations if no detailed metadata
@@ -163,12 +214,21 @@ class CompleteOutputTester:
                     reg_num = source.get('regulation_number', 'N/A')
                     year = source.get('year', 'N/A')
                     about = source.get('about', 'N/A')
-                    lines.append(f"   {idx}. {reg_type} No. {reg_num}/{year}: {about[:80]}...")
+                    content = source.get('content', '')
+
+                    lines.append(f"\n### {idx}. {reg_type} No. {reg_num}/{year}")
+                    lines.append(f"   About: {about}")
+                    if content:
+                        lines.append(f"   Content ({len(content)} chars):")
+                        for content_line in content.split('\n')[:20]:  # First 20 lines
+                            lines.append(f"      {content_line}")
+                        if len(content.split('\n')) > 20:
+                            lines.append(f"      ... (truncated)")
             else:
                 lines.append("No documents retrieved")
 
-        # Research Process Details
-        lines.append(f"\n## RESEARCH PROCESS DETAILS")
+        # Research Process Details - FULL DETAILS for each phase
+        lines.append(f"\n## RESEARCH PROCESS DETAILS (FULL)")
         lines.append("-" * 80)
 
         # Try multiple sources for research data
@@ -183,7 +243,8 @@ class CompleteOutputTester:
             # Team members from research_log
             team_members = research_log.get('team_members', [])
             if team_members:
-                lines.append(f"Team Members: {len(team_members)}")
+                lines.append(f"### Research Team")
+                lines.append(f"Team Size: {len(team_members)}")
                 for member in team_members:
                     if isinstance(member, dict):
                         lines.append(f"   - {member.get('name', member.get('persona', 'Unknown'))}")
@@ -198,7 +259,8 @@ class CompleteOutputTester:
                         if researcher:
                             unique_researchers.add(researcher)
                 if unique_researchers:
-                    lines.append(f"Team Members: {len(unique_researchers)}")
+                    lines.append(f"### Research Team")
+                    lines.append(f"Team Size: {len(unique_researchers)}")
                     for member in unique_researchers:
                         lines.append(f"   - {member}")
 
@@ -209,11 +271,14 @@ class CompleteOutputTester:
                     len(pm.get('candidates', pm.get('results', [])))
                     for pm in phase_metadata.values() if isinstance(pm, dict)
                 )
+            lines.append(f"\n### Summary Statistics")
             lines.append(f"Total Documents Retrieved: {total_docs}")
+            lines.append(f"Total Phases: {len(phase_metadata)}")
 
-            # Phase results from phase_metadata
+            # Phase results from phase_metadata - FULL DETAILS
             if phase_metadata:
-                lines.append(f"\nPhases Executed: {len(phase_metadata)}")
+                lines.append(f"\n### Phase-by-Phase Breakdown (ALL Documents)")
+                lines.append("=" * 80)
 
                 for phase_key, phase_data in phase_metadata.items():
                     if isinstance(phase_data, dict):
@@ -222,22 +287,73 @@ class CompleteOutputTester:
                         candidates = phase_data.get('candidates', phase_data.get('results', []))
                         confidence = phase_data.get('confidence', 1.0)
 
-                        lines.append(f"\n   Phase: {phase_name}")
+                        lines.append(f"\n#### PHASE: {phase_name}")
                         lines.append(f"   Researcher: {researcher}")
-                        lines.append(f"   Documents: {len(candidates)}")
+                        lines.append(f"   Documents Found: {len(candidates)}")
                         lines.append(f"   Confidence: {confidence:.2%}")
+                        lines.append("")
 
-                        # Show document summaries in this phase
+                        # Show ALL documents in this phase with FULL details
                         if candidates:
-                            lines.append(f"   Documents in this phase:")
-                            for i, doc in enumerate(candidates[:5], 1):  # Show first 5
+                            lines.append(f"   Documents Retrieved in This Phase:")
+                            lines.append(f"   " + "-" * 70)
+
+                            for i, doc in enumerate(candidates, 1):  # Show ALL documents, not just first 5
                                 record = doc.get('record', doc)
+                                scores = doc.get('scores', {})
+
                                 reg_type = record.get('regulation_type', 'N/A')
                                 reg_num = record.get('regulation_number', 'N/A')
-                                score = doc.get('scores', {}).get('final', doc.get('composite_score', 0))
-                                lines.append(f"      {i}. {reg_type} No. {reg_num} (score: {score:.4f})")
-                            if len(candidates) > 5:
-                                lines.append(f"      ... and {len(candidates) - 5} more")
+                                year = record.get('year', 'N/A')
+                                about = record.get('about', 'N/A')
+                                global_id = record.get('global_id', 'N/A')
+
+                                # Scores
+                                final_score = scores.get('final', doc.get('composite_score', 0))
+                                semantic = scores.get('semantic', doc.get('semantic_score', 0))
+                                keyword = scores.get('keyword', doc.get('keyword_score', 0))
+                                kg = scores.get('kg', doc.get('kg_score', 0))
+                                authority = scores.get('authority', doc.get('authority_score', 0))
+                                temporal = scores.get('temporal', doc.get('temporal_score', 0))
+
+                                # Article-level details
+                                chapter = record.get('chapter', record.get('bab', ''))
+                                article = record.get('article', record.get('pasal', ''))
+                                section = record.get('section', record.get('bagian', ''))
+                                paragraph = record.get('paragraph', record.get('ayat', ''))
+
+                                lines.append(f"\n   [{i}] {reg_type} No. {reg_num}/{year}")
+                                lines.append(f"       ID: {global_id}")
+                                lines.append(f"       About: {about}")
+
+                                # Show article/chapter if available
+                                location_parts = []
+                                if chapter:
+                                    location_parts.append(f"Bab {chapter}")
+                                if section:
+                                    location_parts.append(f"Bagian {section}")
+                                if article:
+                                    location_parts.append(f"Pasal {article}")
+                                if paragraph:
+                                    location_parts.append(f"Ayat {paragraph}")
+
+                                if location_parts:
+                                    lines.append(f"       Location: {' > '.join(location_parts)}")
+
+                                lines.append(f"       Scores: Final={final_score:.4f} | Semantic={semantic:.4f} | "
+                                           f"Keyword={keyword:.4f} | KG={kg:.4f} | Authority={authority:.4f} | "
+                                           f"Temporal={temporal:.4f}")
+
+                                # Show content preview (first 500 chars)
+                                content = record.get('content', '')
+                                if content:
+                                    content_preview = content[:500].replace('\n', ' ')
+                                    lines.append(f"       Content Preview: {content_preview}...")
+
+                            lines.append(f"   " + "-" * 70)
+
+                        lines.append("")
+                        lines.append("~" * 80)
 
         if not has_research_info:
             lines.append("Research process details not available")
