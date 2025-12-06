@@ -487,11 +487,71 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
             pass
 
         try:
-            # Use streaming if available
-            result = pipeline.query(message, conversation_history=context, stream=False)
+            # Use REAL streaming for LLM output
+            result = None
+            all_phase_metadata = {}
 
-            # Extract metadata for display
-            all_phase_metadata = result.get('phase_metadata', result.get('all_retrieved_metadata', {}))
+            # Check if we can use real streaming
+            use_real_streaming = (
+                HAS_STREAMER and
+                current_provider == 'local'
+            )
+
+            if use_real_streaming:
+                # Real streaming: collect tokens as they're generated
+                yield add_progress("🔄 Starting real-time streaming..."), ""
+
+                streamed_answer = ""
+                chunk_count = 0
+
+                for chunk in pipeline.query(message, conversation_history=context, stream=True):
+                    chunk_type = chunk.get('type', '')
+
+                    if chunk_type == 'token':
+                        token = chunk.get('token', '')
+                        streamed_answer += token
+                        chunk_count += 1
+
+                        # Update display every few tokens for smoother UI
+                        if chunk_count % 5 == 0:
+                            progress_display = "\n".join([f"🔄 {m}" for m in current_progress])
+                            streaming_preview = f"\n\n**Generating ({chunk_count} tokens):**\n{streamed_answer[-500:]}"
+                            yield history + [[message, f"**Generating response...**\n\n{progress_display}{streaming_preview}"]], ""
+
+                    elif chunk_type == 'complete':
+                        result = {
+                            'answer': chunk.get('answer', streamed_answer),
+                            'sources': chunk.get('sources', []),
+                            'citations': chunk.get('citations', []),
+                            'metadata': chunk.get('metadata', {}),
+                            'phase_metadata': chunk.get('phase_metadata', {}),
+                            'thinking': chunk.get('thinking', ''),
+                            'consensus_data': chunk.get('consensus_data', {}),
+                            'research_data': chunk.get('research_data', {}),
+                            'communities': chunk.get('communities', [])
+                        }
+                        all_phase_metadata = result.get('phase_metadata', {})
+
+                    elif chunk_type == 'error':
+                        error_msg = chunk.get('error', 'Unknown error')
+                        yield add_progress(f"❌ Streaming error: {error_msg}"), ""
+                        result = {'answer': '', 'sources': [], 'metadata': {}}
+                        break
+
+                if result is None:
+                    result = {
+                        'answer': streamed_answer,
+                        'sources': [],
+                        'metadata': {},
+                        'phase_metadata': {}
+                    }
+
+                yield add_progress(f"✅ Streaming completed: {chunk_count} tokens generated"), ""
+
+            else:
+                # Fallback to non-streaming for external providers
+                result = pipeline.query(message, conversation_history=context, stream=False)
+                all_phase_metadata = result.get('phase_metadata', result.get('all_retrieved_metadata', {}))
 
             yield add_progress(f"✅ Search completed: {len(result.get('sources', []))} results found"), ""
 
