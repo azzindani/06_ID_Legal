@@ -352,7 +352,28 @@ python tests/integration/test_complete_output.py
 # With JSON export for parsing
 python tests/integration/test_complete_output.py --export
 
-# 8. Output Parser & Validator (AUDIT REPORTS) 📊
+# 8. Conversational Test (MULTI-TURN DIALOGUE WITH MEMORY) 💬
+# Tests: Conversation memory, context management, topic shifts, regulation recognition
+# Demonstrates intelligent legal assistant behavior across 5 turns:
+#   Turn 1: General labor rights question (establishes context)
+#   Turn 2: Specific UU No. 13/2003 on severance (tests regulation recognition)
+#   Turn 3: Follow-up question on legal remedies (tests conversation memory)
+#   Turn 4: Topic shift to environmental permits (tests context switching)
+#   Turn 5: Tax law question (tests multi-domain knowledge)
+# Output includes:
+#   - Turn-by-turn analysis with topic tracking
+#   - Conversation coherence scoring
+#   - Memory and context metrics
+#   - Specific regulation recognition stats
+python tests/integration/test_conversational.py
+
+# With verbose metadata (shows thinking process)
+python tests/integration/test_conversational.py --verbose
+
+# Export conversation results to JSON
+python tests/integration/test_conversational.py --export --output conversation_results.json
+
+# 9. Output Parser & Validator (AUDIT REPORTS) 📊
 # Parses JSON exports and generates audit reports
 # Output includes:
 #   - Structured extraction of all legal references
@@ -367,22 +388,23 @@ python tests/integration/test_output_parser.py --generate
 # Export references to CSV
 python tests/integration/test_output_parser.py --file <export.json> --csv references.csv
 
-# 9. Complete RAG Pipeline Test
+# 10. Complete RAG Pipeline Test
 python tests/integration/test_complete_rag.py
 
-# 10. Integrated System Test
+# 11. Integrated System Test
 python tests/integration/test_integrated_system.py
 
-# 11. End-to-End Test (with pytest)
+# 12. End-to-End Test (with pytest)
 python -m pytest tests/integration/test_end_to_end.py -v -s
 ```
 
 ### Run All Integration Tests at Once
 
 ```bash
-# Run specific comprehensive tests
+# Run core comprehensive tests
 python tests/integration/test_production_ready.py && \
-python tests/integration/test_session_export.py
+python tests/integration/test_session_export.py && \
+python tests/integration/test_conversational.py
 
 # Or run all Python-based tests (shows real output)
 for test in tests/integration/test_*.py; do
