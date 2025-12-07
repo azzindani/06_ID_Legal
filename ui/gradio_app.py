@@ -133,59 +133,93 @@ def parse_think_tags(text: str) -> Tuple[str, str]:
 
 
 def format_sources_info(results: List[Dict], config_dict: Dict) -> str:
-    """Format source information with ENHANCED KG features - FIXED to match original"""
+    """Format LEGAL REFERENCES (Top K Documents Used in LLM Prompt) with FULL details"""
     if not results:
         return "Tidak ada sumber yang ditemukan."
 
     try:
-        output = [f"## 📖 SUMBER HUKUM UTAMA ({len(results)} dokumen)", ""]
+        output = [f"## 📖 LEGAL REFERENCES (Top K Documents Used in LLM Prompt)", ""]
+        output.append(f"**Documents Used in Prompt: {len(results)}**")
+        output.append("")
+        output.append("These are the final selected documents sent to the LLM for answer generation.")
+        output.append("")
 
-        for i, result in enumerate(results[:10], 1):
+        for i, result in enumerate(results, 1):
             try:
                 record = result.get('record', result)
 
-                output.append(f"### SUMBER {i}")
-                output.append(f"**{record.get('regulation_type', 'N/A')} No. {record.get('regulation_number', 'N/A')}/{record.get('year', 'N/A')}**")
-                output.append(f"**Ditetapkan oleh:** {record.get('enacting_body', 'N/A')}")
-                output.append(f"**Tentang:** {record.get('about', 'N/A')}")
+                reg_type = record.get('regulation_type', 'N/A')
+                reg_num = record.get('regulation_number', 'N/A')
+                year = record.get('year', 'N/A')
+                about = record.get('about', 'N/A')
+                enacting_body = record.get('enacting_body', 'N/A')
+                global_id = record.get('global_id', 'N/A')
 
-                # Article/Chapter info
-                chapter = record.get('chapter', 'N/A')
-                article = record.get('article', 'N/A')
-                if chapter != 'N/A' or article != 'N/A':
-                    output.append(f"**Referensi:** Bab {chapter} - Pasal {article}")
+                output.append(f"### {i}. {reg_type} No. {reg_num}/{year}")
+                output.append(f"- **Global ID:** {global_id}")
+                output.append(f"- **Tentang:** {about}")
+                output.append(f"- **Ditetapkan oleh:** {enacting_body}")
 
-                # Enhanced metadata display - MATCHING ORIGINAL
-                metadata_parts = []
+                # Article/Chapter location
+                chapter = record.get('chapter', record.get('bab', ''))
+                article = record.get('article', record.get('pasal', ''))
+                section = record.get('section', record.get('bagian', ''))
+                paragraph = record.get('paragraph', record.get('ayat', ''))
+
+                location_parts = []
+                if chapter:
+                    location_parts.append(f"Bab {chapter}")
+                if section:
+                    location_parts.append(f"Bagian {section}")
+                if article:
+                    location_parts.append(f"Pasal {article}")
+                if paragraph:
+                    location_parts.append(f"Ayat {paragraph}")
+
+                if location_parts:
+                    output.append(f"- **Lokasi:** {' > '.join(location_parts)}")
+                else:
+                    output.append(f"- **Lokasi:** (Dokumen Lengkap)")
+
+                # All scores
+                scores_parts = []
                 if 'final_score' in result:
-                    metadata_parts.append(f"Final: {result['final_score']:.3f}")
-                if 'rerank_score' in result:
-                    metadata_parts.append(f"Rerank: {result['rerank_score']:.3f}")
-                if 'composite_score' in result:
-                    metadata_parts.append(f"Search: {result['composite_score']:.3f}")
+                    scores_parts.append(f"Final: {result['final_score']:.4f}")
+                if result.get('semantic_score', 0) > 0:
+                    scores_parts.append(f"Semantic: {result.get('semantic_score', 0):.4f}")
+                if result.get('keyword_score', 0) > 0:
+                    scores_parts.append(f"Keyword: {result.get('keyword_score', 0):.4f}")
+                if result.get('rerank_score', 0) > 0:
+                    scores_parts.append(f"Rerank: {result['rerank_score']:.4f}")
+                if result.get('composite_score', 0) > 0:
+                    scores_parts.append(f"Search: {result['composite_score']:.4f}")
                 if result.get('kg_score', 0) > 0:
-                    metadata_parts.append(f"KG: {result['kg_score']:.3f}")
+                    scores_parts.append(f"KG: {result['kg_score']:.4f}")
+                if result.get('authority_score', 0) > 0:
+                    scores_parts.append(f"Authority: {result.get('authority_score', 0):.4f}")
+                if result.get('temporal_score', 0) > 0:
+                    scores_parts.append(f"Temporal: {result.get('temporal_score', 0):.4f}")
+                if result.get('completeness_score', 0) > 0:
+                    scores_parts.append(f"Completeness: {result.get('completeness_score', 0):.4f}")
 
-                if metadata_parts:
-                    output.append(f"**Skor:** {' | '.join(metadata_parts)}")
+                if scores_parts:
+                    output.append(f"- **Skor:** {' | '.join(scores_parts)}")
 
-                # ENHANCED: Additional KG metadata - MATCHING ORIGINAL
-                additional_info = []
+                # KG metadata
+                kg_parts = []
                 if record.get('kg_primary_domain'):
-                    additional_info.append(f"Domain: {record['kg_primary_domain']}")
-                if record.get('kg_hierarchy_level', 0) > 0 and record.get('kg_hierarchy_level', 0) <= 3:
-                    additional_info.append(f"Hierarchy: Level {record['kg_hierarchy_level']}")
+                    kg_parts.append(f"Domain: {record['kg_primary_domain']}")
+                if record.get('kg_hierarchy_level', 0) > 0:
+                    kg_parts.append(f"Hierarchy: Level {record['kg_hierarchy_level']}")
                 if record.get('kg_cross_ref_count', 0) > 0:
-                    additional_info.append(f"Cross-refs: {record['kg_cross_ref_count']}")
+                    kg_parts.append(f"Cross-refs: {record['kg_cross_ref_count']}")
                 if record.get('kg_pagerank', 0) > 0:
-                    additional_info.append(f"PageRank: {record['kg_pagerank']:.4f}")
-                if record.get('kg_connectivity_score', 0) > 0:
-                    additional_info.append(f"Connectivity: {record['kg_connectivity_score']:.3f}")
+                    kg_parts.append(f"PageRank: {record['kg_pagerank']:.4f}")
 
-                if additional_info:
-                    output.append(f"**Enhanced KG Metadata:** {' | '.join(additional_info)}")
+                if kg_parts:
+                    output.append(f"- **Knowledge Graph:** {' | '.join(kg_parts)}")
 
-                # Team consensus info - MATCHING ORIGINAL
+                # Team consensus info
                 if result.get('team_consensus', False):
                     consensus_info = f"Team Consensus: Yes"
                     if 'researcher_agreement' in result:
@@ -194,19 +228,13 @@ def format_sources_info(results: List[Dict], config_dict: Dict) -> str:
                         researchers = result['supporting_researchers']
                         researcher_names = [RESEARCH_TEAM_PERSONAS.get(r, {}).get('name', r) for r in researchers[:3]]
                         consensus_info += f" | Researchers: {', '.join(researcher_names)}"
-                    output.append(f"**{consensus_info}**")
+                    output.append(f"- **{consensus_info}**")
 
-                # Devils advocate info - MATCHING ORIGINAL
-                if result.get('devils_advocate_challenged', False):
-                    challenge_points = result.get('challenge_points', [])
-                    output.append(f"**🔍 Challenged by Devil's Advocate:** {'; '.join(challenge_points[:2])}")
-
-                # Content snippet
+                # Content preview (800 chars)
                 content = record.get('content', '')
                 if content:
-                    if len(content) > 500:
-                        content = content[:500] + "..."
-                    output.append(f"**Isi:** {content}")
+                    content_preview = content[:800].replace('\n', ' ')
+                    output.append(f"- **Isi (preview):** {content_preview}...")
 
                 output.append("")
 
@@ -217,6 +245,125 @@ def format_sources_info(results: List[Dict], config_dict: Dict) -> str:
         return "\n".join(output)
     except Exception as e:
         return f"Error formatting sources: {e}"
+
+
+def format_all_documents(phase_metadata: Dict, max_docs: int = 50) -> str:
+    """Format ALL Retrieved Documents (Article-Level Details) - Top 50"""
+    if not phase_metadata:
+        return ""
+
+    try:
+        # Extract all documents from phase_metadata
+        all_docs = []
+        seen_ids = set()
+
+        for phase_name, phase_data in phase_metadata.items():
+            if not isinstance(phase_data, dict):
+                continue
+
+            candidates = phase_data.get('candidates', phase_data.get('results', []))
+            for doc in candidates:
+                record = doc.get('record', doc)
+                doc_id = record.get('global_id', str(hash(str(doc))))
+                if doc_id not in seen_ids:
+                    seen_ids.add(doc_id)
+                    doc['_phase'] = phase_data.get('phase', phase_name)
+                    doc['_researcher'] = phase_data.get('researcher_name', phase_data.get('researcher', ''))
+                    all_docs.append(doc)
+                    if len(all_docs) >= max_docs:
+                        break
+            if len(all_docs) >= max_docs:
+                break
+
+        if not all_docs:
+            return ""
+
+        output = [f"### 📄 ALL Retrieved Documents (Article-Level Details) - TOP {min(len(all_docs), max_docs)}", ""]
+        output.append(f"Showing {len(all_docs)} documents with detailed metadata")
+        output.append("")
+
+        for i, doc in enumerate(all_docs, 1):
+            record = doc.get('record', doc)
+            scores = doc.get('scores', {})
+
+            # Basic info
+            reg_type = record.get('regulation_type', 'N/A')
+            reg_num = record.get('regulation_number', 'N/A')
+            year = record.get('year', 'N/A')
+            about = record.get('about', 'N/A')
+            enacting_body = record.get('enacting_body', 'N/A')
+            global_id = record.get('global_id', 'N/A')
+
+            # Scores
+            final_score = scores.get('final', doc.get('final_score', doc.get('composite_score', record.get('score', 0))))
+            semantic = scores.get('semantic', doc.get('semantic_score', 0))
+            keyword = scores.get('keyword', doc.get('keyword_score', 0))
+            kg = scores.get('kg', doc.get('kg_score', 0))
+            authority = scores.get('authority', doc.get('authority_score', 0))
+            temporal = scores.get('temporal', doc.get('temporal_score', 0))
+            completeness = scores.get('completeness', doc.get('completeness_score', 0))
+
+            # Article-level location
+            chapter = record.get('chapter', record.get('bab', ''))
+            article = record.get('article', record.get('pasal', ''))
+            section = record.get('section', record.get('bagian', ''))
+            paragraph = record.get('paragraph', record.get('ayat', ''))
+
+            # KG metadata
+            kg_domain = record.get('kg_primary_domain', record.get('primary_domain', ''))
+            kg_hierarchy = record.get('kg_hierarchy_level', record.get('hierarchy_level', 0))
+            kg_cross_refs = record.get('kg_cross_ref_count', record.get('cross_ref_count', 0))
+
+            # Phase info
+            phase = doc.get('_phase', '')
+            researcher = doc.get('_researcher', '')
+
+            output.append(f"**[{i}] {reg_type} No. {reg_num}/{year}**")
+            output.append(f"- Global ID: {global_id}")
+            output.append(f"- About: {about}")
+            output.append(f"- Enacting Body: {enacting_body}")
+
+            # Article-level location
+            location_parts = []
+            if chapter:
+                location_parts.append(f"Bab {chapter}")
+            if section:
+                location_parts.append(f"Bagian {section}")
+            if article:
+                location_parts.append(f"Pasal {article}")
+            if paragraph:
+                location_parts.append(f"Ayat {paragraph}")
+
+            if location_parts:
+                output.append(f"- Location: {' > '.join(location_parts)}")
+            else:
+                output.append(f"- Location: (Full Document)")
+
+            # All scores
+            output.append(f"- Scores: Final={final_score:.4f} | Semantic={semantic:.4f} | Keyword={keyword:.4f}")
+            output.append(f"- Scores: KG={kg:.4f} | Authority={authority:.4f} | Temporal={temporal:.4f} | Completeness={completeness:.4f}")
+
+            # KG metadata
+            if kg_domain or kg_hierarchy:
+                output.append(f"- Knowledge Graph: Domain={kg_domain or 'N/A'} | Hierarchy={kg_hierarchy} | CrossRefs={kg_cross_refs}")
+
+            # Research info
+            if phase or researcher:
+                output.append(f"- Discovery: Phase={phase} | Researcher={researcher}")
+
+            # Content (truncated - 300 chars)
+            content = record.get('content', '')
+            if content:
+                content_truncated = content[:300].replace('\n', ' ').strip()
+                output.append(f"- Content (truncated): {content_truncated}...")
+
+            output.append("")
+            output.append("---")
+            output.append("")
+
+        return "\n".join(output)
+    except Exception as e:
+        return f"Error formatting all documents: {e}"
 
 
 def format_retrieved_metadata(phase_metadata: Dict, config_dict: Dict) -> str:
@@ -680,7 +827,7 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                     if citations:
                         sources_info = format_sources_info(citations, config_dict)
                         collapsible_sections.append(
-                            f'<details><summary>📖 <b>Sumber Hukum Utama ({len(citations)} dokumen)</b></summary>\n\n{sources_info}\n</details>'
+                            f'<details><summary>📖 <b>LEGAL REFERENCES (Top K Documents Used in LLM Prompt) - {len(citations)} documents</b></summary>\n\n{sources_info}\n</details>'
                         )
 
                 # *** COMPLETE SEARCH METADATA - DETAILED RESEARCH PROCESS ***
@@ -688,7 +835,14 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                     metadata_info = format_retrieved_metadata(all_phase_metadata, config_dict)
                     if metadata_info.strip():
                         collapsible_sections.append(
-                            f'<details><summary>📚 <b>Semua Metadata Dokumen yang Ditemukan</b></summary>\n\n{metadata_info}\n</details>'
+                            f'<details><summary>🔍 <b>RESEARCH PROCESS DETAILS (ALL Retrieved Documents)</b></summary>\n\n{metadata_info}\n</details>'
+                        )
+
+                    # Add ALL Retrieved Documents (Article-Level Details) - Top 50
+                    all_docs_info = format_all_documents(all_phase_metadata, max_docs=50)
+                    if all_docs_info.strip():
+                        collapsible_sections.append(
+                            f'<details><summary>📄 <b>ALL Retrieved Documents (Article-Level Details) - TOP 50</b></summary>\n\n{all_docs_info}\n</details>'
                         )
 
                 # Add research team info
