@@ -271,7 +271,8 @@ class RAGPipeline:
                     query_analysis=query_analysis,
                     conversation_history=conversation_history,
                     retrieval_time=retrieval_time,
-                    start_time=start_time
+                    start_time=start_time,
+                    rag_result=rag_result  # Pass full rag_result for metadata
                 )
             else:
                 generation_result = self.generation_engine.generate_answer(
@@ -421,11 +422,68 @@ class RAGPipeline:
         query_analysis: Dict,
         conversation_history: Optional[List],
         retrieval_time: float,
-        start_time: float
+        start_time: float,
+        rag_result: Optional[Dict] = None
     ) -> Generator[Dict[str, Any], None, None]:
-        """Generate streaming response"""
+        """Generate streaming response with full metadata"""
 
         self.logger.info("Starting streaming generation")
+
+        # Pre-build phase_metadata from rag_result for inclusion in complete chunk
+        phase_metadata = {}
+        consensus_data = {}
+        research_data = {}
+
+        if rag_result:
+            consensus_data = rag_result.get('consensus_data', {})
+            research_data = rag_result.get('research_data', {})
+
+            # Transform research_data into phase_metadata format (same as non-streaming)
+            if research_data:
+                phase_results = research_data.get('phase_results', {})
+                from config import RESEARCH_TEAM_PERSONAS
+
+                entry_idx = 0
+                for phase_name, results in phase_results.items():
+                    # Group results by persona within each phase
+                    persona_groups = {}
+                    for result in results:
+                        persona = result.get('metadata', {}).get('persona', 'unknown')
+                        if persona not in persona_groups:
+                            persona_groups[persona] = []
+                        persona_groups[persona].append(result)
+
+                    # Create entry for each persona in this phase
+                    for persona_name, persona_results_list in persona_groups.items():
+                        key = f"{entry_idx}_{phase_name}_{persona_name}"
+                        researcher_info = RESEARCH_TEAM_PERSONAS.get(persona_name, {})
+
+                        # Transform results to candidates format with ALL scores
+                        candidates = []
+                        for r in persona_results_list:
+                            candidates.append({
+                                'record': r.get('record', {}),
+                                'scores': r.get('scores', {}),
+                                'composite_score': r.get('scores', {}).get('final', 0),
+                                'semantic_score': r.get('scores', {}).get('semantic', 0),
+                                'keyword_score': r.get('scores', {}).get('keyword', 0),
+                                'kg_score': r.get('scores', {}).get('kg', 0),
+                                'authority_score': r.get('scores', {}).get('authority', 0),
+                                'temporal_score': r.get('scores', {}).get('temporal', 0),
+                                'completeness_score': r.get('scores', {}).get('completeness', 0),
+                                'team_consensus': r.get('team_consensus', False),
+                                'researcher_agreement': r.get('researcher_agreement', 0)
+                            })
+
+                        phase_metadata[key] = {
+                            'phase': phase_name,
+                            'researcher': persona_name,
+                            'researcher_name': researcher_info.get('name', persona_name),
+                            'candidates': candidates,
+                            'confidence': 1.0,
+                            'results': candidates
+                        }
+                        entry_idx += 1
 
         try:
             for chunk in self.generation_engine.generate_answer(
@@ -443,19 +501,56 @@ class RAGPipeline:
                     }
                 elif chunk.get('type') == 'complete':
                     total_time = time.time() - start_time
+
+                    # Format sources from retrieved results
+                    sources = []
+                    citations = []
+                    for r in retrieved_results:
+                        record = r.get('record', r)
+                        source = {
+                            'regulation_type': record.get('regulation_type', ''),
+                            'regulation_number': record.get('regulation_number', ''),
+                            'year': record.get('year', ''),
+                            'about': record.get('about', ''),
+                            'content': record.get('content', ''),
+                            'enacting_body': record.get('enacting_body', ''),
+                            'score': r.get('scores', {}).get('final', r.get('final_score', 0))
+                        }
+                        sources.append(source)
+                        citations.append(source)
+
                     yield {
                         'type': 'complete',
                         'success': True,
                         'answer': chunk['answer'],
-                        'sources': [],  # TODO: format sources
+                        'thinking': chunk.get('thinking', ''),  # Include thinking process
+                        'sources': sources,
+                        'citations': citations,
                         'metadata': {
                             'question': question,
                             'retrieval_time': retrieval_time,
                             'generation_time': chunk.get('generation_time', 0),
                             'total_time': total_time,
                             'results_count': len(retrieved_results),
-                            'tokens_generated': chunk.get('tokens_generated', 0)
+                            'tokens_generated': chunk.get('tokens_generated', 0),
+                            'query_type': query_analysis.get('query_type', 'general')
                         },
+                        # Include all research metadata for transparency
+                        'phase_metadata': phase_metadata,
+                        'all_retrieved_metadata': phase_metadata,
+                        'consensus_data': consensus_data,
+                        'research_data': research_data,
+                        'research_log': {
+                            'phase_results': phase_metadata,
+                            'team_members': list(set(
+                                pm.get('researcher', '') for pm in phase_metadata.values()
+                            )) if phase_metadata else [],
+                            'total_documents_retrieved': sum(
+                                len(pm.get('candidates', []))
+                                for pm in phase_metadata.values()
+                            ) if phase_metadata else 0
+                        },
+                        'communities': rag_result.get('communities', []) if rag_result else [],
                         'done': True
                     }
                 elif chunk.get('type') == 'error':

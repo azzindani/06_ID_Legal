@@ -52,7 +52,7 @@ from core.search.hybrid_search import HybridSearchEngine
 from config import RESEARCH_TEAM_PERSONAS
 
 # Simulate zero weights scenario
-persona = RESEARCH_TEAM_PERSONAS['Generalist']
+persona = RESEARCH_TEAM_PERSONAS['senior_legal_researcher']
 weights = {'semantic_match': 0.0, 'keyword_precision': 0.0}
 
 # This should NOT crash anymore
@@ -153,7 +153,7 @@ engine = StagesResearchEngine(None, {})
 # Simulate 1000 queries (should not grow unboundedly)
 for i in range(1000):
     engine.update_persona_performance(
-        'Generalist',
+        'senior_legal_researcher',
         'procedural',
         0.8,
         10
@@ -164,7 +164,7 @@ print(f'✅ Memory after 1000 updates: {current / 1024:.2f} KB')
 print(f'✅ Peak memory: {peak / 1024:.2f} KB')
 
 # Check history is bounded
-perf = engine._persona_performance['Generalist']['procedural']
+perf = engine._persona_performance['senior_legal_researcher']['procedural']
 print(f'✅ History size bounded to: {len(perf[\"result_counts\"])} entries (max 100)')
 assert len(perf['result_counts']) <= 100, 'Memory leak detected!'
 print('✅ Memory leak fix verified!')
@@ -320,22 +320,99 @@ python tests/integration/test_audit_metadata.py --query "Apa sanksi UU ITE?"
 # Compare multiple queries
 python tests/integration/test_audit_metadata.py --multi
 
-# 6. Complete RAG Pipeline Test
+# 6. Performance & Load Testing (BENCHMARKS) 📊
+# Tests: Response times, concurrent handling, memory usage, throughput
+# Output includes:
+#   - Query response times by type (simple, sanction, procedural, complex)
+#   - P50/P90/P99 latency percentiles
+#   - Throughput (queries per second)
+#   - Memory profiling
+#   - Concurrent load testing
+python tests/integration/test_performance.py
+
+# Full benchmark suite (all query types)
+python tests/integration/test_performance.py --full
+
+# Concurrent load test
+python tests/integration/test_performance.py --concurrent --threads 3 --queries 2
+
+# Memory profiling
+python tests/integration/test_performance.py --memory
+
+# 7. Complete RAG Output Test (5 QUERIES WITH FULL METADATA) 📋
+# Tests: Multiple queries with streaming, ALL retrieved documents, full scoring
+# Output includes:
+#   - Question, Query Type, Thinking Process
+#   - Streamed answer (real-time token output)
+#   - ALL legal references with complete scoring metadata
+#   - Research process details (team members, phases, document counts)
+#   - Export to JSON for further analysis
+python tests/integration/test_complete_output.py
+
+# With JSON export for parsing
+python tests/integration/test_complete_output.py --export
+
+# 8. Conversational Test (MULTI-TURN DIALOGUE WITH MEMORY) 💬
+# Tests: Conversation memory, context management, topic shifts, regulation recognition
+# Demonstrates intelligent legal assistant behavior across 5 turns:
+#   Turn 1: General labor rights question (establishes context)
+#   Turn 2: Specific UU No. 13/2003 on severance (tests regulation recognition)
+#   Turn 3: Follow-up question on legal remedies (tests conversation memory)
+#   Turn 4: Topic shift to environmental permits (tests context switching)
+#   Turn 5: Tax law question (tests multi-domain knowledge)
+# Output includes:
+#   - Turn-by-turn analysis with topic tracking
+#   - Conversation coherence scoring
+#   - Memory and context metrics
+#   - Specific regulation recognition stats
+python tests/integration/test_conversational.py
+
+# With verbose metadata (shows thinking process)
+python tests/integration/test_conversational.py --verbose
+
+# Export conversation results to JSON
+python tests/integration/test_conversational.py --export --output conversation_results.json
+
+# 9. Output Parser & Validator (AUDIT REPORTS) 📊
+# Parses JSON exports and generates audit reports
+# Output includes:
+#   - Structured extraction of all legal references
+#   - Validation of output completeness
+#   - Per-query audit breakdown
+#   - CSV export for spreadsheet analysis
+python tests/integration/test_output_parser.py --file <export.json>
+
+# Generate test data and parse in one command
+python tests/integration/test_output_parser.py --generate
+
+# Export references to CSV
+python tests/integration/test_output_parser.py --file <export.json> --csv references.csv
+
+# 10. Complete RAG Pipeline Test
 python tests/integration/test_complete_rag.py
 
-# 7. Integrated System Test
+# 11. Integrated System Test
 python tests/integration/test_integrated_system.py
 
-# 8. End-to-End Test (with pytest)
+# 12. End-to-End Test (with pytest)
 python -m pytest tests/integration/test_end_to_end.py -v -s
+
+# 13. Stress Test - Single Query (MAXIMUM LOAD)
+# Tests single query with all settings maxed out
+python tests/integration/test_stress_single.py
+
+# 14. Stress Test - Conversational (MAXIMUM LOAD)
+# Tests 7-turn conversation with maximum settings
+python tests/integration/test_stress_conversational.py
 ```
 
 ### Run All Integration Tests at Once
 
 ```bash
-# Run specific comprehensive tests
+# Run core comprehensive tests
 python tests/integration/test_production_ready.py && \
-python tests/integration/test_session_export.py
+python tests/integration/test_session_export.py && \
+python tests/integration/test_conversational.py
 
 # Or run all Python-based tests (shows real output)
 for test in tests/integration/test_*.py; do
@@ -505,6 +582,415 @@ Each document shows 6 individual scores that combine into final score:
 - **Legal Completeness** (0-1): Document comprehensiveness
 
 Final Score = weighted sum of above (default weights: 0.25, 0.15, 0.20, 0.20, 0.10, 0.10)
+
+## 📊 Performance & Load Testing
+
+The performance test (`test_performance.py`) provides benchmarks for system performance and scalability.
+
+### What It Measures
+
+**1. Response Time Benchmarks**
+- Tests 4 query categories: simple, sanction, procedural, complex
+- Calculates: average, min, max, P50, P90, P99 latencies
+- Tracks success rate per query type
+
+**2. Concurrent Load Testing**
+- Multi-threaded query execution
+- Configurable threads (default: 3) and queries per thread
+- Measures true throughput (QPS) under load
+
+**3. Memory Profiling**
+- Tracks memory delta per query
+- Monitors peak memory usage
+- Identifies potential memory leaks
+
+### Running Performance Tests
+
+```bash
+# Quick performance test (simple + sanction queries only)
+python tests/integration/test_performance.py
+
+# Full benchmark (all 4 query types)
+python tests/integration/test_performance.py --full
+
+# Concurrent load test (3 threads, 2 queries each)
+python tests/integration/test_performance.py --concurrent
+
+# Custom concurrent settings
+python tests/integration/test_performance.py --concurrent --threads 5 --queries 3
+
+# Memory profiling only
+python tests/integration/test_performance.py --memory
+
+# Minimal output (quiet mode)
+python tests/integration/test_performance.py --quiet
+```
+
+### Example Output
+
+```
+  OVERALL PERFORMANCE
+======================================================================
+
+  Queries:
+    Total:      12
+    Successful: 12 (100.0%)
+    Failed:     0
+
+  Response Times:
+    Average:    3.45s
+    Min:        2.12s
+    Max:        5.87s
+    P50:        3.21s
+    P90:        4.98s
+    P99:        5.87s
+
+  Throughput:
+    QPS:        0.289 queries/second
+    Total Time: 41.42s
+```
+
+### Performance Baselines
+
+Expected performance on typical hardware:
+
+| Metric | CPU-only | Single GPU |
+|--------|----------|------------|
+| Simple Query | 3-5s | 1-2s |
+| Complex Query | 8-15s | 3-5s |
+| Concurrent QPS | 0.2-0.3 | 0.5-1.0 |
+| Memory per Query | <100MB | <500MB |
+
+## 📋 Complete RAG Output Testing
+
+The complete output test (`test_complete_output.py`) provides full transparency into ALL retrieved documents with streaming output - essential for legal auditing.
+
+### Streaming Mode Metadata
+
+Streaming mode now includes **full metadata** for audit transparency. The `complete` chunk contains:
+
+```python
+{
+    'type': 'complete',
+    'answer': '...',                    # Final answer text
+    'thinking': '...',                  # LLM reasoning process (extracted from <think> tags)
+    'sources': [...],                   # Formatted source documents
+    'citations': [...],                 # Citation references
+    'phase_metadata': {                 # ALL documents from each research phase
+        '0_initial_search_analyst': {
+            'phase': 'initial_search',
+            'researcher': 'analyst',
+            'researcher_name': 'Legal Analyst',
+            'candidates': [             # Documents with full scores
+                {
+                    'record': {...},    # Full document record
+                    'scores': {
+                        'final': 0.85,
+                        'semantic': 0.82,
+                        'keyword': 0.78,
+                        'kg': 0.90,
+                        'authority': 0.95,
+                        'temporal': 0.80
+                    }
+                }
+            ],
+            'confidence': 1.0
+        }
+    },
+    'research_log': {                   # Summary of research process
+        'team_members': ['analyst', 'expert', 'generalist'],
+        'total_documents_retrieved': 15,
+        'phase_results': {...}
+    },
+    'consensus_data': {...},            # Team consensus information
+    'research_data': {...}              # Raw research data
+}
+```
+
+### What It Shows
+
+**1. Complete Document Retrieval**
+- Shows ALL documents retrieved by RAG (not just cited sources)
+- Full scoring breakdown for each document (semantic, keyword, KG, authority, temporal)
+- Perfect for verifying no relevant regulations were missed
+
+**2. Streaming Answer Output**
+- Real-time token-by-token streaming using TextIteratorStreamer
+- Watch the LLM generate answers live
+- Chunk count and timing statistics
+
+**3. Thinking Process Display**
+- Shows LLM reasoning extracted from `<think>` tags
+- Helps understand how the answer was formulated
+- Essential for debugging and quality assurance
+
+**4. Research Process Transparency**
+- Team members (researcher personas) involved
+- Phase-by-phase breakdown with document counts
+- Per-phase document lists with scores
+- Confidence levels per researcher
+
+### Running Complete Output Tests
+
+```bash
+# Run 5 queries with full metadata display
+python tests/integration/test_complete_output.py
+
+# Export results to JSON for parsing
+python tests/integration/test_complete_output.py --export
+
+# Specify custom output path
+python tests/integration/test_complete_output.py --export --output my_results.json
+```
+
+### Example Output Format
+
+```
+====================================================================================================
+COMPLETE RAG OUTPUT
+====================================================================================================
+
+## QUESTION
+--------------------------------------------------------------------------------
+Apa saja hak-hak pekerja menurut UU Ketenagakerjaan?
+
+## QUERY TYPE: procedural
+
+## THINKING PROCESS
+--------------------------------------------------------------------------------
+[Full reasoning process displayed here]
+
+## ANSWER
+--------------------------------------------------------------------------------
+[Streamed answer appears in real-time]
+[Streamed: 145 chunks in 8.23s]
+
+## LEGAL REFERENCES (All Retrieved Documents - FULL DETAILS)
+--------------------------------------------------------------------------------
+Total Documents Retrieved: 12
+
+### 1. Undang-Undang No. 13/2003
+   Global ID: uu-13-2003-ketenagakerjaan
+   About: Ketenagakerjaan
+   Enacting Body: Presiden Republik Indonesia
+   Location in Document:
+      Chapter/Bab: X
+      Section/Bagian: Kesatu
+      Article/Pasal: 77
+      Paragraph/Ayat: 1
+   Relevance Scores:
+      Final Score: 0.8934
+      Semantic: 0.8521
+      Keyword: 0.7823
+      KG Score: 0.9012
+      Authority: 0.9500
+      Temporal: 0.8200
+      Completeness: 0.8750
+   Knowledge Graph Metadata:
+      Domain: ketenagakerjaan
+      Hierarchy Level: 1
+      Cross References: 15
+   Research Team Analysis:
+      Team Consensus: Yes
+      Researcher Agreement: 3
+      Personas Agreed: analyst, expert, generalist
+   Full Content (2543 chars):
+   ------------------------------------------------------------
+      Pasal 77 ayat (1) Setiap pengusaha wajib melaksanakan
+      ketentuan waktu kerja...
+   ------------------------------------------------------------
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+[... more documents with full details ...]
+
+## RESEARCH PROCESS DETAILS (FULL)
+--------------------------------------------------------------------------------
+
+### Research Team
+Team Size: 3
+   - 👨‍⚖️ Senior Legal Researcher
+   - 👩‍⚖️ Junior Legal Researcher
+   - 📚 Knowledge Graph Specialist
+
+### Summary Statistics
+Total Documents Retrieved: 12
+Total Phases: 3
+
+### Phase-by-Phase Breakdown (ALL Documents)
+================================================================================
+
+#### PHASE: initial_search
+   Researcher: 👨‍⚖️ Senior Legal Researcher
+   Documents Found: 8
+   Confidence: 85.00%
+
+   Documents Retrieved in This Phase:
+   ----------------------------------------------------------------------
+
+   [1] Undang-Undang No. 13/2003
+       ID: uu-13-2003-ketenagakerjaan
+       About: Ketenagakerjaan
+       Location: Bab X > Bagian Kesatu > Pasal 77 > Ayat 1
+       Scores: Final=0.8934 | Semantic=0.8521 | Keyword=0.7823 | KG=0.9012 | Authority=0.9500 | Temporal=0.8200
+       Content Preview: Pasal 77 ayat (1) Setiap pengusaha wajib melaksanakan...
+
+   [2] Peraturan Pemerintah No. 35/2021
+       ID: pp-35-2021-pkwt
+       About: Perjanjian Kerja Waktu Tertentu
+       Location: Bab II > Pasal 4
+       Scores: Final=0.8521 | Semantic=0.8234 | Keyword=0.7654 | KG=0.8890 | Authority=0.9200 | Temporal=0.9100
+       Content Preview: Pasal 4 PKWT dapat dibuat untuk pekerjaan yang...
+
+   [... all documents in this phase ...]
+
+   ----------------------------------------------------------------------
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+#### PHASE: refinement
+   Researcher: Regulatory Expert
+   Documents Found: 5
+   Confidence: 92.00%
+
+   [... all documents in this phase with full details ...]
+
+## TIMING
+--------------------------------------------------------------------------------
+Total Time: 12.345s
+Retrieval Time: 4.123s
+Generation Time: 8.222s
+```
+
+### Parsing Exported Results
+
+Use `test_output_parser.py` to parse and analyze exported JSON:
+
+```bash
+# Parse existing export file
+python tests/integration/test_output_parser.py --file complete_output_results_1234567890.json
+
+# Generate and parse in one command
+python tests/integration/test_output_parser.py --generate
+
+# Export all references to CSV for spreadsheet analysis
+python tests/integration/test_output_parser.py --file export.json --csv all_references.csv
+
+# Save audit report to file
+python tests/integration/test_output_parser.py --file export.json --report audit_report.txt
+```
+
+### Output Parser Features
+
+The parser extracts structured data from RAG output:
+
+**LegalReference dataclass:**
+- `regulation_type`, `regulation_number`, `year`, `about`
+- All scores: `final_score`, `semantic_score`, `keyword_score`, `kg_score`, etc.
+- `domain`, `hierarchy_level`
+- `team_consensus`, `researcher_agreement`, `personas_agreed`
+- `content_snippet`
+
+**QueryResult dataclass:**
+- Query information and success status
+- Streaming statistics (chunks, duration)
+- List of all `LegalReference` objects
+- Research phases with researcher details
+- Timing breakdown
+
+### Use Cases
+
+**1. Legal Audit Compliance**
+- Verify all relevant regulations were considered
+- Check scoring justification for each document
+- Validate research process transparency
+
+**2. Quality Assurance**
+- Compare results across multiple queries
+- Identify scoring anomalies
+- Verify team consensus accuracy
+
+**3. Data Export**
+- CSV export for Excel/spreadsheet analysis
+- JSON for programmatic processing
+- Text reports for documentation
+
+## 💪 Stress Testing (MAXIMUM LOAD)
+
+Stress tests verify system stability under maximum configuration settings.
+
+### Stress Test 1: Single Query Maximum Load
+
+Tests a single complex query with ALL settings maxed out:
+- All 5 search phases enabled (including expert_review)
+- Maximum candidates per phase (600-800)
+- All 5 research personas active
+- Maximum final_top_k (20 documents)
+- Maximum max_new_tokens (8192)
+
+```bash
+# Full stress test (maximum settings)
+python tests/integration/test_stress_single.py
+
+# Quick mode (moderate settings)
+python tests/integration/test_stress_single.py --quick
+
+# With memory profiling
+python tests/integration/test_stress_single.py --memory
+
+# Export results to JSON
+python tests/integration/test_stress_single.py --export
+```
+
+### Stress Test 2: Conversational Maximum Load
+
+Tests 7-turn complex conversation with maximum settings:
+- Cross-domain topics (tax, labor, multi-domain)
+- Topic shifts and back-references
+- Context building across turns
+- Heavy conversation history (50 turns tracked)
+- Summary requests requiring full context
+
+```bash
+# Full stress test (7 turns, maximum settings)
+python tests/integration/test_stress_conversational.py
+
+# Quick mode (5 turns, moderate settings)
+python tests/integration/test_stress_conversational.py --quick
+
+# With memory profiling per turn
+python tests/integration/test_stress_conversational.py --memory
+
+# Export results to JSON
+python tests/integration/test_stress_conversational.py --export
+```
+
+### Stress Test Configuration Details
+
+| Setting | Default | Stress Max | Description |
+|---------|---------|------------|-------------|
+| final_top_k | 3 | 20 | Documents returned |
+| research_team_size | 4 | 5 | Active personas |
+| max_new_tokens | 2048 | 8192 | Generation limit |
+| search_phases | 4/5 | 5/5 | All phases enabled |
+| candidates (total) | ~640 | ~1500+ | Search candidates |
+
+### What Stress Tests Verify
+
+1. **System Stability**: No crashes under maximum load
+2. **Memory Bounds**: Memory stays within acceptable limits
+3. **Timeout Handling**: Long operations complete or timeout gracefully
+4. **Context Management**: Large conversation contexts are handled
+5. **Resource Cleanup**: Proper cleanup after heavy operations
+
+### Expected Stress Test Metrics
+
+| Metric | Quick Mode | Maximum Mode |
+|--------|------------|--------------|
+| Single Query Time | 30-60s | 60-180s |
+| Memory Peak | <2GB | <4GB |
+| Conv Turn Time (avg) | 20-40s | 40-90s |
+| 7-Turn Total | N/A | 5-15 min |
 
 ## 📊 Verification Checklist
 

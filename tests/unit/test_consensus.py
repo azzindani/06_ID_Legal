@@ -76,19 +76,20 @@ class TestConsensusBuilder:
         assert consensus['validated_results'] == []
 
     def test_disagreement_handling(self, builder):
-        """Test handling when researchers disagree"""
+        """Test handling when researchers disagree (each prefers a different doc)"""
         research_data = {
             'all_results': [
-                {'record': {'global_id': 'doc-1'}, 'score': 0.9, 'metadata': {'persona': 'analyst'}},
-                {'record': {'global_id': 'doc-2'}, 'score': 0.9, 'metadata': {'persona': 'specialist'}},
-                {'record': {'global_id': 'doc-3'}, 'score': 0.9, 'metadata': {'persona': 'generalist'}},
+                # Each researcher prefers a different document - no overlap
+                {'record': {'global_id': 'doc-1'}, 'scores': {'final': 0.9, 'semantic': 0.85, 'keyword': 0.8, 'kg': 0.7, 'authority': 0.8, 'temporal': 0.9, 'completeness': 0.85}, 'metadata': {'persona': 'analyst'}},
+                {'record': {'global_id': 'doc-2'}, 'scores': {'final': 0.9, 'semantic': 0.85, 'keyword': 0.8, 'kg': 0.7, 'authority': 0.8, 'temporal': 0.9, 'completeness': 0.85}, 'metadata': {'persona': 'specialist'}},
+                {'record': {'global_id': 'doc-3'}, 'scores': {'final': 0.9, 'semantic': 0.85, 'keyword': 0.8, 'kg': 0.7, 'authority': 0.8, 'temporal': 0.9, 'completeness': 0.85}, 'metadata': {'persona': 'generalist'}},
             ]
         }
         team = ['analyst', 'specialist', 'generalist']
 
         consensus = builder.build_consensus(research_data, team)
 
-        # Should still produce results
+        # Should still produce results even with disagreement
         assert 'validated_results' in consensus
 
 

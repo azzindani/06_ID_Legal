@@ -243,14 +243,17 @@ class GenerationEngine:
                         }
                     else:
                         # Final chunk
+                        # Extract thinking BEFORE post-processing
+                        thinking, answer_only = self._extract_thinking(full_response)
+
                         # Post-process and validate
-                        processed = self._post_process_response(full_response)
-                        
+                        processed = self._post_process_response(answer_only if answer_only else full_response)
+
                         cited = self.citation_formatter.format_inline_references(
                             processed,
                             retrieved_results
                         )
-                        
+
                         validation_result = None
                         if self.enable_validation:
                             validation_result = self.response_validator.validate_response(
@@ -259,13 +262,14 @@ class GenerationEngine:
                                 retrieved_results=retrieved_results,
                                 strict=False  # Don't be strict in streaming
                             )
-                            
+
                             if self.enable_enhancement:
                                 cited = validation_result['enhanced_response']
-                        
+
                         yield {
                             'type': 'complete',
                             'answer': cited,
+                            'thinking': thinking,  # Include extracted thinking process
                             'raw_answer': full_response,
                             'tokens_generated': tokens_generated,
                             'generation_time': chunk.get('generation_time', 0),

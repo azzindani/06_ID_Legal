@@ -94,6 +94,7 @@ This system provides intelligent legal consultation by combining:
 - [x] Add integration tests ✅ (4 comprehensive tests)
 - [x] Add streaming LLM test ✅ (test_streaming.py - real-time output)
 - [x] Add audit/transparency test ✅ (test_audit_metadata.py - full scoring details)
+- [x] Add conversational test ✅ (test_conversational.py - 5-turn multi-topic conversation)
 - [ ] Add load/performance tests
 - [ ] Add security penetration tests
 - [ ] Increase unit test coverage to 80%+
@@ -127,6 +128,7 @@ This system provides intelligent legal consultation by combining:
 | **Export (MD/JSON/HTML)** | ❌ None | ✅ **All formats** | **100%** | **test_session_export.py** |
 | **Streaming Output** | ❌ None | ✅ **Full** | **100%** | **test_streaming.py** |
 | **Audit/Metadata** | ❌ None | ✅ **Complete** | **100%** | **test_audit_metadata.py** |
+| **Conversational** | ❌ None | ✅ **Full** | **100%** | **test_conversational.py** |
 | Gradio UI | ❌ None | ❌ None | 0% | Manual only |
 
 ### 🔍 How to Validate Bug Fixes
@@ -156,12 +158,16 @@ python tests/integration/test_api_endpoints.py       # API endpoints
 python tests/integration/test_session_export.py      # Sessions & export
 python tests/integration/test_streaming.py           # Real-time streaming
 python tests/integration/test_audit_metadata.py      # Full audit with all scores
+python tests/integration/test_conversational.py      # Multi-turn conversation with memory
 
 # Streaming with API tests (slower, starts server)
 python tests/integration/test_streaming.py --api
 
 # Audit with custom query
 python tests/integration/test_audit_metadata.py --query "Your question"
+
+# Conversational test with export
+python tests/integration/test_conversational.py --export --verbose
 
 # Compare multiple queries (for debugging)
 python tests/integration/test_audit_metadata.py --multi

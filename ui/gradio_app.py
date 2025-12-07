@@ -133,59 +133,93 @@ def parse_think_tags(text: str) -> Tuple[str, str]:
 
 
 def format_sources_info(results: List[Dict], config_dict: Dict) -> str:
-    """Format source information with ENHANCED KG features - FIXED to match original"""
+    """Format LEGAL REFERENCES (Top K Documents Used in LLM Prompt) with FULL details"""
     if not results:
         return "Tidak ada sumber yang ditemukan."
 
     try:
-        output = [f"## 📖 SUMBER HUKUM UTAMA ({len(results)} dokumen)", ""]
+        # No duplicate header - header is in collapsible summary
+        output = [f"**Documents Used in Prompt: {len(results)}**"]
+        output.append("")
+        output.append("These are the final selected documents sent to the LLM for answer generation.")
+        output.append("")
 
-        for i, result in enumerate(results[:10], 1):
+        for i, result in enumerate(results, 1):
             try:
                 record = result.get('record', result)
 
-                output.append(f"### SUMBER {i}")
-                output.append(f"**{record.get('regulation_type', 'N/A')} No. {record.get('regulation_number', 'N/A')}/{record.get('year', 'N/A')}**")
-                output.append(f"**Ditetapkan oleh:** {record.get('enacting_body', 'N/A')}")
-                output.append(f"**Tentang:** {record.get('about', 'N/A')}")
+                reg_type = record.get('regulation_type', 'N/A')
+                reg_num = record.get('regulation_number', 'N/A')
+                year = record.get('year', 'N/A')
+                about = record.get('about', 'N/A')
+                enacting_body = record.get('enacting_body', 'N/A')
+                global_id = record.get('global_id', 'N/A')
 
-                # Article/Chapter info
-                chapter = record.get('chapter', 'N/A')
-                article = record.get('article', 'N/A')
-                if chapter != 'N/A' or article != 'N/A':
-                    output.append(f"**Referensi:** Bab {chapter} - Pasal {article}")
+                output.append(f"### {i}. {reg_type} No. {reg_num}/{year}")
+                output.append(f"- **Global ID:** {global_id}")
+                output.append(f"- **Tentang:** {about}")
+                output.append(f"- **Ditetapkan oleh:** {enacting_body}")
 
-                # Enhanced metadata display - MATCHING ORIGINAL
-                metadata_parts = []
+                # Article/Chapter location
+                chapter = record.get('chapter', record.get('bab', ''))
+                article = record.get('article', record.get('pasal', ''))
+                section = record.get('section', record.get('bagian', ''))
+                paragraph = record.get('paragraph', record.get('ayat', ''))
+
+                location_parts = []
+                if chapter:
+                    location_parts.append(f"Bab {chapter}")
+                if section:
+                    location_parts.append(f"Bagian {section}")
+                if article:
+                    location_parts.append(f"Pasal {article}")
+                if paragraph:
+                    location_parts.append(f"Ayat {paragraph}")
+
+                if location_parts:
+                    output.append(f"- **Lokasi:** {' > '.join(location_parts)}")
+                else:
+                    output.append(f"- **Lokasi:** (Dokumen Lengkap)")
+
+                # All scores
+                scores_parts = []
                 if 'final_score' in result:
-                    metadata_parts.append(f"Final: {result['final_score']:.3f}")
-                if 'rerank_score' in result:
-                    metadata_parts.append(f"Rerank: {result['rerank_score']:.3f}")
-                if 'composite_score' in result:
-                    metadata_parts.append(f"Search: {result['composite_score']:.3f}")
+                    scores_parts.append(f"Final: {result['final_score']:.4f}")
+                if result.get('semantic_score', 0) > 0:
+                    scores_parts.append(f"Semantic: {result.get('semantic_score', 0):.4f}")
+                if result.get('keyword_score', 0) > 0:
+                    scores_parts.append(f"Keyword: {result.get('keyword_score', 0):.4f}")
+                if result.get('rerank_score', 0) > 0:
+                    scores_parts.append(f"Rerank: {result['rerank_score']:.4f}")
+                if result.get('composite_score', 0) > 0:
+                    scores_parts.append(f"Search: {result['composite_score']:.4f}")
                 if result.get('kg_score', 0) > 0:
-                    metadata_parts.append(f"KG: {result['kg_score']:.3f}")
+                    scores_parts.append(f"KG: {result['kg_score']:.4f}")
+                if result.get('authority_score', 0) > 0:
+                    scores_parts.append(f"Authority: {result.get('authority_score', 0):.4f}")
+                if result.get('temporal_score', 0) > 0:
+                    scores_parts.append(f"Temporal: {result.get('temporal_score', 0):.4f}")
+                if result.get('completeness_score', 0) > 0:
+                    scores_parts.append(f"Completeness: {result.get('completeness_score', 0):.4f}")
 
-                if metadata_parts:
-                    output.append(f"**Skor:** {' | '.join(metadata_parts)}")
+                if scores_parts:
+                    output.append(f"- **Skor:** {' | '.join(scores_parts)}")
 
-                # ENHANCED: Additional KG metadata - MATCHING ORIGINAL
-                additional_info = []
+                # KG metadata
+                kg_parts = []
                 if record.get('kg_primary_domain'):
-                    additional_info.append(f"Domain: {record['kg_primary_domain']}")
-                if record.get('kg_hierarchy_level', 0) > 0 and record.get('kg_hierarchy_level', 0) <= 3:
-                    additional_info.append(f"Hierarchy: Level {record['kg_hierarchy_level']}")
+                    kg_parts.append(f"Domain: {record['kg_primary_domain']}")
+                if record.get('kg_hierarchy_level', 0) > 0:
+                    kg_parts.append(f"Hierarchy: Level {record['kg_hierarchy_level']}")
                 if record.get('kg_cross_ref_count', 0) > 0:
-                    additional_info.append(f"Cross-refs: {record['kg_cross_ref_count']}")
+                    kg_parts.append(f"Cross-refs: {record['kg_cross_ref_count']}")
                 if record.get('kg_pagerank', 0) > 0:
-                    additional_info.append(f"PageRank: {record['kg_pagerank']:.4f}")
-                if record.get('kg_connectivity_score', 0) > 0:
-                    additional_info.append(f"Connectivity: {record['kg_connectivity_score']:.3f}")
+                    kg_parts.append(f"PageRank: {record['kg_pagerank']:.4f}")
 
-                if additional_info:
-                    output.append(f"**Enhanced KG Metadata:** {' | '.join(additional_info)}")
+                if kg_parts:
+                    output.append(f"- **Knowledge Graph:** {' | '.join(kg_parts)}")
 
-                # Team consensus info - MATCHING ORIGINAL
+                # Team consensus info
                 if result.get('team_consensus', False):
                     consensus_info = f"Team Consensus: Yes"
                     if 'researcher_agreement' in result:
@@ -194,19 +228,13 @@ def format_sources_info(results: List[Dict], config_dict: Dict) -> str:
                         researchers = result['supporting_researchers']
                         researcher_names = [RESEARCH_TEAM_PERSONAS.get(r, {}).get('name', r) for r in researchers[:3]]
                         consensus_info += f" | Researchers: {', '.join(researcher_names)}"
-                    output.append(f"**{consensus_info}**")
+                    output.append(f"- **{consensus_info}**")
 
-                # Devils advocate info - MATCHING ORIGINAL
-                if result.get('devils_advocate_challenged', False):
-                    challenge_points = result.get('challenge_points', [])
-                    output.append(f"**🔍 Challenged by Devil's Advocate:** {'; '.join(challenge_points[:2])}")
-
-                # Content snippet
+                # Content preview (800 chars)
                 content = record.get('content', '')
                 if content:
-                    if len(content) > 500:
-                        content = content[:500] + "..."
-                    output.append(f"**Isi:** {content}")
+                    content_preview = content[:800].replace('\n', ' ')
+                    output.append(f"- **Isi (preview):** {content_preview}...")
 
                 output.append("")
 
@@ -217,6 +245,189 @@ def format_sources_info(results: List[Dict], config_dict: Dict) -> str:
         return "\n".join(output)
     except Exception as e:
         return f"Error formatting sources: {e}"
+
+
+def _extract_all_documents_from_metadata(metadata: Dict) -> List[Dict]:
+    """Extract all retrieved documents from various metadata locations - matching test pattern"""
+    all_docs = []
+    seen_ids = set()
+
+    # Try phase_metadata first (most complete)
+    phase_metadata = metadata.get('phase_metadata', {})
+    for phase_name, phase_data in phase_metadata.items():
+        if isinstance(phase_data, dict):
+            candidates = phase_data.get('candidates', phase_data.get('results', []))
+            for doc in candidates:
+                doc_copy = dict(doc) if isinstance(doc, dict) else {'record': doc}
+                record = doc_copy.get('record', doc_copy)
+                doc_id = record.get('global_id', str(hash(str(doc))))
+                if doc_id not in seen_ids:
+                    seen_ids.add(doc_id)
+                    doc_copy['_phase'] = phase_data.get('phase', phase_name)
+                    doc_copy['_researcher'] = phase_data.get('researcher_name', phase_data.get('researcher', ''))
+                    all_docs.append(doc_copy)
+
+    # Try research_data
+    if not all_docs:
+        research_data = metadata.get('research_data', {})
+        all_results = research_data.get('all_results', [])
+        for doc in all_results:
+            doc_copy = dict(doc) if isinstance(doc, dict) else {'record': doc}
+            record = doc_copy.get('record', doc_copy)
+            doc_id = record.get('global_id', str(hash(str(doc))))
+            if doc_id not in seen_ids:
+                seen_ids.add(doc_id)
+                all_docs.append(doc_copy)
+
+    # Try research_log
+    if not all_docs:
+        research_log = metadata.get('research_log', {})
+        phase_results = research_log.get('phase_results', {})
+        for phase_name, phase_data in phase_results.items():
+            if isinstance(phase_data, dict):
+                candidates = phase_data.get('candidates', phase_data.get('results', []))
+                for doc in candidates:
+                    doc_copy = dict(doc) if isinstance(doc, dict) else {'record': doc}
+                    record = doc_copy.get('record', doc_copy)
+                    doc_id = record.get('global_id', str(hash(str(doc))))
+                    if doc_id not in seen_ids:
+                        seen_ids.add(doc_id)
+                        doc_copy['_phase'] = phase_name
+                        all_docs.append(doc_copy)
+
+    # Try consensus_data
+    if not all_docs:
+        consensus_data = metadata.get('consensus_data', {})
+        final_results = consensus_data.get('final_results', [])
+        for doc in final_results:
+            doc_copy = dict(doc) if isinstance(doc, dict) else {'record': doc}
+            record = doc_copy.get('record', doc_copy)
+            doc_id = record.get('global_id', str(hash(str(doc))))
+            if doc_id not in seen_ids:
+                seen_ids.add(doc_id)
+                all_docs.append(doc_copy)
+
+    # Try sources/citations at top level (fallback)
+    if not all_docs:
+        sources = metadata.get('sources', metadata.get('citations', []))
+        for doc in sources:
+            doc_id = doc.get('global_id', doc.get('regulation_number', str(hash(str(doc)))))
+            if doc_id not in seen_ids:
+                seen_ids.add(doc_id)
+                # Convert source format to document format
+                all_docs.append({
+                    'record': doc,
+                    'scores': {
+                        'final': doc.get('score', 0),
+                        'semantic': doc.get('semantic_score', 0),
+                        'keyword': doc.get('keyword_score', 0),
+                        'kg': doc.get('kg_score', 0),
+                        'authority': doc.get('authority_score', 0),
+                        'temporal': doc.get('temporal_score', 0)
+                    }
+                })
+
+    return all_docs
+
+
+def format_all_documents(metadata: Dict, max_docs: int = 50) -> str:
+    """Format ALL Retrieved Documents (Article-Level Details) - Top 50 using existing extraction pattern"""
+    if not metadata:
+        return ""
+
+    try:
+        # Use existing extraction function matching test_complete_output.py pattern
+        all_docs = _extract_all_documents_from_metadata(metadata)
+
+        if not all_docs:
+            return "No documents retrieved during research process."
+
+        # No duplicate header - header is in collapsible summary
+        output = [f"**Showing {min(len(all_docs), max_docs)} documents with detailed metadata**"]
+        output.append("")
+
+        for i, doc in enumerate(all_docs[:max_docs], 1):
+            record = doc.get('record', doc)
+            scores = doc.get('scores', {})
+
+            # Basic info
+            reg_type = record.get('regulation_type', 'N/A')
+            reg_num = record.get('regulation_number', 'N/A')
+            year = record.get('year', 'N/A')
+            about = record.get('about', 'N/A')
+            enacting_body = record.get('enacting_body', 'N/A')
+            global_id = record.get('global_id', 'N/A')
+
+            # Scores
+            final_score = scores.get('final', doc.get('final_score', doc.get('composite_score', record.get('score', 0))))
+            semantic = scores.get('semantic', doc.get('semantic_score', 0))
+            keyword = scores.get('keyword', doc.get('keyword_score', 0))
+            kg = scores.get('kg', doc.get('kg_score', 0))
+            authority = scores.get('authority', doc.get('authority_score', 0))
+            temporal = scores.get('temporal', doc.get('temporal_score', 0))
+            completeness = scores.get('completeness', doc.get('completeness_score', 0))
+
+            # Article-level location
+            chapter = record.get('chapter', record.get('bab', ''))
+            article = record.get('article', record.get('pasal', ''))
+            section = record.get('section', record.get('bagian', ''))
+            paragraph = record.get('paragraph', record.get('ayat', ''))
+
+            # KG metadata
+            kg_domain = record.get('kg_primary_domain', record.get('primary_domain', ''))
+            kg_hierarchy = record.get('kg_hierarchy_level', record.get('hierarchy_level', 0))
+            kg_cross_refs = record.get('kg_cross_ref_count', record.get('cross_ref_count', 0))
+
+            # Phase info
+            phase = doc.get('_phase', '')
+            researcher = doc.get('_researcher', '')
+
+            output.append(f"**[{i}] {reg_type} No. {reg_num}/{year}**")
+            output.append(f"- Global ID: {global_id}")
+            output.append(f"- About: {about}")
+            output.append(f"- Enacting Body: {enacting_body}")
+
+            # Article-level location
+            location_parts = []
+            if chapter:
+                location_parts.append(f"Bab {chapter}")
+            if section:
+                location_parts.append(f"Bagian {section}")
+            if article:
+                location_parts.append(f"Pasal {article}")
+            if paragraph:
+                location_parts.append(f"Ayat {paragraph}")
+
+            if location_parts:
+                output.append(f"- Location: {' > '.join(location_parts)}")
+            else:
+                output.append(f"- Location: (Full Document)")
+
+            # All scores
+            output.append(f"- Scores: Final={final_score:.4f} | Semantic={semantic:.4f} | Keyword={keyword:.4f}")
+            output.append(f"- Scores: KG={kg:.4f} | Authority={authority:.4f} | Temporal={temporal:.4f} | Completeness={completeness:.4f}")
+
+            # KG metadata
+            if kg_domain or kg_hierarchy:
+                output.append(f"- Knowledge Graph: Domain={kg_domain or 'N/A'} | Hierarchy={kg_hierarchy} | CrossRefs={kg_cross_refs}")
+
+            # Research info
+            if phase or researcher:
+                output.append(f"- Discovery: Phase={phase} | Researcher={researcher}")
+
+            # Content (truncated - 300 chars)
+            content = record.get('content', '')
+            if content:
+                content_truncated = content[:300].replace('\n', ' ').strip()
+                output.append(f"- Content (truncated): {content_truncated}...")
+
+            output.append("")
+            output.append("---")
+            output.append("")
+
+        return "\n".join(output)
+    except Exception as e:
+        return f"Error formatting all documents: {e}"
 
 
 def format_retrieved_metadata(phase_metadata: Dict, config_dict: Dict) -> str:
@@ -260,11 +471,8 @@ def format_retrieved_metadata(phase_metadata: Dict, config_dict: Dict) -> str:
             for researcher_data in phase_groups[phase_name].values():
                 total_retrieved += len(researcher_data['candidates'])
 
-        # Build output with detailed research process format
-        output = ["### 🔍 Research Process Details", "-" * 80]
-        output.append(f"- **Team Members:** {len(unique_researchers)}")
-        output.append(f"- **Total Documents Retrieved:** {total_retrieved:,}")
-        output.append(f"- **Phases Executed:** {len(phase_groups)}")
+        # Build output - no duplicate header (header is in collapsible summary)
+        output = [f"**Team Members:** {len(unique_researchers)} | **Total Documents:** {total_retrieved:,} | **Phases:** {len(phase_groups)}"]
         output.append("")
 
         # Detailed phase breakdown
@@ -310,14 +518,8 @@ def format_retrieved_metadata(phase_metadata: Dict, config_dict: Dict) -> str:
                     output.append(f"   ... and {len(candidates) - 5} more documents")
                 output.append("")
 
-        # Summary section
-        output.append(f"**Total Documents Retrieved:** {total_retrieved:,}")
-        if total_kg_enhanced > 0:
-            output.append("")
-            output.append("### 📈 KG Enhancement Stats")
-            output.append(f"- **KG-Enhanced Documents:** {total_kg_enhanced:,}")
-            if total_retrieved > 0:
-                output.append(f"- **KG Enhancement Rate:** {total_kg_enhanced/total_retrieved*100:.1f}%")
+        # Summary section - removed KG Enhancement Stats as per user request
+        output.append(f"**Summary:** {total_retrieved:,} total documents retrieved across {len(phase_groups)} phases")
 
         return "\n".join(output)
     except Exception as e:
@@ -487,11 +689,73 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
             pass
 
         try:
-            # Use streaming if available
-            result = pipeline.query(message, conversation_history=context, stream=False)
+            # Use REAL streaming for LLM output
+            result = None
+            all_phase_metadata = {}
 
-            # Extract metadata for display
-            all_phase_metadata = result.get('phase_metadata', result.get('all_retrieved_metadata', {}))
+            # Check if we can use real streaming
+            use_real_streaming = (
+                HAS_STREAMER and
+                current_provider == 'local'
+            )
+
+            if use_real_streaming:
+                # Real streaming: collect tokens as they're generated
+                yield add_progress("🔄 Starting real-time streaming..."), ""
+
+                streamed_answer = ""
+                chunk_count = 0
+
+                for chunk in pipeline.query(message, conversation_history=context, stream=True):
+                    chunk_type = chunk.get('type', '')
+
+                    if chunk_type == 'token':
+                        token = chunk.get('token', '')
+                        streamed_answer += token
+                        chunk_count += 1
+
+                        # Update display every few tokens - show FULL accumulated answer
+                        if chunk_count % 3 == 0:
+                            progress_display = "\n".join([f"🔄 {m}" for m in current_progress])
+                            # Build incremental output with full answer visible
+                            streaming_output = f'<details><summary>📋 <b>Proses Penelitian (klik untuk melihat)</b></summary>\n\n{progress_display}\n</details>\n\n'
+                            streaming_output += f"✅ **Generating ({chunk_count} tokens)...**\n\n{streamed_answer}"
+                            yield history + [[message, streaming_output]], ""
+
+                    elif chunk_type == 'complete':
+                        result = {
+                            'answer': chunk.get('answer', streamed_answer),
+                            'sources': chunk.get('sources', []),
+                            'citations': chunk.get('citations', []),
+                            'metadata': chunk.get('metadata', {}),
+                            'phase_metadata': chunk.get('phase_metadata', {}),
+                            'thinking': chunk.get('thinking', ''),
+                            'consensus_data': chunk.get('consensus_data', {}),
+                            'research_data': chunk.get('research_data', {}),
+                            'communities': chunk.get('communities', [])
+                        }
+                        all_phase_metadata = result.get('phase_metadata', {})
+
+                    elif chunk_type == 'error':
+                        error_msg = chunk.get('error', 'Unknown error')
+                        yield add_progress(f"❌ Streaming error: {error_msg}"), ""
+                        result = {'answer': '', 'sources': [], 'metadata': {}}
+                        break
+
+                if result is None:
+                    result = {
+                        'answer': streamed_answer,
+                        'sources': [],
+                        'metadata': {},
+                        'phase_metadata': {}
+                    }
+
+                yield add_progress(f"✅ Streaming completed: {chunk_count} tokens generated"), ""
+
+            else:
+                # Fallback to non-streaming for external providers
+                result = pipeline.query(message, conversation_history=context, stream=False)
+                all_phase_metadata = result.get('phase_metadata', result.get('all_retrieved_metadata', {}))
 
             yield add_progress(f"✅ Search completed: {len(result.get('sources', []))} results found"), ""
 
@@ -620,7 +884,7 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                     if citations:
                         sources_info = format_sources_info(citations, config_dict)
                         collapsible_sections.append(
-                            f'<details><summary>📖 <b>Sumber Hukum Utama ({len(citations)} dokumen)</b></summary>\n\n{sources_info}\n</details>'
+                            f'<details><summary>📖 <b>LEGAL REFERENCES (Top K Documents Used in LLM Prompt) - {len(citations)} documents</b></summary>\n\n{sources_info}\n</details>'
                         )
 
                 # *** COMPLETE SEARCH METADATA - DETAILED RESEARCH PROCESS ***
@@ -628,44 +892,111 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                     metadata_info = format_retrieved_metadata(all_phase_metadata, config_dict)
                     if metadata_info.strip():
                         collapsible_sections.append(
-                            f'<details><summary>📚 <b>Semua Metadata Dokumen yang Ditemukan</b></summary>\n\n{metadata_info}\n</details>'
+                            f'<details><summary>🔍 <b>RESEARCH PROCESS DETAILS (ALL Retrieved Documents)</b></summary>\n\n{metadata_info}\n</details>'
                         )
 
-                # Add research team info
+                    # Add ALL Retrieved Documents (Article-Level Details) - Top 50
+                    # Pass full metadata including phase_metadata, research_data, consensus_data, sources
+                    full_metadata_for_docs = {
+                        'phase_metadata': all_phase_metadata,
+                        'research_data': result.get('research_data', {}),
+                        'research_log': result.get('metadata', {}).get('research_log', {}),
+                        'consensus_data': result.get('consensus_data', {}),
+                        'sources': result.get('sources', []),
+                        'citations': result.get('citations', [])
+                    }
+                    all_docs_info = format_all_documents(full_metadata_for_docs, max_docs=50)
+                    if all_docs_info.strip() and all_docs_info != "No documents retrieved during research process.":
+                        collapsible_sections.append(
+                            f'<details><summary>📄 <b>ALL Retrieved Documents (Article-Level Details) - TOP 50</b></summary>\n\n{all_docs_info}\n</details>'
+                        )
+
+                # Add research team info - more transparent
                 if result.get('consensus_data') or result.get('research_data'):
                     consensus = result.get('consensus_data', {})
                     research = result.get('research_data', {})
 
-                    team_content = ""
-                    if consensus.get('agreement_level'):
-                        team_content += f"- **Tingkat Kesepakatan:** {consensus['agreement_level']:.0%}\n"
-                    if research.get('rounds_executed'):
-                        team_content += f"- **Ronde Penelitian:** {research['rounds_executed']}/5\n"
-                    if research.get('total_candidates_evaluated'):
-                        team_content += f"- **Dokumen Dievaluasi:** {research['total_candidates_evaluated']:,}\n"
+                    team_content = "**Ringkasan Tim Peneliti:**\n\n"
 
-                    if team_content:
+                    # Team members info
+                    team_members = research.get('team_members', [])
+                    if team_members:
+                        team_content += f"- **Anggota Tim ({len(team_members)}):**\n"
+                        for member in team_members[:5]:
+                            if isinstance(member, dict):
+                                name = member.get('name', member.get('persona', 'Unknown'))
+                                team_content += f"  - {name}\n"
+                            elif member in RESEARCH_TEAM_PERSONAS:
+                                persona = RESEARCH_TEAM_PERSONAS[member]
+                                team_content += f"  - {persona.get('emoji', '👤')} {persona.get('name', member)}\n"
+                            else:
+                                team_content += f"  - {member}\n"
+
+                    # Consensus details
+                    if consensus.get('agreement_level'):
+                        team_content += f"\n**Konsensus:**\n"
+                        team_content += f"- Tingkat Kesepakatan: **{consensus['agreement_level']:.0%}**\n"
+                    if consensus.get('final_results'):
+                        team_content += f"- Dokumen Akhir Terpilih: {len(consensus['final_results'])}\n"
+                    if consensus.get('voting_details'):
+                        team_content += f"- Detail Voting: {consensus['voting_details']}\n"
+
+                    # Research process details
+                    if research.get('rounds_executed'):
+                        team_content += f"\n**Proses Penelitian:**\n"
+                        team_content += f"- Ronde Dieksekusi: {research['rounds_executed']}/5\n"
+                    if research.get('total_candidates_evaluated'):
+                        team_content += f"- Total Dokumen Dievaluasi: {research['total_candidates_evaluated']:,}\n"
+                    if research.get('cross_validation_enabled'):
+                        team_content += f"- Cross-Validation: Aktif\n"
+                    if research.get('devil_advocate_enabled'):
+                        team_content += f"- Devil's Advocate: Aktif\n"
+
+                    if team_content.strip() != "**Ringkasan Tim Peneliti:**":
                         collapsible_sections.append(
                             f'<details><summary>👥 <b>Tim Peneliti & Konsensus</b></summary>\n\n{team_content}\n</details>'
                         )
 
-                # Add query metadata
-                if result.get('metadata'):
-                    meta = result['metadata']
-                    meta_content = ""
-                    if meta.get('query_type'):
-                        meta_content += f"- **Tipe Query:** {meta['query_type']}\n"
-                    if meta.get('processing_time'):
-                        meta_content += f"- **Waktu Proses:** {meta['processing_time']:.2f}s\n"
-                    if meta.get('total_results'):
-                        meta_content += f"- **Total Hasil:** {meta['total_results']}\n"
-                    if meta.get('strategy'):
-                        meta_content += f"- **Strategi:** {meta['strategy']}\n"
+                # Add query metadata - combined with query analysis
+                meta = result.get('metadata', {})
+                meta_content = ""
 
-                    if meta_content:
-                        collapsible_sections.append(
-                            f'<details><summary>📊 <b>Metadata Pencarian</b></summary>\n\n{meta_content}\n</details>'
-                        )
+                # Add query analysis info inside Metadata Pencarian
+                if query_analysis:
+                    meta_content += "**Analisis Query:**\n"
+                    if query_analysis.get('search_strategy'):
+                        meta_content += f"- Strategi Pencarian: **{query_analysis['search_strategy']}**\n"
+                    if query_analysis.get('confidence'):
+                        meta_content += f"- Confidence: {query_analysis['confidence']:.0%}\n"
+                    if query_analysis.get('reasoning'):
+                        meta_content += f"- Reasoning: {query_analysis['reasoning']}\n"
+                    if query_analysis.get('key_phrases'):
+                        phrases = [p['phrase'] for p in query_analysis['key_phrases'][:5]]
+                        meta_content += f"- Key Phrases: {', '.join(phrases)}\n"
+                    if query_analysis.get('law_name_detected') and query_analysis.get('specific_entities'):
+                        law_name = query_analysis['specific_entities'][0]['name']
+                        meta_content += f"- Law Name Detected: {law_name}\n"
+                    meta_content += "\n"
+
+                # Add other metadata
+                meta_content += "**Metadata Hasil:**\n"
+                if meta.get('query_type'):
+                    meta_content += f"- Tipe Query: {meta['query_type']}\n"
+                if meta.get('processing_time'):
+                    meta_content += f"- Waktu Proses: {meta['processing_time']:.2f}s\n"
+                if meta.get('total_results'):
+                    meta_content += f"- Total Hasil: {meta['total_results']}\n"
+                if meta.get('strategy'):
+                    meta_content += f"- Strategy: {meta['strategy']}\n"
+                if meta.get('retrieval_time'):
+                    meta_content += f"- Retrieval Time: {meta['retrieval_time']:.2f}s\n"
+                if meta.get('generation_time'):
+                    meta_content += f"- Generation Time: {meta['generation_time']:.2f}s\n"
+
+                if meta_content.strip():
+                    collapsible_sections.append(
+                        f'<details><summary>📊 <b>Metadata Pencarian</b></summary>\n\n{meta_content}\n</details>'
+                    )
 
                 if collapsible_sections:
                     final_output += f"\n\n---\n\n" + "\n\n".join(collapsible_sections)

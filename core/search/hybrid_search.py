@@ -546,6 +546,9 @@ class HybridSearchEngine:
         """Normalize regulation type for comparison"""
         reg_type = reg_type.upper().strip()
 
+        # Normalize "UNDANG UNDANG" (with space) to "UNDANG-UNDANG" (with hyphen)
+        reg_type = reg_type.replace('UNDANG UNDANG', 'UNDANG-UNDANG')
+
         # Map full names to abbreviations
         mappings = {
             'UNDANG-UNDANG': 'UU',

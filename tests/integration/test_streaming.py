@@ -70,8 +70,18 @@ class StreamingTester:
             start_time = time.time()
 
             # Stream the response
+            # Pipeline yields dicts with 'type' field: 'token', 'complete', or 'error'
             for chunk in self.pipeline.query(query, stream=True):
-                if isinstance(chunk, dict):
+                chunk_type = chunk.get('type', '')
+
+                if chunk_type == 'token':
+                    # Token chunk - print immediately (real-time streaming)
+                    token = chunk.get('token', '')
+                    print(token, end='', flush=True)
+                    full_answer += token
+                    chunk_count += 1
+
+                elif chunk_type == 'complete':
                     # Final result with metadata
                     full_answer = chunk.get('answer', full_answer)
                     metadata = chunk.get('metadata', {})
@@ -82,14 +92,14 @@ class StreamingTester:
                     self.logger.info(f"Total time: {time.time() - start_time:.2f}s")
                     self.logger.info(f"Final length: {len(full_answer)} chars")
 
-                    if metadata.get('num_source_docs'):
-                        self.logger.info(f"Sources used: {metadata['num_source_docs']}")
+                    if metadata.get('results_count'):
+                        self.logger.info(f"Sources used: {metadata['results_count']}")
 
-                else:
-                    # Text chunk - print immediately (real-time streaming)
-                    print(chunk, end='', flush=True)
-                    full_answer += chunk
-                    chunk_count += 1
+                elif chunk_type == 'error':
+                    # Error during streaming
+                    error_msg = chunk.get('error', 'Unknown error')
+                    self.logger.error(f"Streaming error: {error_msg}")
+                    return False
 
             if full_answer and chunk_count > 0:
                 self.logger.success("\n✅ Direct pipeline streaming passed")
