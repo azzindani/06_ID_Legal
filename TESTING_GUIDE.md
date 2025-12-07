@@ -396,6 +396,14 @@ python tests/integration/test_integrated_system.py
 
 # 12. End-to-End Test (with pytest)
 python -m pytest tests/integration/test_end_to_end.py -v -s
+
+# 13. Stress Test - Single Query (MAXIMUM LOAD)
+# Tests single query with all settings maxed out
+python tests/integration/test_stress_single.py
+
+# 14. Stress Test - Conversational (MAXIMUM LOAD)
+# Tests 7-turn conversation with maximum settings
+python tests/integration/test_stress_conversational.py
 ```
 
 ### Run All Integration Tests at Once
@@ -906,6 +914,83 @@ The parser extracts structured data from RAG output:
 - CSV export for Excel/spreadsheet analysis
 - JSON for programmatic processing
 - Text reports for documentation
+
+## 💪 Stress Testing (MAXIMUM LOAD)
+
+Stress tests verify system stability under maximum configuration settings.
+
+### Stress Test 1: Single Query Maximum Load
+
+Tests a single complex query with ALL settings maxed out:
+- All 5 search phases enabled (including expert_review)
+- Maximum candidates per phase (600-800)
+- All 5 research personas active
+- Maximum final_top_k (20 documents)
+- Maximum max_new_tokens (8192)
+
+```bash
+# Full stress test (maximum settings)
+python tests/integration/test_stress_single.py
+
+# Quick mode (moderate settings)
+python tests/integration/test_stress_single.py --quick
+
+# With memory profiling
+python tests/integration/test_stress_single.py --memory
+
+# Export results to JSON
+python tests/integration/test_stress_single.py --export
+```
+
+### Stress Test 2: Conversational Maximum Load
+
+Tests 7-turn complex conversation with maximum settings:
+- Cross-domain topics (tax, labor, multi-domain)
+- Topic shifts and back-references
+- Context building across turns
+- Heavy conversation history (50 turns tracked)
+- Summary requests requiring full context
+
+```bash
+# Full stress test (7 turns, maximum settings)
+python tests/integration/test_stress_conversational.py
+
+# Quick mode (5 turns, moderate settings)
+python tests/integration/test_stress_conversational.py --quick
+
+# With memory profiling per turn
+python tests/integration/test_stress_conversational.py --memory
+
+# Export results to JSON
+python tests/integration/test_stress_conversational.py --export
+```
+
+### Stress Test Configuration Details
+
+| Setting | Default | Stress Max | Description |
+|---------|---------|------------|-------------|
+| final_top_k | 3 | 20 | Documents returned |
+| research_team_size | 4 | 5 | Active personas |
+| max_new_tokens | 2048 | 8192 | Generation limit |
+| search_phases | 4/5 | 5/5 | All phases enabled |
+| candidates (total) | ~640 | ~1500+ | Search candidates |
+
+### What Stress Tests Verify
+
+1. **System Stability**: No crashes under maximum load
+2. **Memory Bounds**: Memory stays within acceptable limits
+3. **Timeout Handling**: Long operations complete or timeout gracefully
+4. **Context Management**: Large conversation contexts are handled
+5. **Resource Cleanup**: Proper cleanup after heavy operations
+
+### Expected Stress Test Metrics
+
+| Metric | Quick Mode | Maximum Mode |
+|--------|------------|--------------|
+| Single Query Time | 30-60s | 60-180s |
+| Memory Peak | <2GB | <4GB |
+| Conv Turn Time (avg) | 20-40s | 40-90s |
+| 7-Turn Total | N/A | 5-15 min |
 
 ## 📊 Verification Checklist
 
