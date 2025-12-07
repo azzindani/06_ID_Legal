@@ -1,15 +1,19 @@
 """
 Conversational RAG Test - Multi-Turn Conversation with Memory and Context Management
 
-This test demonstrates the system's ability to handle intelligent legal conversations:
+This test verifies the system's conversational capabilities using EXISTING MODULES:
+- QueryDetector (core/search/query_detection.py) - Query analysis, follow-up detection
+- KnowledgeGraphCore (core/knowledge_graph/kg_core.py) - Entity/regulation extraction
+- ConversationManager (conversation/manager.py) - Session and history management
+- RAGPipeline (pipeline/rag_pipeline.py) - Complete RAG processing
 
-1. CONVERSATION MEMORY - Maintains context across related questions
-2. CONTEXT MANAGEMENT - Tracks topic continuity and detects topic shifts
-3. SPECIFIC REGULATION RECOGNITION - Handles direct references (e.g., UU No. 13 Tahun 2003)
-4. ENTITY EXTRACTION - Identifies legal entities, articles, and references
-5. TOPIC CHANGE DETECTION - Gracefully handles conversation pivots
-6. DYNAMIC COMMUNITY DETECTION - Groups related regulations thematically
-7. FOLLOW-UP QUESTION HANDLING - Understands implicit references from prior turns
+Features Tested:
+1. CONVERSATION MEMORY - ConversationManager tracks context across turns
+2. CONTEXT MANAGEMENT - QueryDetector detects follow-ups and topic changes
+3. SPECIFIC REGULATION RECOGNITION - KnowledgeGraphCore extracts UU No. 13 Tahun 2003
+4. ENTITY EXTRACTION - KnowledgeGraphCore identifies legal entities
+5. TOPIC CHANGE DETECTION - QueryDetector analyzes query patterns
+6. FOLLOW-UP QUESTION HANDLING - QueryDetector.is_followup detection
 
 Conversation Flow (5 Questions):
 ────────────────────────────────────────────────────────────────────────────────
@@ -32,8 +36,6 @@ Options:
     --export          Export results to JSON
     --output PATH     Custom output file path
     --verbose         Show detailed metadata for each turn
-
-Author: Legal RAG System Test Suite
 """
 
 import sys
@@ -49,18 +51,19 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 from logger_utils import get_logger, initialize_logging
 from pipeline import RAGPipeline
 from conversation import ConversationManager, get_context_cache
+from core.search.query_detection import QueryDetector
+from core.knowledge_graph.kg_core import KnowledgeGraphCore
 
 
 class ConversationalTester:
     """
-    Tests multi-turn conversational capabilities with memory and context management.
+    Tests multi-turn conversational capabilities using existing system modules.
 
-    This class simulates a high-intelligence legal assistant handling:
-    - Continuous conversations with context memory
-    - Topic continuity and topic shifts
-    - Specific regulation lookups
-    - Follow-up questions with implicit references
-    - Multi-domain legal knowledge
+    Uses:
+    - QueryDetector for query analysis and follow-up detection
+    - KnowledgeGraphCore for entity and regulation extraction
+    - ConversationManager for session tracking
+    - RAGPipeline for end-to-end processing
     """
 
     def __init__(self, verbose: bool = False):
@@ -68,9 +71,11 @@ class ConversationalTester:
         self.logger = get_logger("ConversationalTest")
         self.verbose = verbose
 
-        # Core components
+        # Core components - use EXISTING modules
         self.pipeline: Optional[RAGPipeline] = None
         self.conversation_manager: Optional[ConversationManager] = None
+        self.query_detector: Optional[QueryDetector] = None
+        self.kg_core: Optional[KnowledgeGraphCore] = None
         self.session_id: Optional[str] = None
 
         # Results tracking
@@ -84,13 +89,13 @@ class ConversationalTester:
             'specific_regulations_found': 0,
             'follow_up_context_used': 0,
             'entities_extracted': [],
-            'communities_discovered': [],
+            'regulation_references': [],
             'total_documents_retrieved': 0,
             'conversation_coherence_score': 0.0
         }
 
     def initialize(self) -> bool:
-        """Initialize RAG pipeline and conversation manager"""
+        """Initialize RAG pipeline and all required modules"""
         self.logger.info("=" * 100)
         self.logger.info("INITIALIZING CONVERSATIONAL RAG SYSTEM")
         self.logger.info("=" * 100)
@@ -102,17 +107,26 @@ class ConversationalTester:
                 self.logger.error("Pipeline initialization failed")
                 return False
 
-            # Initialize Conversation Manager
+            # Initialize QueryDetector - EXISTING MODULE
+            self.query_detector = QueryDetector()
+            self.logger.info("QueryDetector initialized (core/search/query_detection.py)")
+
+            # Initialize KnowledgeGraphCore - EXISTING MODULE
+            self.kg_core = KnowledgeGraphCore()
+            self.logger.info("KnowledgeGraphCore initialized (core/knowledge_graph/kg_core.py)")
+
+            # Initialize Conversation Manager - EXISTING MODULE
             self.conversation_manager = ConversationManager({
                 'max_history_turns': 50,
-                'max_context_turns': 10  # Keep more context for follow-ups
+                'max_context_turns': 10
             })
+            self.logger.info("ConversationManager initialized (conversation/manager.py)")
 
             # Start session
             self.session_id = self.conversation_manager.start_session()
             self.logger.info(f"Conversation session started: {self.session_id}")
 
-            self.logger.success("System initialized successfully")
+            self.logger.success("All modules initialized successfully")
             return True
 
         except Exception as e:
@@ -130,79 +144,56 @@ class ConversationalTester:
         context = []
         for turn in history:
             context.append({"role": "user", "content": turn['query']})
-            context.append({"role": "assistant", "content": turn['answer'][:500]})  # Truncate for context
+            context.append({"role": "assistant", "content": turn['answer'][:500]})
         return context
 
-    def _analyze_topic_continuity(
-        self,
-        current_query: str,
-        previous_queries: List[str]
-    ) -> Dict[str, Any]:
-        """Analyze if current query continues previous topic or shifts"""
-        # Keywords for topic detection
-        topic_keywords = {
-            'ketenagakerjaan': ['pekerja', 'buruh', 'ketenagakerjaan', 'pesangon', 'phk', 'upah', 'tenaga kerja'],
-            'lingkungan': ['lingkungan', 'izin lingkungan', 'amdal', 'pencemaran', 'limbah'],
-            'perpajakan': ['pajak', 'perpajakan', 'wajib pajak', 'keberatan', 'banding'],
-            'perusahaan': ['perseroan', 'pt', 'perusahaan', 'direksi', 'komisaris'],
-            'konsumen': ['konsumen', 'perlindungan konsumen', 'produk', 'pengaduan']
-        }
+    def _analyze_query_with_modules(self, query: str, previous_queries: List[str]) -> Dict[str, Any]:
+        """
+        Analyze query using EXISTING modules:
+        - QueryDetector.analyze_query() for query type, follow-up detection
+        - KnowledgeGraphCore.extract_regulation_references_with_confidence() for regulations
+        - KnowledgeGraphCore.extract_entities() for entity extraction
+        """
+        # Use QueryDetector for comprehensive analysis
+        query_analysis = self.query_detector.analyze_query(
+            query,
+            conversation_history=[{'query': q} for q in previous_queries]
+        )
 
-        def detect_topic(query: str) -> str:
-            query_lower = query.lower()
-            for topic, keywords in topic_keywords.items():
-                if any(kw in query_lower for kw in keywords):
-                    return topic
-            return 'general'
+        # Use KnowledgeGraphCore for regulation extraction
+        regulation_refs = self.kg_core.extract_regulation_references_with_confidence(query)
 
-        current_topic = detect_topic(current_query)
-        previous_topics = [detect_topic(q) for q in previous_queries] if previous_queries else []
+        # Use KnowledgeGraphCore for entity extraction
+        entities = self.kg_core.extract_entities(query)
 
-        is_continuation = current_topic in previous_topics if previous_topics else True
-        is_topic_shift = not is_continuation and len(previous_topics) > 0
+        # Determine topic based on query_type from QueryDetector
+        current_topic = query_analysis.get('query_type', 'general')
+
+        # Detect topic shift by comparing with previous topics
+        previous_topics = []
+        for prev_q in previous_queries:
+            prev_analysis = self.query_detector.analyze_query(prev_q)
+            previous_topics.append(prev_analysis.get('query_type', 'general'))
+
+        is_topic_shift = (
+            len(previous_topics) > 0 and
+            current_topic != previous_topics[-1] if previous_topics else False
+        )
 
         return {
+            'query_analysis': query_analysis,
+            'query_type': query_analysis.get('query_type', 'general'),
+            'is_followup': query_analysis.get('is_followup', False),
+            'is_clarification': query_analysis.get('is_clarification', False),
+            'has_regulation_ref': query_analysis.get('has_regulation_ref', False),
+            'regulation_references': regulation_refs,
+            'entities': entities,
             'current_topic': current_topic,
             'previous_topics': previous_topics,
-            'is_continuation': is_continuation,
-            'is_topic_shift': is_topic_shift
+            'is_topic_shift': is_topic_shift,
+            'complexity_score': query_analysis.get('complexity_score', 0),
+            'team_composition': query_analysis.get('team_composition', [])
         }
-
-    def _extract_regulation_reference(self, query: str) -> Optional[Dict[str, str]]:
-        """Extract specific regulation reference from query"""
-        import re
-
-        # Pattern for Indonesian regulations: UU No. 13 Tahun 2003, PP 35/2021, etc.
-        patterns = [
-            r'UU\s*(?:No\.?|Nomor)\s*(\d+)\s*(?:Tahun|Thn|\/)\s*(\d{4})',
-            r'PP\s*(?:No\.?|Nomor)\s*(\d+)\s*(?:Tahun|Thn|\/)\s*(\d{4})',
-            r'Perpres\s*(?:No\.?|Nomor)\s*(\d+)\s*(?:Tahun|Thn|\/)\s*(\d{4})',
-            r'Perda\s*(?:No\.?|Nomor)\s*(\d+)\s*(?:Tahun|Thn|\/)\s*(\d{4})',
-            r'Permen\w*\s*(?:No\.?|Nomor)\s*(\d+)\s*(?:Tahun|Thn|\/)\s*(\d{4})'
-        ]
-
-        for pattern in patterns:
-            match = re.search(pattern, query, re.IGNORECASE)
-            if match:
-                reg_type = pattern.split(r'\s')[0].replace('\\', '').upper()
-                return {
-                    'type': reg_type,
-                    'number': match.group(1),
-                    'year': match.group(2),
-                    'full_reference': match.group(0)
-                }
-        return None
-
-    def _is_follow_up_question(self, query: str) -> bool:
-        """Detect if query is a follow-up question"""
-        follow_up_indicators = [
-            'bagaimana jika', 'lalu bagaimana', 'selanjutnya',
-            'apakah juga', 'terkait hal tersebut', 'mengenai hal itu',
-            'tentang itu', 'tersebut', 'nya', 'yang tadi',
-            'jika demikian', 'dalam hal ini', 'untuk kasus ini'
-        ]
-        query_lower = query.lower()
-        return any(indicator in query_lower for indicator in follow_up_indicators)
 
     def format_turn_output(
         self,
@@ -222,96 +213,112 @@ class ConversationalTester:
 
         # Question
         lines.append(f"\n┌{'─' * 98}┐")
-        lines.append(f"│ 📝 QUESTION                                                                              │")
+        lines.append(f"│ QUESTION                                                                                     │")
         lines.append(f"├{'─' * 98}┤")
-        lines.append(f"│ {query[:95]}{'...' if len(query) > 95 else ''} │")
+        q_display = query[:92] + '...' if len(query) > 92 else query
+        lines.append(f"│ {q_display:<96} │")
         lines.append(f"└{'─' * 98}┘")
 
-        # Analysis Section
+        # Analysis Section (using EXISTING module results)
         lines.append(f"\n┌{'─' * 98}┐")
-        lines.append(f"│ 🔍 ANALYSIS                                                                              │")
+        lines.append(f"│ ANALYSIS (from QueryDetector & KnowledgeGraphCore)                                           │")
         lines.append(f"├{'─' * 98}┤")
 
-        topic_info = analysis.get('topic_analysis', {})
-        lines.append(f"│ Topic: {topic_info.get('current_topic', 'N/A'):<20} | Continuation: {'✓' if topic_info.get('is_continuation') else '✗':<5} | Topic Shift: {'⚠️' if topic_info.get('is_topic_shift') else '—':<5} │")
+        query_type = analysis.get('query_type', 'N/A')
+        is_followup = '✓' if analysis.get('is_followup') else '—'
+        is_shift = '⚠️' if analysis.get('is_topic_shift') else '—'
+        lines.append(f"│ Query Type: {query_type:<15} | Follow-up: {is_followup:<5} | Topic Shift: {is_shift:<5}                       │")
 
-        reg_ref = analysis.get('regulation_reference')
-        if reg_ref:
-            lines.append(f"│ 📜 Specific Regulation: {reg_ref.get('full_reference', 'N/A'):<67} │")
+        # Regulation references from KnowledgeGraphCore
+        reg_refs = analysis.get('regulation_references', [])
+        if reg_refs:
+            for ref in reg_refs[:2]:
+                ref_str = f"{ref.get('type', 'N/A')} No. {ref.get('number', '?')}/{ref.get('year', '?')} (conf: {ref.get('confidence', 0):.1f})"
+                lines.append(f"│ Regulation Found: {ref_str:<76} │")
 
-        if analysis.get('is_follow_up'):
-            lines.append(f"│ 💭 Follow-up Question: Using context from previous turns                                 │")
+        # Entities from KnowledgeGraphCore
+        entities = analysis.get('entities', {})
+        if entities:
+            entity_summary = []
+            for etype, evals in entities.items():
+                if evals:
+                    entity_summary.append(f"{etype}: {len(evals)}")
+            if entity_summary:
+                ent_str = ", ".join(entity_summary[:4])
+                lines.append(f"│ Entities: {ent_str:<84} │")
 
-        query_type = metadata.get('query_type', 'general')
-        lines.append(f"│ Query Type: {query_type:<83} │")
+        # Team composition from QueryDetector
+        team = analysis.get('team_composition', [])
+        if team:
+            team_str = ", ".join(team[:3])
+            lines.append(f"│ Research Team: {team_str:<79} │")
+
         lines.append(f"└{'─' * 98}┘")
 
-        # Thinking Process (if available)
+        # Thinking Process (if available and verbose)
         thinking = metadata.get('thinking', '')
         if thinking and self.verbose:
             lines.append(f"\n┌{'─' * 98}┐")
-            lines.append(f"│ 🧠 THINKING PROCESS                                                                      │")
+            lines.append(f"│ THINKING PROCESS                                                                             │")
             lines.append(f"├{'─' * 98}┤")
-            # Wrap thinking content
-            for i in range(0, min(len(thinking), 500), 95):
-                chunk = thinking[i:i+95]
-                lines.append(f"│ {chunk:<95} │")
-            if len(thinking) > 500:
-                lines.append(f"│ ... [truncated - {len(thinking)} chars total]                                                  │")
+            for i in range(0, min(len(thinking), 400), 94):
+                chunk = thinking[i:i+94]
+                lines.append(f"│ {chunk:<96} │")
+            if len(thinking) > 400:
+                lines.append(f"│ ... [truncated - {len(thinking)} chars total]                                                         │")
             lines.append(f"└{'─' * 98}┘")
 
         # Answer
         lines.append(f"\n┌{'─' * 98}┐")
-        lines.append(f"│ ✅ ANSWER                                                                                │")
+        lines.append(f"│ ANSWER                                                                                       │")
         lines.append(f"├{'─' * 98}┤")
-        # Wrap answer
         answer_lines = answer.split('\n')
-        for ans_line in answer_lines[:15]:  # Show first 15 lines
-            for i in range(0, len(ans_line), 95):
-                chunk = ans_line[i:i+95]
-                lines.append(f"│ {chunk:<95} │")
-        if len(answer_lines) > 15:
-            lines.append(f"│ ... [truncated - {len(answer_lines)} lines total]                                                 │")
+        for ans_line in answer_lines[:12]:
+            for i in range(0, len(ans_line), 94):
+                chunk = ans_line[i:i+94]
+                lines.append(f"│ {chunk:<96} │")
+        if len(answer_lines) > 12:
+            lines.append(f"│ ... [truncated - {len(answer_lines)} lines total]                                                        │")
         lines.append(f"└{'─' * 98}┘")
 
         # Sources/Citations
         sources = metadata.get('sources', metadata.get('citations', []))
         if sources:
             lines.append(f"\n┌{'─' * 98}┐")
-            lines.append(f"│ 📚 LEGAL SOURCES ({len(sources)} documents)                                                      │")
+            lines.append(f"│ LEGAL SOURCES ({len(sources)} documents)                                                               │")
             lines.append(f"├{'─' * 98}┤")
             for idx, source in enumerate(sources[:5], 1):
                 reg_type = source.get('regulation_type', 'N/A')
                 reg_num = source.get('regulation_number', 'N/A')
                 year = source.get('year', 'N/A')
                 score = source.get('score', 0)
-                about = source.get('about', '')[:60]
-                lines.append(f"│ {idx}. {reg_type} No. {reg_num}/{year} (Score: {score:.3f})                                      │")
-                lines.append(f"│    {about}...                                                  │")
+                src_str = f"{idx}. {reg_type} No. {reg_num}/{year} (Score: {score:.3f})"
+                lines.append(f"│ {src_str:<96} │")
             if len(sources) > 5:
-                lines.append(f"│ ... and {len(sources) - 5} more documents                                                      │")
+                lines.append(f"│ ... and {len(sources) - 5} more documents                                                             │")
             lines.append(f"└{'─' * 98}┘")
 
-        # Context Memory Indicators
+        # Context Memory (from ConversationManager)
         if turn_num > 1:
             lines.append(f"\n┌{'─' * 98}┐")
-            lines.append(f"│ 💾 CONVERSATION MEMORY                                                                   │")
+            lines.append(f"│ CONVERSATION MEMORY (from ConversationManager)                                                │")
             lines.append(f"├{'─' * 98}┤")
-            context_used = analysis.get('context_turns_used', 0)
-            lines.append(f"│ Previous turns in context: {context_used:<69} │")
-            if topic_info.get('previous_topics'):
-                prev_topics = ', '.join(set(topic_info['previous_topics']))
-                lines.append(f"│ Previous topics: {prev_topics:<77} │")
+            context_used = len(analysis.get('previous_topics', []))
+            lines.append(f"│ Previous turns tracked: {context_used:<71} │")
+            if analysis.get('previous_topics'):
+                prev_topics = ', '.join(analysis['previous_topics'][-3:])
+                lines.append(f"│ Recent topics: {prev_topics:<79} │")
             lines.append(f"└{'─' * 98}┘")
 
         # Timing
         lines.append(f"\n┌{'─' * 98}┐")
-        lines.append(f"│ ⏱️  PERFORMANCE                                                                           │")
+        lines.append(f"│ PERFORMANCE                                                                                  │")
         lines.append(f"├{'─' * 98}┤")
         duration = streaming_stats.get('duration', 0)
         chunks = streaming_stats.get('chunk_count', 0)
         retrieval_time = metadata.get('retrieval_time', 0)
-        lines.append(f"│ Streaming: {chunks} chunks in {duration:.2f}s | Retrieval: {retrieval_time:.2f}s                                      │")
+        perf_str = f"Streaming: {chunks} chunks in {duration:.2f}s | Retrieval: {retrieval_time:.2f}s"
+        lines.append(f"│ {perf_str:<96} │")
         lines.append(f"└{'─' * 98}┘")
 
         return "\n".join(lines)
@@ -322,7 +329,7 @@ class ConversationalTester:
         turn_num: int,
         turn_type: str = "QUERY"
     ) -> Dict[str, Any]:
-        """Run a single conversation turn with full analysis"""
+        """Run a single conversation turn using existing modules"""
         self.logger.info(f"\n{'#' * 100}")
         self.logger.info(f"TURN {turn_num}: {turn_type}")
         self.logger.info(f"{'#' * 100}")
@@ -339,33 +346,26 @@ class ConversationalTester:
         }
 
         try:
-            # Pre-query analysis
+            # Get previous queries from conversation log
             previous_queries = [t['query'] for t in self.conversation_log]
 
-            topic_analysis = self._analyze_topic_continuity(query, previous_queries)
-            regulation_ref = self._extract_regulation_reference(query)
-            is_follow_up = self._is_follow_up_question(query)
+            # Analyze query using EXISTING MODULES
+            analysis = self._analyze_query_with_modules(query, previous_queries)
+            analysis['turn_type'] = turn_type
 
-            analysis = {
-                'turn_type': turn_type,
-                'topic_analysis': topic_analysis,
-                'regulation_reference': regulation_ref,
-                'is_follow_up': is_follow_up,
-                'context_turns_used': min(len(previous_queries), 5)
-            }
-
-            # Update metrics
-            if topic_analysis['is_continuation'] and turn_num > 1:
+            # Update metrics based on module analysis
+            if not analysis['is_topic_shift'] and turn_num > 1:
                 self.metrics['topic_continuity_detected'] += 1
-            if topic_analysis['is_topic_shift']:
+            if analysis['is_topic_shift']:
                 self.metrics['topic_shifts_detected'] += 1
-            if regulation_ref:
-                self.metrics['specific_regulations_found'] += 1
-            if is_follow_up:
+            if analysis['regulation_references']:
+                self.metrics['specific_regulations_found'] += len(analysis['regulation_references'])
+                for ref in analysis['regulation_references']:
+                    ref_str = f"{ref.get('type', '')} {ref.get('number', '')}/{ref.get('year', '')}"
+                    if ref_str not in self.metrics['regulation_references']:
+                        self.metrics['regulation_references'].append(ref_str)
+            if analysis['is_followup']:
                 self.metrics['follow_up_context_used'] += 1
-
-            # Get conversation context
-            conversation_context = self._get_conversation_context()
 
             print(f"\n{'=' * 100}")
             print(f"TURN {turn_num}: {query[:80]}{'...' if len(query) > 80 else ''}")
@@ -378,14 +378,8 @@ class ConversationalTester:
             start_time = time.time()
             final_metadata = {}
 
-            # Prepare query with context for follow-ups
-            enriched_query = query
-            if is_follow_up and conversation_context:
-                # Add implicit context for better understanding
-                enriched_query = f"[Melanjutkan pembahasan sebelumnya] {query}"
-
-            # Stream the response
-            for chunk in self.pipeline.query(enriched_query, stream=True):
+            # Stream the response using RAGPipeline
+            for chunk in self.pipeline.query(query, stream=True):
                 chunk_type = chunk.get('type', '')
 
                 if chunk_type == 'token':
@@ -419,7 +413,7 @@ class ConversationalTester:
                 'chars_per_second': len(full_answer) / duration if duration > 0 else 0
             }
 
-            # Add turn to conversation manager
+            # Add turn to ConversationManager (EXISTING MODULE)
             if self.conversation_manager and self.session_id:
                 self.conversation_manager.add_turn(
                     session_id=self.session_id,
@@ -447,15 +441,14 @@ class ConversationalTester:
                 'turn_num': turn_num,
                 'query': query,
                 'answer': full_answer,
-                'topic': topic_analysis['current_topic'],
+                'topic': analysis['current_topic'],
                 'timestamp': datetime.now().isoformat()
             })
 
-            # Track documents retrieved
+            # Track documents and entities
             sources = final_metadata.get('sources', [])
             self.metrics['total_documents_retrieved'] += len(sources)
 
-            # Extract entities from sources
             for source in sources:
                 entity = f"{source.get('regulation_type', '')} {source.get('regulation_number', '')}/{source.get('year', '')}"
                 if entity not in self.metrics['entities_extracted']:
@@ -492,18 +485,18 @@ class ConversationalTester:
             {
                 'query': "Jelaskan pasal-pasal dalam UU Nomor 13 Tahun 2003 yang mengatur tentang pesangon dan bagaimana cara menghitungnya",
                 'type': "SPECIFIC REGULATION",
-                'description': "Direct reference to UU No. 13 Tahun 2003 - tests specific regulation recognition"
+                'description': "Direct reference to UU No. 13 Tahun 2003 - tests KnowledgeGraphCore extraction"
             },
             {
                 'query': "Bagaimana jika perusahaan tidak membayar pesangon tersebut? Apa upaya hukum yang dapat dilakukan pekerja?",
                 'type': "FOLLOW-UP",
-                'description': "Follow-up using context from Q2 - tests conversation memory"
+                'description': "Follow-up using context - tests QueryDetector.is_followup"
             },
             # TOPIC 2: Lingkungan Hidup (Environmental Law) - 1 Question
             {
                 'query': "Sekarang saya ingin bertanya tentang izin lingkungan. Apa persyaratan untuk mendapatkan izin lingkungan berdasarkan peraturan yang berlaku?",
                 'type': "TOPIC SHIFT",
-                'description': "Topic change to environmental law - tests context switching"
+                'description': "Topic change to environmental law - tests QueryDetector topic analysis"
             },
             # TOPIC 3: Perpajakan (Tax Law) - 1 Question
             {
@@ -514,18 +507,16 @@ class ConversationalTester:
         ]
 
         self.logger.info("\n" + "═" * 100)
-        self.logger.info("  CONVERSATIONAL RAG TEST - MULTI-TURN INTELLIGENT LEGAL ASSISTANT")
+        self.logger.info("  CONVERSATIONAL RAG TEST - Using Existing System Modules")
         self.logger.info("═" * 100)
+        self.logger.info("\n  Modules Being Tested:")
+        self.logger.info("    • QueryDetector (core/search/query_detection.py)")
+        self.logger.info("    • KnowledgeGraphCore (core/knowledge_graph/kg_core.py)")
+        self.logger.info("    • ConversationManager (conversation/manager.py)")
+        self.logger.info("    • RAGPipeline (pipeline/rag_pipeline.py)")
         self.logger.info(f"\n  Session ID: {self.session_id}")
         self.logger.info(f"  Questions: {len(conversation_script)}")
         self.logger.info(f"  Topics: Ketenagakerjaan (3) → Lingkungan (1) → Perpajakan (1)")
-        self.logger.info("\n  Testing:")
-        self.logger.info("    ✓ Conversation Memory")
-        self.logger.info("    ✓ Context Management")
-        self.logger.info("    ✓ Specific Regulation Recognition (UU 13/2003)")
-        self.logger.info("    ✓ Follow-up Question Handling")
-        self.logger.info("    ✓ Topic Shift Detection")
-        self.logger.info("    ✓ Multi-Domain Knowledge")
         self.logger.info("═" * 100)
 
         # Initialize
@@ -546,12 +537,12 @@ class ConversationalTester:
                 if result['success']:
                     successful += 1
 
-                # Pause between turns to simulate real conversation
+                # Pause between turns
                 if i < len(conversation_script):
-                    self.logger.info("\n⏳ Simulating conversation pause...")
+                    self.logger.info("\n⏳ Pause before next turn...")
                     time.sleep(3)
 
-            # Calculate conversation coherence score
+            # Calculate coherence score
             self.metrics['conversation_coherence_score'] = self._calculate_coherence_score()
 
             # Display Final Summary
@@ -571,29 +562,21 @@ class ConversationalTester:
 
         scores = []
 
-        # Score based on topic continuity
-        if self.metrics['topic_continuity_detected'] >= 2:  # Expected 2 continuations
-            scores.append(1.0)
-        else:
-            scores.append(self.metrics['topic_continuity_detected'] / 2.0)
+        # Score based on topic continuity (expected 2 continuations in Q2, Q3)
+        continuity_score = min(1.0, self.metrics['topic_continuity_detected'] / 2.0)
+        scores.append(continuity_score)
 
-        # Score based on topic shifts handled
-        if self.metrics['topic_shifts_detected'] >= 2:  # Expected 2 shifts
-            scores.append(1.0)
-        else:
-            scores.append(self.metrics['topic_shifts_detected'] / 2.0)
+        # Score based on topic shifts handled (expected 2 shifts in Q4, Q5)
+        shift_score = min(1.0, self.metrics['topic_shifts_detected'] / 2.0)
+        scores.append(shift_score)
 
-        # Score based on specific regulation recognition
-        if self.metrics['specific_regulations_found'] >= 1:
-            scores.append(1.0)
-        else:
-            scores.append(0.0)
+        # Score based on specific regulation recognition (Q2 has UU 13/2003)
+        reg_score = 1.0 if self.metrics['specific_regulations_found'] >= 1 else 0.0
+        scores.append(reg_score)
 
-        # Score based on follow-up handling
-        if self.metrics['follow_up_context_used'] >= 1:
-            scores.append(1.0)
-        else:
-            scores.append(0.0)
+        # Score based on follow-up handling (Q3 is follow-up)
+        followup_score = 1.0 if self.metrics['follow_up_context_used'] >= 1 else 0.0
+        scores.append(followup_score)
 
         # Score based on successful turns
         success_rate = sum(1 for r in self.turn_results if r['success']) / len(self.turn_results)
@@ -607,9 +590,9 @@ class ConversationalTester:
         print("  CONVERSATIONAL TEST SUMMARY")
         print("═" * 100)
 
-        print(f"\n  📊 RESULTS: {successful}/{total} turns successful")
-        print(f"  🆔 Session ID: {self.session_id}")
-        print(f"  🎯 Coherence Score: {self.metrics['conversation_coherence_score']:.1%}")
+        print(f"\n  RESULTS: {successful}/{total} turns successful")
+        print(f"  Session ID: {self.session_id}")
+        print(f"  Coherence Score: {self.metrics['conversation_coherence_score']:.1%}")
 
         print("\n  " + "─" * 96)
         print("  TURN-BY-TURN RESULTS")
@@ -619,11 +602,11 @@ class ConversationalTester:
             status = "✅ PASS" if result['success'] else "❌ FAIL"
             turn_type = result['turn_type']
             query_preview = result['query'][:50] + "..." if len(result['query']) > 50 else result['query']
-            topic = result['analysis'].get('topic_analysis', {}).get('current_topic', 'N/A')
+            topic = result['analysis'].get('current_topic', 'N/A')
 
             print(f"  Turn {result['turn_num']}: [{status}] [{turn_type}]")
             print(f"         Query: {query_preview}")
-            print(f"         Topic: {topic}")
+            print(f"         Topic (from QueryDetector): {topic}")
 
             if result['success']:
                 stats = result['streaming_stats']
@@ -632,44 +615,39 @@ class ConversationalTester:
             print()
 
         print("  " + "─" * 96)
-        print("  CONVERSATION INTELLIGENCE METRICS")
+        print("  MODULE VERIFICATION METRICS")
         print("  " + "─" * 96)
 
-        print(f"\n  💾 Memory & Context:")
-        print(f"     • Topic continuity detected: {self.metrics['topic_continuity_detected']} times")
-        print(f"     • Topic shifts handled: {self.metrics['topic_shifts_detected']} times")
-        print(f"     • Follow-up context used: {self.metrics['follow_up_context_used']} times")
+        print(f"\n  QueryDetector Results:")
+        print(f"     • Follow-ups detected: {self.metrics['follow_up_context_used']}")
+        print(f"     • Topic shifts detected: {self.metrics['topic_shifts_detected']}")
+        print(f"     • Topic continuity: {self.metrics['topic_continuity_detected']}")
 
-        print(f"\n  📜 Regulation Recognition:")
-        print(f"     • Specific regulations identified: {self.metrics['specific_regulations_found']}")
-        print(f"     • Total entities extracted: {len(self.metrics['entities_extracted'])}")
+        print(f"\n  KnowledgeGraphCore Results:")
+        print(f"     • Regulation references extracted: {self.metrics['specific_regulations_found']}")
+        if self.metrics['regulation_references']:
+            print(f"     • References: {', '.join(self.metrics['regulation_references'][:5])}")
 
-        if self.metrics['entities_extracted'][:10]:
-            print(f"     • Sample entities: {', '.join(self.metrics['entities_extracted'][:5])}")
+        print(f"\n  ConversationManager Results:")
+        print(f"     • Session tracked: {self.session_id}")
+        print(f"     • Turns recorded: {len(self.conversation_log)}")
 
-        print(f"\n  📚 Document Retrieval:")
+        print(f"\n  RAGPipeline Results:")
         print(f"     • Total documents retrieved: {self.metrics['total_documents_retrieved']}")
-        print(f"     • Average per turn: {self.metrics['total_documents_retrieved'] / total:.1f}")
-
-        # Coherence breakdown
-        print(f"\n  🎯 Coherence Score Breakdown:")
-        print(f"     • Topic Continuity: {'✓' if self.metrics['topic_continuity_detected'] >= 2 else '○'}")
-        print(f"     • Topic Shift Handling: {'✓' if self.metrics['topic_shifts_detected'] >= 2 else '○'}")
-        print(f"     • Regulation Recognition: {'✓' if self.metrics['specific_regulations_found'] >= 1 else '○'}")
-        print(f"     • Follow-up Handling: {'✓' if self.metrics['follow_up_context_used'] >= 1 else '○'}")
-        print(f"     • Overall Success Rate: {successful}/{total}")
+        print(f"     • Unique regulations cited: {len(self.metrics['entities_extracted'])}")
 
         print("\n" + "═" * 100)
 
         # Final verdict
-        if self.metrics['conversation_coherence_score'] >= 0.8:
-            print("  🏆 VERDICT: EXCELLENT - System demonstrates high conversational intelligence")
-        elif self.metrics['conversation_coherence_score'] >= 0.6:
-            print("  ✅ VERDICT: GOOD - System handles most conversational scenarios")
-        elif self.metrics['conversation_coherence_score'] >= 0.4:
-            print("  ⚠️  VERDICT: FAIR - Some conversational features need improvement")
+        score = self.metrics['conversation_coherence_score']
+        if score >= 0.8:
+            print("  VERDICT: EXCELLENT - All modules working correctly together")
+        elif score >= 0.6:
+            print("  VERDICT: GOOD - Most module integrations working")
+        elif score >= 0.4:
+            print("  VERDICT: FAIR - Some module issues detected")
         else:
-            print("  ❌ VERDICT: NEEDS WORK - Significant conversational improvements needed")
+            print("  VERDICT: NEEDS WORK - Module integration problems found")
 
         print("═" * 100 + "\n")
 
@@ -681,11 +659,17 @@ class ConversationalTester:
         export_data = {
             'export_timestamp': datetime.now().isoformat(),
             'session_id': self.session_id,
+            'modules_tested': [
+                'QueryDetector (core/search/query_detection.py)',
+                'KnowledgeGraphCore (core/knowledge_graph/kg_core.py)',
+                'ConversationManager (conversation/manager.py)',
+                'RAGPipeline (pipeline/rag_pipeline.py)'
+            ],
             'total_turns': len(self.turn_results),
             'successful_turns': sum(1 for r in self.turn_results if r['success']),
             'metrics': {
                 **self.metrics,
-                'entities_extracted': self.metrics['entities_extracted'][:50]  # Limit for export
+                'entities_extracted': self.metrics['entities_extracted'][:50]
             },
             'conversation_log': self.conversation_log,
             'turn_results': []
@@ -697,10 +681,14 @@ class ConversationalTester:
                 'turn_type': result['turn_type'],
                 'query': result['query'],
                 'success': result['success'],
-                'answer': result['answer'],
-                'analysis': result['analysis'],
+                'answer': result['answer'][:1000],  # Truncate for export
+                'analysis': {
+                    'query_type': result['analysis'].get('query_type'),
+                    'is_followup': result['analysis'].get('is_followup'),
+                    'is_topic_shift': result['analysis'].get('is_topic_shift'),
+                    'regulation_references': result['analysis'].get('regulation_references', [])
+                },
                 'streaming_stats': result['streaming_stats'],
-                # Exclude very large fields
                 'sources_count': len(result['metadata'].get('sources', []))
             }
             export_data['turn_results'].append(export_result)
@@ -717,7 +705,7 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="Test conversational RAG with memory and context management"
+        description="Test conversational RAG using existing system modules"
     )
     parser.add_argument('--export', action='store_true', help='Export results to JSON')
     parser.add_argument('--output', type=str, help='Output file path for export')
@@ -727,15 +715,9 @@ def main():
     print("""
 ╔════════════════════════════════════════════════════════════════════════════════════════════════════╗
 ║                                                                                                    ║
-║   ██╗     ███████╗ ██████╗  █████╗ ██╗         ██████╗  █████╗  ██████╗                           ║
-║   ██║     ██╔════╝██╔════╝ ██╔══██╗██║         ██╔══██╗██╔══██╗██╔════╝                           ║
-║   ██║     █████╗  ██║  ███╗███████║██║         ██████╔╝███████║██║  ███╗                          ║
-║   ██║     ██╔══╝  ██║   ██║██╔══██║██║         ██╔══██╗██╔══██║██║   ██║                          ║
-║   ███████╗███████╗╚██████╔╝██║  ██║███████╗    ██║  ██║██║  ██║╚██████╔╝                          ║
-║   ╚══════╝╚══════╝ ╚═════╝ ╚═╝  ╚═╝╚══════╝    ╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝                           ║
+║   CONVERSATIONAL RAG TEST - Module Integration Verification                                        ║
 ║                                                                                                    ║
-║   CONVERSATIONAL INTELLIGENCE TEST                                                                 ║
-║   Testing: Memory | Context | Topic Shifts | Regulation Recognition | Follow-ups                  ║
+║   Testing: QueryDetector | KnowledgeGraphCore | ConversationManager | RAGPipeline                 ║
 ║                                                                                                    ║
 ╚════════════════════════════════════════════════════════════════════════════════════════════════════╝
     """)
