@@ -381,14 +381,15 @@ class ConversationalStressTester:
         start_time = time.time()
 
         try:
-            # Stream the response
+            # Stream the response using query() with stream=True
             print("\nAnswer:")
             print("-" * 80)
 
             full_answer = ""
             chunk_count = 0
+            result = None
 
-            for chunk in self.pipeline.query_stream(query, conversation_history=context):
+            for chunk in self.pipeline.query(query, conversation_history=context, stream=True):
                 if chunk.get('type') == 'token':
                     token = chunk.get('token', '')
                     print(token, end='', flush=True)
@@ -434,7 +435,7 @@ class ConversationalStressTester:
                 'memory': memory_stats
             }
 
-            if 'result' in dir() and result:
+            if result:
                 turn_result['sources_count'] = len(result.get('sources', []))
 
             return turn_result

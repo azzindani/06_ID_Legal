@@ -223,8 +223,10 @@ class StressTester:
             full_answer = ""
             chunk_count = 0
             stream_start = time.time()
+            result = None
 
-            for chunk in self.pipeline.query_stream(query):
+            # Use query() with stream=True
+            for chunk in self.pipeline.query(query, stream=True):
                 if chunk.get('type') == 'token':
                     token = chunk.get('token', '')
                     print(token, end='', flush=True)
@@ -265,7 +267,7 @@ class StressTester:
             }
 
             # Extract additional metadata if available
-            if 'result' in dir() and result:
+            if result:
                 self.results['sources'] = result.get('sources', [])
                 self.results['citations'] = result.get('citations', [])
                 self.results['thinking'] = result.get('thinking', '')
