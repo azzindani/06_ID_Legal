@@ -52,7 +52,7 @@ from core.search.hybrid_search import HybridSearchEngine
 from config import RESEARCH_TEAM_PERSONAS
 
 # Simulate zero weights scenario
-persona = RESEARCH_TEAM_PERSONAS['Generalist']
+persona = RESEARCH_TEAM_PERSONAS['senior_legal_researcher']
 weights = {'semantic_match': 0.0, 'keyword_precision': 0.0}
 
 # This should NOT crash anymore
@@ -153,7 +153,7 @@ engine = StagesResearchEngine(None, {})
 # Simulate 1000 queries (should not grow unboundedly)
 for i in range(1000):
     engine.update_persona_performance(
-        'Generalist',
+        'senior_legal_researcher',
         'procedural',
         0.8,
         10
@@ -164,7 +164,7 @@ print(f'✅ Memory after 1000 updates: {current / 1024:.2f} KB')
 print(f'✅ Peak memory: {peak / 1024:.2f} KB')
 
 # Check history is bounded
-perf = engine._persona_performance['Generalist']['procedural']
+perf = engine._persona_performance['senior_legal_researcher']['procedural']
 print(f'✅ History size bounded to: {len(perf[\"result_counts\"])} entries (max 100)')
 assert len(perf['result_counts']) <= 100, 'Memory leak detected!'
 print('✅ Memory leak fix verified!')
@@ -779,9 +779,9 @@ Total Documents Retrieved: 12
 
 ### Research Team
 Team Size: 3
-   - Legal Analyst
-   - Regulatory Expert
-   - Generalist
+   - 👨‍⚖️ Senior Legal Researcher
+   - 👩‍⚖️ Junior Legal Researcher
+   - 📚 Knowledge Graph Specialist
 
 ### Summary Statistics
 Total Documents Retrieved: 12
@@ -791,7 +791,7 @@ Total Phases: 3
 ================================================================================
 
 #### PHASE: initial_search
-   Researcher: Legal Analyst
+   Researcher: 👨‍⚖️ Senior Legal Researcher
    Documents Found: 8
    Confidence: 85.00%
 

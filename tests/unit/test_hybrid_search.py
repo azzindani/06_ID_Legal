@@ -279,7 +279,7 @@ class TestEdgeCases:
         # Empty query should not crash
         results = mock_search_engine.search_with_persona(
             query="",
-            persona_name="Senior Legal Researcher",
+            persona_name="senior_legal_researcher",
             phase_config=phase_config,
             priority_weights=priority_weights
         )
@@ -303,7 +303,7 @@ class TestEdgeCases:
             # Should not crash with special characters
             results = mock_search_engine.search_with_persona(
                 query=query,
-                persona_name="Senior Legal Researcher",
+                persona_name="senior_legal_researcher",
                 phase_config=phase_config,
                 priority_weights=priority_weights
             )
@@ -319,7 +319,7 @@ class TestEdgeCases:
         # Should not crash with long query
         results = mock_search_engine.search_with_persona(
             query=long_query,
-            persona_name="Senior Legal Researcher",
+            persona_name="senior_legal_researcher",
             phase_config=phase_config,
             priority_weights=priority_weights
         )
