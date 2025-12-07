@@ -700,11 +700,10 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
             )
 
             if use_real_streaming:
-                # Real streaming: collect tokens as they're generated
-                yield add_progress("🔄 Starting real-time streaming..."), ""
-
+                # Real streaming: show text appearing in real-time like ChatGPT/Claude
                 streamed_answer = ""
                 chunk_count = 0
+                result = None
 
                 for chunk in pipeline.query(message, conversation_history=context, stream=True):
                     chunk_type = chunk.get('type', '')
@@ -714,13 +713,9 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                         streamed_answer += token
                         chunk_count += 1
 
-                        # Update display every few tokens - show FULL accumulated answer
-                        if chunk_count % 3 == 0:
-                            progress_display = "\n".join([f"🔄 {m}" for m in current_progress])
-                            # Build incremental output with full answer visible
-                            streaming_output = f'<details><summary>📋 <b>Proses Penelitian (klik untuk melihat)</b></summary>\n\n{progress_display}\n</details>\n\n'
-                            streaming_output += f"✅ **Generating ({chunk_count} tokens)...**\n\n{streamed_answer}"
-                            yield history + [[message, streaming_output]], ""
+                        # Yield every token for smooth streaming display
+                        # Just show the answer text - clean ChatGPT-like streaming
+                        yield history + [[message, streamed_answer]], ""
 
                     elif chunk_type == 'complete':
                         result = {
@@ -738,7 +733,7 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
 
                     elif chunk_type == 'error':
                         error_msg = chunk.get('error', 'Unknown error')
-                        yield add_progress(f"❌ Streaming error: {error_msg}"), ""
+                        yield history + [[message, f"❌ Error: {error_msg}"]], ""
                         result = {'answer': '', 'sources': [], 'metadata': {}}
                         break
 
@@ -750,106 +745,49 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                         'phase_metadata': {}
                     }
 
-                yield add_progress(f"✅ Streaming completed: {chunk_count} tokens generated"), ""
+                # Log streaming stats (not shown to user during streaming)
+                logger.info(f"Streaming completed: {chunk_count} tokens")
 
             else:
                 # Fallback to non-streaming for external providers
                 result = pipeline.query(message, conversation_history=context, stream=False)
                 all_phase_metadata = result.get('phase_metadata', result.get('all_retrieved_metadata', {}))
 
-            yield add_progress(f"✅ Search completed: {len(result.get('sources', []))} results found"), ""
-
         except Exception as e:
-            yield add_progress(f"❌ Error in search: {str(e)}"), ""
+            yield history + [[message, f"❌ Error: {str(e)}"]], ""
             import traceback
             traceback.print_exc()
             result = {'answer': '', 'sources': [], 'metadata': {}}
 
-        # Generate LLM Response with STREAMING
-        yield add_progress("🤖 Generating KG-enhanced response..."), ""
-
+        # Build final progress for collapsible section
         final_progress = "\n".join([msg for msg in current_progress])
 
         if result and result.get('answer'):
             try:
-                # Check if we should use streaming
-                use_streaming = (
-                    HAS_STREAMER and
-                    llm_model is not None and
-                    llm_tokenizer is not None and
-                    current_provider == 'local'
-                )
+                # Parse think tags from answer
+                answer_text = result.get('answer', '')
+                thinking_from_tags, clean_answer = parse_think_tags(answer_text)
 
-                if use_streaming and hasattr(pipeline, 'generator'):
-                    # *** LIVE TOKEN STREAMING - MATCHING ORIGINAL ***
-                    try:
-                        # Get the raw response for streaming
-                        answer_text = result.get('answer', '')
+                # Combine thinking sources
+                thinking_content = result.get('thinking', '')
+                if thinking_from_tags:
+                    thinking_content = thinking_from_tags if not thinking_content else f"{thinking_content}\n\n{thinking_from_tags}"
 
-                        # Parse think tags
-                        thinking_from_tags, clean_answer = parse_think_tags(answer_text)
+                response_text = clean_answer if thinking_from_tags else answer_text
 
-                        # Combine thinking sources
-                        thinking_content = result.get('thinking', '')
-                        if thinking_from_tags:
-                            thinking_content = thinking_from_tags if not thinking_content else f"{thinking_content}\n\n{thinking_from_tags}"
-
-                        response_text = clean_answer if thinking_from_tags else answer_text
-
-                        # Build output with streaming simulation
-                        final_output = f'<details><summary>📋 <b>Proses Penelitian Selesai (klik untuk melihat)</b></summary>\n\n{final_progress}\n</details>\n\n'
-
-                        if thinking_content and show_thinking:
-                            final_output += (
-                                '<details><summary>🧠 <b>Proses berfikir (klik untuk melihat)</b></summary>\n\n'
-                                + thinking_content +
-                                '\n</details>\n\n'
-                                + '-----\n✅ **Jawaban:**\n'
-                            )
-
-                            # Stream the response character by character for effect
-                            streamed_text = ""
-                            chunk_size = 50
-                            for i in range(0, len(response_text), chunk_size):
-                                streamed_text += response_text[i:i+chunk_size]
-                                yield history + [[message, final_output + streamed_text]], ""
-
-                            response_text = streamed_text
-                        else:
-                            final_output += f"✅ **Jawaban:**\n{response_text}"
-                            yield history + [[message, final_output]], ""
-
-                    except Exception as stream_error:
-                        logger.debug(f"Streaming failed, using static: {stream_error}")
-                        # Fall through to static display
-                        answer_text = result.get('answer', '')
-                        thinking_from_tags, clean_answer = parse_think_tags(answer_text)
-                        thinking_content = result.get('thinking', '')
-                        if thinking_from_tags:
-                            thinking_content = thinking_from_tags if not thinking_content else f"{thinking_content}\n\n{thinking_from_tags}"
-                        response_text = clean_answer if thinking_from_tags else answer_text
-                else:
-                    # Static display
-                    answer_text = result.get('answer', '')
-                    thinking_from_tags, clean_answer = parse_think_tags(answer_text)
-                    thinking_content = result.get('thinking', '')
-                    if thinking_from_tags:
-                        thinking_content = thinking_from_tags if not thinking_content else f"{thinking_content}\n\n{thinking_from_tags}"
-                    response_text = clean_answer if thinking_from_tags else answer_text
-
-                # Build final output
-                final_output = f'<details><summary>📋 <b>Proses Penelitian Selesai (klik untuk melihat)</b></summary>\n\n{final_progress}\n</details>\n\n'
+                # Build final output with all sections
+                final_output = f'<details><summary>📋 <b>Proses Penelitian (klik untuk melihat)</b></summary>\n\n{final_progress}\n</details>\n\n'
 
                 if thinking_content and show_thinking:
                     final_output += (
                         '<details><summary>🧠 <b>Proses berfikir (klik untuk melihat)</b></summary>\n\n'
                         + thinking_content +
                         '\n</details>\n\n'
-                        + '-----\n✅ **Jawaban:**\n'
+                        + '-----\n'
                         + response_text
                     )
                 else:
-                    final_output += f"✅ **Jawaban:**\n{response_text}"
+                    final_output += response_text
 
                 # *** COMMUNITY CLUSTERS DISPLAY - MATCHING ORIGINAL ***
                 if result.get('communities') or result.get('clusters'):
