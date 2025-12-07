@@ -74,7 +74,7 @@ class TestWeightNormalization:
             'temporal_relevance': 0.1
         }
 
-        persona = RESEARCH_TEAM_PERSONAS.get('Senior Legal Researcher')
+        persona = RESEARCH_TEAM_PERSONAS.get('senior_legal_researcher')
         normalized = mock_search_engine._apply_persona_weights(base_weights, persona)
 
         # Weights should sum to approximately 1.0
@@ -91,7 +91,7 @@ class TestWeightNormalization:
             'temporal_relevance': 0.0
         }
 
-        persona = RESEARCH_TEAM_PERSONAS.get('Senior Legal Researcher')
+        persona = RESEARCH_TEAM_PERSONAS.get('senior_legal_researcher')
         # Override persona style to have zero weights too
         persona_copy = {**persona, 'search_style': {}}
 
