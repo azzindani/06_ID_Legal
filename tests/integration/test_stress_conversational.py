@@ -437,6 +437,12 @@ class ConversationalStressTester:
 
             if result:
                 turn_result['sources_count'] = len(result.get('sources', []))
+                turn_result['sources'] = result.get('sources', [])
+                turn_result['citations'] = result.get('citations', [])
+                turn_result['phase_metadata'] = result.get('phase_metadata', {})
+                turn_result['research_log'] = result.get('research_log', {})
+                turn_result['consensus_data'] = result.get('consensus_data', {})
+                turn_result['research_data'] = result.get('research_data', {})
 
             return turn_result
 
@@ -554,7 +560,272 @@ class ConversationalStressTester:
             enabled = sum(1 for p in self.config['search_phases'].values() if p.get('enabled'))
             print(f"Search Phases Enabled: {enabled}/5")
 
+        # Print detailed output from last successful turn
+        self.print_detailed_turn_output()
+
         print("\n" + "=" * 100)
+
+    def _extract_all_documents(self, turn_result: Dict[str, Any], max_docs: int = 50) -> list:
+        """Extract all retrieved documents from turn metadata (limited to max_docs)"""
+        all_docs = []
+        seen_ids = set()
+
+        # Try phase_metadata first
+        phase_metadata = turn_result.get('phase_metadata', {})
+        for phase_name, phase_data in phase_metadata.items():
+            if isinstance(phase_data, dict):
+                candidates = phase_data.get('candidates', phase_data.get('results', []))
+                for doc in candidates:
+                    record = doc.get('record', doc)
+                    doc_id = record.get('global_id', str(hash(str(doc))))
+                    if doc_id not in seen_ids:
+                        seen_ids.add(doc_id)
+                        doc['_phase'] = phase_data.get('phase', phase_name)
+                        doc['_researcher'] = phase_data.get('researcher_name', phase_data.get('researcher', ''))
+                        all_docs.append(doc)
+                        if len(all_docs) >= max_docs:
+                            return all_docs
+
+        # Try research_data
+        if not all_docs:
+            research_data = turn_result.get('research_data', {})
+            all_results = research_data.get('all_results', [])
+            for doc in all_results:
+                record = doc.get('record', doc)
+                doc_id = record.get('global_id', str(hash(str(doc))))
+                if doc_id not in seen_ids:
+                    seen_ids.add(doc_id)
+                    all_docs.append(doc)
+                    if len(all_docs) >= max_docs:
+                        return all_docs
+
+        # Try sources as fallback
+        if not all_docs:
+            sources = turn_result.get('sources', turn_result.get('citations', []))
+            for doc in sources:
+                doc_id = doc.get('global_id', doc.get('regulation_number', str(hash(str(doc)))))
+                if doc_id not in seen_ids:
+                    seen_ids.add(doc_id)
+                    all_docs.append({'record': doc, 'scores': {'final': doc.get('score', 0)}})
+                    if len(all_docs) >= max_docs:
+                        return all_docs
+
+        return all_docs
+
+    def print_detailed_turn_output(self):
+        """Print detailed output from the last successful turn"""
+        # Find last successful turn with metadata
+        last_turn = None
+        for t in reversed(self.turn_results):
+            if t.get('success') and (t.get('sources') or t.get('phase_metadata')):
+                last_turn = t
+                break
+
+        if not last_turn:
+            print("\nNo detailed metadata available from turns")
+            return
+
+        turn_num = last_turn.get('turn', 0)
+        print(f"\n" + "=" * 100)
+        print(f"DETAILED OUTPUT FROM TURN {turn_num} (Last Successful Turn)")
+        print("=" * 100)
+
+        # LEGAL REFERENCES (Top K Documents Used in LLM Prompt)
+        self._print_legal_references(last_turn)
+
+        # RESEARCH PROCESS DETAILS
+        self._print_research_process(last_turn)
+
+        # ALL Retrieved Documents (Article-Level Details)
+        self._print_all_documents(last_turn)
+
+    def _print_legal_references(self, turn_result: Dict[str, Any]):
+        """Print LEGAL REFERENCES (Top K Documents Used in LLM Prompt)"""
+        print("\n" + "=" * 100)
+        print("## LEGAL REFERENCES (Top K Documents Used in LLM Prompt)")
+        print("=" * 100)
+        print("These are the final selected documents sent to the LLM for answer generation.")
+        print()
+
+        sources = turn_result.get('sources', turn_result.get('citations', []))
+
+        if sources:
+            print(f"Documents Used in Prompt: {len(sources)}")
+            print()
+
+            for idx, source in enumerate(sources, 1):
+                reg_type = source.get('regulation_type', 'N/A')
+                reg_num = source.get('regulation_number', 'N/A')
+                year = source.get('year', 'N/A')
+                about = source.get('about', 'N/A')
+                enacting_body = source.get('enacting_body', 'N/A')
+                score = source.get('score', 0)
+                content = source.get('content', '')
+
+                print(f"### {idx}. {reg_type} No. {reg_num}/{year}")
+                print(f"   About: {about}")
+                print(f"   Enacting Body: {enacting_body}")
+                print(f"   Final Score: {score:.4f}")
+
+                if content:
+                    content_preview = content[:800].replace('\n', ' ')
+                    print(f"   Content Preview: {content_preview}...")
+                print()
+        else:
+            print("No documents in prompt (check retrieval)")
+
+    def _print_research_process(self, turn_result: Dict[str, Any]):
+        """Print RESEARCH PROCESS DETAILS"""
+        print("\n" + "=" * 100)
+        print("## RESEARCH PROCESS DETAILS (ALL Retrieved Documents)")
+        print("=" * 100)
+        print("All documents retrieved during research process - for audit and verification.")
+        print()
+
+        research_log = turn_result.get('research_log', {})
+        phase_metadata = turn_result.get('phase_metadata', {})
+
+        # Team members
+        team_members = research_log.get('team_members', [])
+        if team_members:
+            print("### Research Team")
+            print(f"Team Size: {len(team_members)}")
+            for member in team_members:
+                if isinstance(member, dict):
+                    print(f"   - {member.get('name', member.get('persona', 'Unknown'))}")
+                else:
+                    print(f"   - {member}")
+        elif phase_metadata:
+            unique_researchers = set()
+            for phase_key, phase_data in phase_metadata.items():
+                if isinstance(phase_data, dict):
+                    researcher = phase_data.get('researcher_name', phase_data.get('researcher', ''))
+                    if researcher:
+                        unique_researchers.add(researcher)
+            if unique_researchers:
+                print("### Research Team")
+                print(f"Team Size: {len(unique_researchers)}")
+                for member in unique_researchers:
+                    print(f"   - {member}")
+
+        # Summary Statistics
+        total_docs = research_log.get('total_documents_retrieved', 0)
+        all_documents = self._extract_all_documents(turn_result, max_docs=50)
+        if not total_docs:
+            total_docs = len(all_documents)
+
+        print(f"\n### Summary Statistics")
+        print(f"Total Documents Retrieved: {total_docs}")
+        print(f"Total Phases: {len(phase_metadata)}")
+
+        # Phase breakdown
+        if phase_metadata:
+            print(f"\n### Phase Breakdown")
+            print("-" * 80)
+            for phase_key, phase_data in phase_metadata.items():
+                if isinstance(phase_data, dict):
+                    phase_name = phase_data.get('phase', phase_key)
+                    researcher = phase_data.get('researcher_name', phase_data.get('researcher', 'Unknown'))
+                    candidates = phase_data.get('candidates', phase_data.get('results', []))
+                    confidence = phase_data.get('confidence', 1.0)
+
+                    print(f"\n   Phase: {phase_name}")
+                    print(f"   Researcher: {researcher}")
+                    print(f"   Documents: {len(candidates)}")
+                    print(f"   Confidence: {confidence:.2%}")
+
+    def _print_all_documents(self, turn_result: Dict[str, Any]):
+        """Print ALL Retrieved Documents (Article-Level Details) - Top 50"""
+        print("\n" + "=" * 100)
+        print("### ALL Retrieved Documents (Article-Level Details) - TOP 50")
+        print("=" * 100)
+
+        all_documents = self._extract_all_documents(turn_result, max_docs=50)
+
+        if not all_documents:
+            print("No documents retrieved")
+            return
+
+        print(f"Showing {len(all_documents)} documents")
+        print()
+
+        for i, doc in enumerate(all_documents, 1):
+            record = doc.get('record', doc)
+            scores = doc.get('scores', {})
+
+            # Basic info
+            reg_type = record.get('regulation_type', 'N/A')
+            reg_num = record.get('regulation_number', 'N/A')
+            year = record.get('year', 'N/A')
+            about = record.get('about', 'N/A')
+            enacting_body = record.get('enacting_body', 'N/A')
+            global_id = record.get('global_id', 'N/A')
+
+            # Scores
+            final_score = scores.get('final', doc.get('final_score', doc.get('composite_score', record.get('score', 0))))
+            semantic = scores.get('semantic', doc.get('semantic_score', 0))
+            keyword = scores.get('keyword', doc.get('keyword_score', 0))
+            kg = scores.get('kg', doc.get('kg_score', 0))
+            authority = scores.get('authority', doc.get('authority_score', 0))
+            temporal = scores.get('temporal', doc.get('temporal_score', 0))
+            completeness = scores.get('completeness', doc.get('completeness_score', 0))
+
+            # Article-level location
+            chapter = record.get('chapter', record.get('bab', ''))
+            article = record.get('article', record.get('pasal', ''))
+            section = record.get('section', record.get('bagian', ''))
+            paragraph = record.get('paragraph', record.get('ayat', ''))
+
+            # KG metadata
+            kg_domain = record.get('kg_primary_domain', record.get('primary_domain', ''))
+            kg_hierarchy = record.get('kg_hierarchy_level', record.get('hierarchy_level', 0))
+            kg_cross_refs = record.get('kg_cross_ref_count', record.get('cross_ref_count', 0))
+
+            # Phase info
+            phase = doc.get('_phase', '')
+            researcher = doc.get('_researcher', '')
+
+            print(f"[{i}] {reg_type} No. {reg_num}/{year}")
+            print(f"    Global ID: {global_id}")
+            print(f"    About: {about}")
+            print(f"    Enacting Body: {enacting_body}")
+
+            # Article-level location
+            location_parts = []
+            if chapter:
+                location_parts.append(f"Bab {chapter}")
+            if section:
+                location_parts.append(f"Bagian {section}")
+            if article:
+                location_parts.append(f"Pasal {article}")
+            if paragraph:
+                location_parts.append(f"Ayat {paragraph}")
+
+            if location_parts:
+                print(f"    Location: {' > '.join(location_parts)}")
+            else:
+                print(f"    Location: (Full Document)")
+
+            # All scores
+            print(f"    Scores:")
+            print(f"       Final: {final_score:.4f} | Semantic: {semantic:.4f} | Keyword: {keyword:.4f}")
+            print(f"       KG: {kg:.4f} | Authority: {authority:.4f} | Temporal: {temporal:.4f} | Completeness: {completeness:.4f}")
+
+            # KG metadata
+            if kg_domain or kg_hierarchy:
+                print(f"    Knowledge Graph: Domain={kg_domain or 'N/A'} | Hierarchy={kg_hierarchy} | CrossRefs={kg_cross_refs}")
+
+            # Research info
+            if phase or researcher:
+                print(f"    Discovery: Phase={phase} | Researcher={researcher}")
+
+            # Content (truncated - 300 chars)
+            content = record.get('content', '')
+            if content:
+                content_truncated = content[:300].replace('\n', ' ').strip()
+                print(f"    Content (truncated): {content_truncated}...")
+
+            print("-" * 100)
 
     def export_results(self, filepath: str):
         """Export results to JSON"""
