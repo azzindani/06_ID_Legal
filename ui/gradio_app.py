@@ -700,6 +700,7 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
 
             # Use streaming for local provider (pipeline handles streaming internally)
             use_real_streaming = (current_provider == 'local')
+            logger.info(f"Streaming mode: {use_real_streaming} (provider: {current_provider})")
 
             if use_real_streaming:
                 # Show "generating" status before tokens start
@@ -729,6 +730,10 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
 
                                 # Yield every token for smooth streaming display
                                 yield history + [[message, progress_header + streamed_answer]], ""
+
+                                # Log first few tokens for debugging
+                                if chunk_count <= 3:
+                                    logger.debug(f"Yielded token #{chunk_count}: {token[:20]}...")
 
                             elif chunk_type == 'complete':
                                 result = {
@@ -1811,6 +1816,9 @@ def create_gradio_interface():
             )
         except Exception as e:
             print(f"Error setting up system info: {e}")
+
+    # Enable queue for streaming support
+    interface.queue()
 
     return interface
 
