@@ -728,14 +728,20 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                                 streamed_answer += token
                                 chunk_count += 1
 
-                                # Yield every token for smooth streaming display
-                                yield history + [[message, progress_header + streamed_answer]], ""
+                                # Yield every 2 tokens for smoother streaming (reduce yield frequency)
+                                if chunk_count % 2 == 0:
+                                    yield history + [[message, progress_header + streamed_answer]], ""
+                                    time.sleep(0.01)  # Small delay for UI processing
 
                                 # Log first few tokens for debugging
                                 if chunk_count <= 3:
                                     logger.debug(f"Yielded token #{chunk_count}: {token[:20]}...")
 
                             elif chunk_type == 'complete':
+                                # Final yield to show any remaining tokens
+                                if streamed_answer:
+                                    yield history + [[message, progress_header + streamed_answer]], ""
+
                                 result = {
                                     'answer': chunk.get('answer', streamed_answer),
                                     'sources': chunk.get('sources', []),
@@ -1798,12 +1804,13 @@ def create_gradio_interface():
         except Exception as e:
             print(f"Error setting up reset button: {e}")
 
-        # Chat functionality
+        # Chat functionality with streaming support
         try:
             msg_input.submit(
                 chat_with_legal_rag,
                 inputs=[msg_input, chatbot, config_state, show_thinking, show_sources, show_metadata],
-                outputs=[chatbot, msg_input]
+                outputs=[chatbot, msg_input],
+                show_progress="hidden"  # Hide progress to allow streaming
             )
         except Exception as e:
             print(f"Error setting up chat: {e}")
@@ -1817,8 +1824,11 @@ def create_gradio_interface():
         except Exception as e:
             print(f"Error setting up system info: {e}")
 
-    # Enable queue for streaming support
-    interface.queue()
+    # Enable queue for streaming support with concurrency settings
+    interface.queue(
+        default_concurrency_limit=10,
+        max_size=20
+    )
 
     return interface
 
