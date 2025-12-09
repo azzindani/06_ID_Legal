@@ -1340,7 +1340,6 @@ def create_gradio_interface():
 
     with gr.Blocks(
         title="Enhanced Indonesian Legal Assistant",
-        theme=gr.themes.Default(),
         css=custom_css
     ) as interface:
 
