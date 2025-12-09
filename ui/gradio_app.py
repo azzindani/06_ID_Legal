@@ -728,10 +728,8 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                                 streamed_answer += token
                                 chunk_count += 1
 
-                                # Yield every 2 tokens for smoother streaming (reduce yield frequency)
-                                if chunk_count % 2 == 0:
-                                    yield history + [[message, progress_header + streamed_answer]], ""
-                                    time.sleep(0.01)  # Small delay for UI processing
+                                # Yield EVERY token for real-time streaming (like original code)
+                                yield history + [[message, progress_header + streamed_answer]], ""
 
                                 # Log first few tokens for debugging
                                 if chunk_count <= 3:
