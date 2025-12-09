@@ -698,8 +698,8 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
             progress_header += "\n".join([f"🔄 {m}" for m in current_progress])
             progress_header += '\n</details>\n\n'
 
-            # Check if we can use real streaming (works with local models)
-            use_real_streaming = HAS_STREAMER and current_provider == 'local'
+            # Use streaming for local provider (pipeline handles streaming internally)
+            use_real_streaming = (current_provider == 'local')
 
             if use_real_streaming:
                 # Show "generating" status before tokens start
@@ -709,47 +709,62 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                 chunk_count = 0
                 result = None
 
-                for chunk in pipeline.query(message, conversation_history=context, stream=True):
-                    chunk_type = chunk.get('type', '')
+                try:
+                    stream_response = pipeline.query(message, conversation_history=context, stream=True)
 
-                    if chunk_type == 'token':
-                        token = chunk.get('token', '')
-                        streamed_answer += token
-                        chunk_count += 1
+                    # Check if we got a generator or a dict (dict means no streaming/error)
+                    if isinstance(stream_response, dict):
+                        # Not a generator - use as result directly
+                        result = stream_response
+                        logger.info("Pipeline returned dict instead of stream")
+                    else:
+                        # Iterate over the stream
+                        for chunk in stream_response:
+                            chunk_type = chunk.get('type', '')
 
-                        # Yield every token for smooth streaming display
-                        # Show progress header + streaming answer
-                        yield history + [[message, progress_header + streamed_answer]], ""
+                            if chunk_type == 'token':
+                                token = chunk.get('token', '')
+                                streamed_answer += token
+                                chunk_count += 1
 
-                    elif chunk_type == 'complete':
-                        result = {
-                            'answer': chunk.get('answer', streamed_answer),
-                            'sources': chunk.get('sources', []),
-                            'citations': chunk.get('citations', []),
-                            'metadata': chunk.get('metadata', {}),
-                            'phase_metadata': chunk.get('phase_metadata', {}),
-                            'thinking': chunk.get('thinking', ''),
-                            'consensus_data': chunk.get('consensus_data', {}),
-                            'research_data': chunk.get('research_data', {}),
-                            'communities': chunk.get('communities', [])
-                        }
-                        all_phase_metadata = result.get('phase_metadata', {})
+                                # Yield every token for smooth streaming display
+                                yield history + [[message, progress_header + streamed_answer]], ""
 
-                    elif chunk_type == 'error':
-                        error_msg = chunk.get('error', 'Unknown error')
-                        yield history + [[message, progress_header + f"❌ Error: {error_msg}"]], ""
-                        result = {'answer': '', 'sources': [], 'metadata': {}}
-                        break
+                            elif chunk_type == 'complete':
+                                result = {
+                                    'answer': chunk.get('answer', streamed_answer),
+                                    'sources': chunk.get('sources', []),
+                                    'citations': chunk.get('citations', []),
+                                    'metadata': chunk.get('metadata', {}),
+                                    'phase_metadata': chunk.get('phase_metadata', {}),
+                                    'thinking': chunk.get('thinking', ''),
+                                    'consensus_data': chunk.get('consensus_data', {}),
+                                    'research_data': chunk.get('research_data', {}),
+                                    'communities': chunk.get('communities', [])
+                                }
+                                all_phase_metadata = result.get('phase_metadata', {})
 
-                if result is None:
-                    result = {
-                        'answer': streamed_answer,
-                        'sources': [],
-                        'metadata': {},
-                        'phase_metadata': {}
-                    }
+                            elif chunk_type == 'error':
+                                error_msg = chunk.get('error', 'Unknown error')
+                                yield history + [[message, progress_header + f"❌ Error: {error_msg}"]], ""
+                                result = {'answer': '', 'sources': [], 'metadata': {}}
+                                break
 
-                logger.info(f"Streaming completed: {chunk_count} tokens")
+                        if result is None and streamed_answer:
+                            result = {
+                                'answer': streamed_answer,
+                                'sources': [],
+                                'metadata': {},
+                                'phase_metadata': {}
+                            }
+
+                        logger.info(f"Streaming completed: {chunk_count} tokens")
+
+                except Exception as stream_error:
+                    logger.warning(f"Streaming failed, falling back to non-streaming: {stream_error}")
+                    # Fall back to non-streaming
+                    result = pipeline.query(message, conversation_history=context, stream=False)
+                    all_phase_metadata = result.get('phase_metadata', result.get('all_retrieved_metadata', {}))
 
             else:
                 # Non-streaming: show progress while waiting
