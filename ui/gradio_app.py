@@ -1510,8 +1510,7 @@ def create_gradio_interface():
                     export_output = gr.Textbox(
                         label="Export Output",
                         lines=20,
-                        max_lines=30,
-                        show_copy_button=True
+                        max_lines=30
                     )
 
                     download_file = gr.File(
