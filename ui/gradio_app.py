@@ -693,14 +693,18 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
             result = None
             all_phase_metadata = {}
 
-            # Check if we can use real streaming
-            use_real_streaming = (
-                HAS_STREAMER and
-                current_provider == 'local'
-            )
+            # Build progress header for display during streaming
+            progress_header = f'<details open><summary>📋 <b>Proses Penelitian</b></summary>\n\n'
+            progress_header += "\n".join([f"🔄 {m}" for m in current_progress])
+            progress_header += '\n</details>\n\n'
+
+            # Check if we can use real streaming (works with local models)
+            use_real_streaming = HAS_STREAMER and current_provider == 'local'
 
             if use_real_streaming:
-                # Real streaming: show text appearing in real-time like ChatGPT/Claude
+                # Show "generating" status before tokens start
+                yield history + [[message, progress_header + "⏳ **Menghasilkan jawaban...**"]], ""
+
                 streamed_answer = ""
                 chunk_count = 0
                 result = None
@@ -714,8 +718,8 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                         chunk_count += 1
 
                         # Yield every token for smooth streaming display
-                        # Just show the answer text - clean ChatGPT-like streaming
-                        yield history + [[message, streamed_answer]], ""
+                        # Show progress header + streaming answer
+                        yield history + [[message, progress_header + streamed_answer]], ""
 
                     elif chunk_type == 'complete':
                         result = {
@@ -733,7 +737,7 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
 
                     elif chunk_type == 'error':
                         error_msg = chunk.get('error', 'Unknown error')
-                        yield history + [[message, f"❌ Error: {error_msg}"]], ""
+                        yield history + [[message, progress_header + f"❌ Error: {error_msg}"]], ""
                         result = {'answer': '', 'sources': [], 'metadata': {}}
                         break
 
@@ -745,11 +749,12 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                         'phase_metadata': {}
                     }
 
-                # Log streaming stats (not shown to user during streaming)
                 logger.info(f"Streaming completed: {chunk_count} tokens")
 
             else:
-                # Fallback to non-streaming for external providers
+                # Non-streaming: show progress while waiting
+                yield history + [[message, progress_header + "⏳ **Menghasilkan jawaban...**"]], ""
+
                 result = pipeline.query(message, conversation_history=context, stream=False)
                 all_phase_metadata = result.get('phase_metadata', result.get('all_retrieved_metadata', {}))
 
