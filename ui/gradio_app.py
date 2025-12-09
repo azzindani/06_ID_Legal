@@ -1357,6 +1357,7 @@ def create_gradio_interface():
                         show_copy_button=True,
                         sanitize_html=True,
                         render_markdown=True,
+                        autoscroll=True,  # Enable autoscroll for streaming
                     )
 
                     with gr.Row(elem_classes="input-row"):
@@ -1808,7 +1809,8 @@ def create_gradio_interface():
                 chat_with_legal_rag,
                 inputs=[msg_input, chatbot, config_state, show_thinking, show_sources, show_metadata],
                 outputs=[chatbot, msg_input],
-                show_progress="hidden"  # Hide progress to allow streaming
+                show_progress=False,  # Disable progress for streaming
+                queue=True  # Explicitly enable queue for this event
             )
         except Exception as e:
             print(f"Error setting up chat: {e}")
