@@ -1348,13 +1348,12 @@ def create_gradio_interface():
             # Main Chat Tab
             with gr.TabItem("💬 Konsultasi Hukum", id="chat"):
                 with gr.Column(elem_classes="main-chat-area"):
-                    # Note: Gradio 6.x removed several Chatbot parameters
+                    # Note: Gradio 6.x removed many Chatbot parameters
+                    # Keeping only essential ones that work in 6.x
                     chatbot = gr.Chatbot(
                         height="75vh",
                         show_label=False,
-                        elem_classes="chat-container",
-                        show_copy_button=True,
-                        autoscroll=True,
+                        autoscroll=True
                     )
 
                     with gr.Row(elem_classes="input-row"):
