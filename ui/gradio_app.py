@@ -1338,9 +1338,10 @@ def create_gradio_interface():
     }
     """
 
+    # Note: Gradio 6.x removed theme and css parameters from gr.Blocks()
+    # Custom styling would need to be applied differently in Gradio 6.x
     with gr.Blocks(
-        title="Enhanced Indonesian Legal Assistant",
-        css=custom_css
+        title="Enhanced Indonesian Legal Assistant"
     ) as interface:
 
         with gr.Tabs():
@@ -1803,13 +1804,12 @@ def create_gradio_interface():
             print(f"Error setting up reset button: {e}")
 
         # Chat functionality with streaming support
+        # Note: Gradio 6.x handles streaming automatically for generator functions
         try:
             msg_input.submit(
                 chat_with_legal_rag,
                 inputs=[msg_input, chatbot, config_state, show_thinking, show_sources, show_metadata],
-                outputs=[chatbot, msg_input],
-                show_progress=False,  # Disable progress for streaming
-                queue=True  # Explicitly enable queue for this event
+                outputs=[chatbot, msg_input]
             )
         except Exception as e:
             print(f"Error setting up chat: {e}")
@@ -1823,11 +1823,9 @@ def create_gradio_interface():
         except Exception as e:
             print(f"Error setting up system info: {e}")
 
-    # Enable queue for streaming support with concurrency settings
-    interface.queue(
-        default_concurrency_limit=10,
-        max_size=20
-    )
+    # Enable queue for streaming support
+    # Note: Gradio 6.x has different queue parameters
+    interface.queue()
 
     return interface
 
