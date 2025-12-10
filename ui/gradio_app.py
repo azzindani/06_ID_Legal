@@ -708,15 +708,18 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
             logger.info(f"Streaming mode: {use_real_streaming} (provider: {current_provider})")
 
             if use_real_streaming:
-                # Show "generating" status before tokens start
-                yield history + [
-                    {"role": "user", "content": message},
-                    {"role": "assistant", "content": progress_header + "⏳ **Menghasilkan jawaban...**"}
-                ], ""
-
                 streamed_answer = ""
                 chunk_count = 0
                 result = None
+
+                # Variables for <think> tag processing (like original)
+                thinking_content = []
+                final_answer = []
+                live_output = []
+                in_thinking_block = False
+                saw_think_tag = False
+                thinking_header_shown = False
+                accumulated_text = ''
 
                 try:
                     stream_response = pipeline.query(message, conversation_history=context, stream=True)
@@ -727,40 +730,91 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                         result = stream_response
                         logger.info("Pipeline returned dict instead of stream")
                     else:
-                        # Iterate over the stream
+                        # Iterate over the stream (like original with TextIteratorStreamer)
                         for chunk in stream_response:
                             chunk_type = chunk.get('type', '')
 
                             if chunk_type == 'token':
-                                token = chunk.get('token', '')
-                                streamed_answer += token
+                                new_text = chunk.get('token', '')
+                                streamed_answer += new_text
+                                accumulated_text += new_text
                                 chunk_count += 1
 
-                                # Yield EVERY token for real-time streaming (Gradio 6.x format)
+                                # Process <think> tags DURING streaming (like original)
+                                if '<think>' in new_text:
+                                    in_thinking_block = True
+                                    saw_think_tag = True
+                                    new_text = new_text.replace('<think>', '')
+                                    if not thinking_header_shown and show_thinking:
+                                        live_output = [f"**Proses Penelitian:**\n\n{final_progress}\n\n---\n\n🧠 **Sedang berfikir...**\n"]
+                                        thinking_header_shown = True
+
+                                if '</think>' in new_text:
+                                    in_thinking_block = False
+                                    new_text = new_text.replace('</think>', '')
+                                    if show_thinking:
+                                        live_output.append('\n\n-----\n✅ **Jawaban:**\n')
+
+                                # Append to appropriate section (like original)
+                                if saw_think_tag:
+                                    if in_thinking_block:
+                                        thinking_content.append(new_text)
+                                        if show_thinking:
+                                            live_output.append(new_text)
+                                    else:
+                                        final_answer.append(new_text)
+                                        live_output.append(new_text)
+                                else:
+                                    # No <think> tag seen yet
+                                    if len(accumulated_text) > 20 and not saw_think_tag:
+                                        if not thinking_header_shown:
+                                            live_output = [f"**Proses Penelitian:**\n\n{final_progress}\n\n---\n\n⭐ **Jawaban langsung:**\n\n"]
+                                            thinking_header_shown = True
+                                        final_answer.append(new_text)
+                                        live_output.append(new_text)
+                                    else:
+                                        if not thinking_header_shown:
+                                            progress_with_generation = final_progress + f"\n\n🤖 Generating response..."
+                                            live_output = [f"**Proses Penelitian:**\n\n{progress_with_generation}\n\n{new_text}"]
+                                        else:
+                                            live_output.append(new_text)
+
+                                # Yield with live output (like original)
                                 yield history + [
                                     {"role": "user", "content": message},
-                                    {"role": "assistant", "content": progress_header + streamed_answer}
+                                    {"role": "assistant", "content": ''.join(live_output)}
                                 ], ""
 
                                 # Log first few tokens for debugging
                                 if chunk_count <= 3:
-                                    logger.debug(f"Yielded token #{chunk_count}: {token[:20]}...")
+                                    logger.debug(f"Yielded token #{chunk_count}: {new_text[:20]}...")
 
                             elif chunk_type == 'complete':
-                                # Final yield to show any remaining tokens
-                                if streamed_answer:
-                                    yield history + [
-                                        {"role": "user", "content": message},
-                                        {"role": "assistant", "content": progress_header + streamed_answer}
-                                    ], ""
+                                # Extract response text from live answer (like original)
+                                response_text = ''.join(final_answer).strip()
+
+                                # Build final output with collapsible sections (like original)
+                                final_output = f'<details><summary>📋 <b>Proses Penelitian Selesai (klik untuk melihat)</b></summary>\n\n{final_progress}\n</details>\n\n'
+
+                                if thinking_content and show_thinking:
+                                    thinking_text = ''.join(thinking_content).strip()
+                                    final_output += (
+                                        '<details><summary>🧠 <b>Proses berfikir (klik untuk melihat)</b></summary>\n\n'
+                                        + thinking_text +
+                                        '\n</details>\n\n'
+                                        + '-----\n✅ **Jawaban:**\n'
+                                        + response_text
+                                    )
+                                else:
+                                    final_output += f"✅ **Jawaban:**\n{response_text}"
 
                                 result = {
-                                    'answer': chunk.get('answer', streamed_answer),
+                                    'answer': chunk.get('answer', response_text),
                                     'sources': chunk.get('sources', []),
                                     'citations': chunk.get('citations', []),
                                     'metadata': chunk.get('metadata', {}),
                                     'phase_metadata': chunk.get('phase_metadata', {}),
-                                    'thinking': chunk.get('thinking', ''),
+                                    'thinking': ''.join(thinking_content).strip(),
                                     'consensus_data': chunk.get('consensus_data', {}),
                                     'research_data': chunk.get('research_data', {}),
                                     'communities': chunk.get('communities', [])
@@ -816,30 +870,23 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
 
         if result and result.get('answer'):
             try:
-                # Parse think tags from answer
-                answer_text = result.get('answer', '')
-                thinking_from_tags, clean_answer = parse_think_tags(answer_text)
-
-                # Combine thinking sources
+                # Use thinking and answer extracted during streaming (no need to re-parse)
                 thinking_content = result.get('thinking', '')
-                if thinking_from_tags:
-                    thinking_content = thinking_from_tags if not thinking_content else f"{thinking_content}\n\n{thinking_from_tags}"
+                response_text = result.get('answer', '')
 
-                response_text = clean_answer if thinking_from_tags else answer_text
-
-                # Build final output with all sections
-                final_output = f'<details><summary>📋 <b>Proses Penelitian (klik untuk melihat)</b></summary>\n\n{final_progress}\n</details>\n\n'
+                # Build final output with collapsible sections (matching original format)
+                final_output = f'<details><summary>📋 <b>Proses Penelitian Selesai (klik untuk melihat)</b></summary>\n\n{final_progress}\n</details>\n\n'
 
                 if thinking_content and show_thinking:
                     final_output += (
                         '<details><summary>🧠 <b>Proses berfikir (klik untuk melihat)</b></summary>\n\n'
                         + thinking_content +
                         '\n</details>\n\n'
-                        + '-----\n'
+                        + '-----\n✅ **Jawaban:**\n'
                         + response_text
                     )
                 else:
-                    final_output += response_text
+                    final_output += f"✅ **Jawaban:**\n{response_text}"
 
                 # *** COMMUNITY CLUSTERS DISPLAY - MATCHING ORIGINAL ***
                 if result.get('communities') or result.get('clusters'):
