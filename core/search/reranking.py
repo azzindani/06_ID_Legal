@@ -19,7 +19,13 @@ class RerankerEngine:
         self.config = config
         self.logger = get_logger("RerankerEngine")
 
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        # Use device from reranker model if available (supports multi-GPU distribution)
+        # CrossEncoder has .device attribute, TransformersReranker has .device attribute
+        if hasattr(reranker_model, 'device'):
+            self.device = reranker_model.device if isinstance(reranker_model.device, torch.device) else torch.device(str(reranker_model.device))
+        else:
+            self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
         self.final_top_k = config.get('final_top_k', 3)
         self.batch_size = config.get('rerank_batch_size', 8)  # Process in smaller batches to avoid OOM
 

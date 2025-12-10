@@ -646,9 +646,14 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
         current_progress = []
 
         def add_progress(msg):
+            """Helper to add progress updates in Gradio 6.x message format"""
             current_progress.append(msg)
             progress_display = "\n".join([f"🔄 {m}" for m in current_progress])
-            return history + [[message, f"**Mencari dan menganalisis...**\n\n{progress_display}"]]
+            # Gradio 6.x format: list of message dicts with 'role' and 'content'
+            return history + [
+                {"role": "user", "content": message},
+                {"role": "assistant", "content": f"**Mencari dan menganalisis...**\n\n{progress_display}"}
+            ]
 
         yield add_progress("🚀 Memulai analisis query..."), ""
 
@@ -675,8 +680,14 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
             logger.debug(f"Query analysis display skipped: {e}")
             query_analysis = None
 
-        # Get conversation context
+        # Get conversation context - no hardcoded limits, use natural conversation flow
+        # OOM prevention is handled at the LLM engine level with proper tensor cleanup
         context = manager.get_context_for_query(current_session) if current_session else None
+
+        if context:
+            logger.info(f"Using {len(context)} messages from conversation history")
+        else:
+            logger.info("No conversation context available (first message)")
 
         # *** RESEARCHER PROGRESS - MATCHING ORIGINAL ***
         yield add_progress("🔍 Conducting intelligent search..."), ""
@@ -698,18 +709,32 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
             progress_header += "\n".join([f"🔄 {m}" for m in current_progress])
             progress_header += '\n</details>\n\n'
 
+            # Build final_progress for use in streaming display
+            final_progress = "\n".join([msg for msg in current_progress])
+
             # Use streaming for local provider (pipeline handles streaming internally)
             use_real_streaming = (current_provider == 'local')
+            logger.info(f"Streaming mode: {use_real_streaming} (provider: {current_provider})")
 
             if use_real_streaming:
-                # Show "generating" status before tokens start
-                yield history + [[message, progress_header + "⏳ **Menghasilkan jawaban...**"]], ""
-
                 streamed_answer = ""
                 chunk_count = 0
                 result = None
 
                 try:
+                    # Clear GPU cache and run garbage collection BEFORE generation
+                    # This prevents OOM errors on follow-up conversations
+                    import gc
+                    gc.collect()
+                    try:
+                        import torch
+                        if torch.cuda.is_available():
+                            torch.cuda.empty_cache()
+                            torch.cuda.synchronize()  # Ensure cache clearing completes
+                            logger.debug("Cleared CUDA cache before streaming generation")
+                    except Exception as cache_error:
+                        logger.debug(f"Could not clear CUDA cache before generation: {cache_error}")
+
                     stream_response = pipeline.query(message, conversation_history=context, stream=True)
 
                     # Check if we got a generator or a dict (dict means no streaming/error)
@@ -718,26 +743,54 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                         result = stream_response
                         logger.info("Pipeline returned dict instead of stream")
                     else:
-                        # Iterate over the stream
+                        # Iterate over the stream (like original with TextIteratorStreamer)
                         for chunk in stream_response:
                             chunk_type = chunk.get('type', '')
 
                             if chunk_type == 'token':
-                                token = chunk.get('token', '')
-                                streamed_answer += token
+                                new_text = chunk.get('token', '')
+                                streamed_answer += new_text
                                 chunk_count += 1
 
-                                # Yield every token for smooth streaming display
-                                yield history + [[message, progress_header + streamed_answer]], ""
+                                # Simple streaming - just show progress + accumulated answer
+                                display_text = f"**Proses Penelitian:**\n\n{final_progress}\n\n---\n\n**Menghasilkan jawaban...**\n\n{streamed_answer}"
+
+                                # Yield every token
+                                yield history + [
+                                    {"role": "user", "content": message},
+                                    {"role": "assistant", "content": display_text}
+                                ], ""
+
+                                # Log first few tokens for debugging
+                                if chunk_count <= 3:
+                                    logger.debug(f"Yielded token #{chunk_count}: {new_text[:20]}...")
 
                             elif chunk_type == 'complete':
+                                # Get the final answer from the complete chunk
+                                response_text = chunk.get('answer', streamed_answer)
+                                thinking_content = chunk.get('thinking', '')
+
+                                # Build final output with collapsible sections
+                                final_output = f'<details><summary>📋 <b>Proses Penelitian Selesai (klik untuk melihat)</b></summary>\n\n{final_progress}\n</details>\n\n'
+
+                                if thinking_content and show_thinking:
+                                    final_output += (
+                                        '<details><summary>🧠 <b>Proses berfikir (klik untuk melihat)</b></summary>\n\n'
+                                        + thinking_content +
+                                        '\n</details>\n\n'
+                                        + '-----\n✅ **Jawaban:**\n'
+                                        + response_text
+                                    )
+                                else:
+                                    final_output += f"✅ **Jawaban:**\n{response_text}"
+
                                 result = {
-                                    'answer': chunk.get('answer', streamed_answer),
+                                    'answer': response_text,
                                     'sources': chunk.get('sources', []),
                                     'citations': chunk.get('citations', []),
                                     'metadata': chunk.get('metadata', {}),
                                     'phase_metadata': chunk.get('phase_metadata', {}),
-                                    'thinking': chunk.get('thinking', ''),
+                                    'thinking': thinking_content,
                                     'consensus_data': chunk.get('consensus_data', {}),
                                     'research_data': chunk.get('research_data', {}),
                                     'communities': chunk.get('communities', [])
@@ -746,7 +799,10 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
 
                             elif chunk_type == 'error':
                                 error_msg = chunk.get('error', 'Unknown error')
-                                yield history + [[message, progress_header + f"❌ Error: {error_msg}"]], ""
+                                yield history + [
+                                    {"role": "user", "content": message},
+                                    {"role": "assistant", "content": progress_header + f"❌ Error: {error_msg}"}
+                                ], ""
                                 result = {'answer': '', 'sources': [], 'metadata': {}}
                                 break
 
@@ -760,21 +816,69 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
 
                         logger.info(f"Streaming completed: {chunk_count} tokens")
 
+                        # Clear GPU cache to prevent OOM on next conversation
+                        try:
+                            import torch
+                            if torch.cuda.is_available():
+                                torch.cuda.empty_cache()
+                                logger.debug("Cleared CUDA cache after streaming")
+                        except Exception as cache_error:
+                            logger.debug(f"Could not clear CUDA cache: {cache_error}")
+
                 except Exception as stream_error:
                     logger.warning(f"Streaming failed, falling back to non-streaming: {stream_error}")
+                    # Clear cache before fallback
+                    import gc
+                    gc.collect()
+                    try:
+                        import torch
+                        if torch.cuda.is_available():
+                            torch.cuda.empty_cache()
+                            torch.cuda.synchronize()
+                            logger.debug("Cleared CUDA cache before fallback generation")
+                    except Exception as cache_error:
+                        logger.debug(f"Could not clear CUDA cache: {cache_error}")
+
                     # Fall back to non-streaming
                     result = pipeline.query(message, conversation_history=context, stream=False)
                     all_phase_metadata = result.get('phase_metadata', result.get('all_retrieved_metadata', {}))
 
             else:
                 # Non-streaming: show progress while waiting
-                yield history + [[message, progress_header + "⏳ **Menghasilkan jawaban...**"]], ""
+                yield history + [
+                    {"role": "user", "content": message},
+                    {"role": "assistant", "content": progress_header + "⏳ **Menghasilkan jawaban...**"}
+                ], ""
+
+                # Clear GPU cache and run garbage collection BEFORE generation
+                import gc
+                gc.collect()
+                try:
+                    import torch
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                        torch.cuda.synchronize()
+                        logger.debug("Cleared CUDA cache before non-streaming generation")
+                except Exception as cache_error:
+                    logger.debug(f"Could not clear CUDA cache before generation: {cache_error}")
 
                 result = pipeline.query(message, conversation_history=context, stream=False)
                 all_phase_metadata = result.get('phase_metadata', result.get('all_retrieved_metadata', {}))
 
+                # Clear GPU cache after non-streaming generation
+                try:
+                    import torch
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                        logger.debug("Cleared CUDA cache after generation")
+                except Exception as cache_error:
+                    logger.debug(f"Could not clear CUDA cache: {cache_error}")
+
         except Exception as e:
-            yield history + [[message, f"❌ Error: {str(e)}"]], ""
+            yield history + [
+                {"role": "user", "content": message},
+                {"role": "assistant", "content": f"❌ Error: {str(e)}"}
+            ], ""
             import traceback
             traceback.print_exc()
             result = {'answer': '', 'sources': [], 'metadata': {}}
@@ -784,30 +888,23 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
 
         if result and result.get('answer'):
             try:
-                # Parse think tags from answer
-                answer_text = result.get('answer', '')
-                thinking_from_tags, clean_answer = parse_think_tags(answer_text)
-
-                # Combine thinking sources
+                # Use thinking and answer extracted during streaming (no need to re-parse)
                 thinking_content = result.get('thinking', '')
-                if thinking_from_tags:
-                    thinking_content = thinking_from_tags if not thinking_content else f"{thinking_content}\n\n{thinking_from_tags}"
+                response_text = result.get('answer', '')
 
-                response_text = clean_answer if thinking_from_tags else answer_text
-
-                # Build final output with all sections
-                final_output = f'<details><summary>📋 <b>Proses Penelitian (klik untuk melihat)</b></summary>\n\n{final_progress}\n</details>\n\n'
+                # Build final output with collapsible sections (matching original format)
+                final_output = f'<details><summary>📋 <b>Proses Penelitian Selesai (klik untuk melihat)</b></summary>\n\n{final_progress}\n</details>\n\n'
 
                 if thinking_content and show_thinking:
                     final_output += (
                         '<details><summary>🧠 <b>Proses berfikir (klik untuk melihat)</b></summary>\n\n'
                         + thinking_content +
                         '\n</details>\n\n'
-                        + '-----\n'
+                        + '-----\n✅ **Jawaban:**\n'
                         + response_text
                     )
                 else:
-                    final_output += response_text
+                    final_output += f"✅ **Jawaban:**\n{response_text}"
 
                 # *** COMMUNITY CLUSTERS DISPLAY - MATCHING ORIGINAL ***
                 if result.get('communities') or result.get('clusters'):
@@ -842,7 +939,7 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                     if citations:
                         sources_info = format_sources_info(citations, config_dict)
                         collapsible_sections.append(
-                            f'<details><summary>📖 <b>LEGAL REFERENCES (Top K Documents Used in LLM Prompt) - {len(citations)} documents</b></summary>\n\n{sources_info}\n</details>'
+                            f'<details><summary>📖 <b>Sumber Hukum Utama {len(citations)}</b></summary>\n\n{sources_info}\n</details>'
                         )
 
                 # *** COMPLETE SEARCH METADATA - DETAILED RESEARCH PROCESS ***
@@ -850,7 +947,7 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                     metadata_info = format_retrieved_metadata(all_phase_metadata, config_dict)
                     if metadata_info.strip():
                         collapsible_sections.append(
-                            f'<details><summary>🔍 <b>RESEARCH PROCESS DETAILS (ALL Retrieved Documents)</b></summary>\n\n{metadata_info}\n</details>'
+                            f'<details><summary>🔍 <b>RESEARCH PROCESS DETAILS</b></summary>\n\n{metadata_info}\n</details>'
                         )
 
                     # Add ALL Retrieved Documents (Article-Level Details) - Top 50
@@ -959,7 +1056,10 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                 if collapsible_sections:
                     final_output += f"\n\n---\n\n" + "\n\n".join(collapsible_sections)
 
-                yield history + [[message, final_output]], ""
+                yield history + [
+                    {"role": "user", "content": message},
+                    {"role": "assistant", "content": final_output}
+                ], ""
 
                 # *** SAVE FULL RESEARCH LOG - MATCHING ORIGINAL ***
                 if current_session:
@@ -987,7 +1087,10 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                 error_output += f"❌ **Error generating response:** {str(e)}\n\n"
                 error_output += "Maaf, terjadi kesalahan saat membuat respons. Silakan coba lagi."
 
-                yield history + [[message, error_output]], ""
+                yield history + [
+                    {"role": "user", "content": message},
+                    {"role": "assistant", "content": error_output}
+                ], ""
 
                 import traceback
                 traceback.print_exc()
@@ -1000,12 +1103,18 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
             final_output += "- Memperjelas pertanyaan Anda\n"
             final_output += "- Menggunakan istilah hukum yang lebih spesifik"
 
-            yield history + [[message, final_output]], ""
+            yield history + [
+                {"role": "user", "content": message},
+                {"role": "assistant", "content": final_output}
+            ], ""
 
     except Exception as e:
         error_msg = f"❌ **Terjadi kesalahan sistem:**\n\n{str(e)}\n\n"
         error_msg += "Silakan coba lagi atau hubungi administrator jika masalah berlanjut."
-        yield history + [[message, error_msg]], ""
+        yield history + [
+            {"role": "user", "content": message},
+            {"role": "assistant", "content": error_msg}
+        ], ""
 
         import traceback
         traceback.print_exc()
@@ -1036,6 +1145,7 @@ def get_system_info():
             stats = dataset_loader.get_statistics()
 
         info = f"""## 📊 Enhanced KG Legal RAG System Information
+
 **Models:**
 - **Embedding:** {EMBEDDING_MODEL}
 - **Reranker:** {RERANKER_MODEL}
@@ -1315,25 +1425,22 @@ def create_gradio_interface():
     }
     """
 
+    # Note: Gradio 6.x removed theme and css parameters from gr.Blocks()
+    # Custom styling would need to be applied differently in Gradio 6.x
     with gr.Blocks(
-        title="Enhanced Indonesian Legal Assistant",
-        theme=gr.themes.Default(),
-        css=custom_css
+        title="Enhanced Indonesian Legal Assistant"
     ) as interface:
 
         with gr.Tabs():
             # Main Chat Tab
             with gr.TabItem("💬 Konsultasi Hukum", id="chat"):
                 with gr.Column(elem_classes="main-chat-area"):
+                    # Note: Gradio 6.x removed many Chatbot parameters
+                    # Keeping only essential ones that work in 6.x
                     chatbot = gr.Chatbot(
                         height="75vh",
                         show_label=False,
-                        container=True,
-                        bubble_full_width=True,
-                        elem_classes="chat-container",
-                        show_copy_button=True,
-                        sanitize_html=True,
-                        render_markdown=True,
+                        autoscroll=True
                     )
 
                     with gr.Row(elem_classes="input-row"):
@@ -1490,8 +1597,7 @@ def create_gradio_interface():
                     export_output = gr.Textbox(
                         label="Export Output",
                         lines=20,
-                        max_lines=30,
-                        show_copy_button=True
+                        max_lines=30
                     )
 
                     download_file = gr.File(
@@ -1703,7 +1809,8 @@ def create_gradio_interface():
         except Exception as e:
             print(f"Error setting up reset button: {e}")
 
-        # Chat functionality
+        # Chat functionality with streaming support
+        # Note: Gradio 6.x handles streaming automatically for generator functions
         try:
             msg_input.submit(
                 chat_with_legal_rag,
@@ -1721,6 +1828,10 @@ def create_gradio_interface():
             )
         except Exception as e:
             print(f"Error setting up system info: {e}")
+
+    # Enable queue for streaming support
+    # Note: Gradio 6.x has different queue parameters
+    interface.queue()
 
     return interface
 
@@ -1748,4 +1859,5 @@ def launch_app(share: bool = False, server_port: int = 7860):
 
 if __name__ == "__main__":
     launch_app()
+
 

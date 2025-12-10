@@ -229,6 +229,8 @@ class LLMEngine:
                 'top_k': top_k or self.top_k,
                 'repetition_penalty': self.repetition_penalty,
                 'do_sample': True,
+                # use_cache=True by default - cache is used WITHIN generation, not between calls
+                # Deleting outputs frees the cache (past_key_values)
                 'pad_token_id': self._tokenizer.pad_token_id,
                 'eos_token_id': self._tokenizer.eos_token_id,
             }
@@ -273,7 +275,20 @@ class LLMEngine:
                 "generation_time": f"{generation_time:.2f}s",
                 "tokens_per_second": f"{tokens_per_second:.1f}"
             })
-            
+
+            # CRITICAL: Clean up tensors to prevent OOM on next generation
+            # Delete inputs and outputs to free GPU memory immediately
+            del inputs
+            del outputs
+            del generated_ids
+            # Force garbage collection to free memory NOW, not later
+            import gc
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()  # Ensure cleanup completes
+                self.logger.debug("Cleaned up generation tensors and cleared CUDA cache")
+
             return {
                 'generated_text': generated_text.strip(),
                 'tokens_generated': tokens_generated,
@@ -383,6 +398,8 @@ class LLMEngine:
                 'top_k': top_k or self.top_k,
                 'repetition_penalty': self.repetition_penalty,
                 'do_sample': True,
+                # use_cache=True by default - cache is used WITHIN generation, not between calls
+                # The thread-based generation completes and cache is freed when outputs are deleted
                 'pad_token_id': self._tokenizer.pad_token_id,
                 'eos_token_id': self._tokenizer.eos_token_id,
             }
@@ -429,6 +446,19 @@ class LLMEngine:
                 "generation_time": f"{generation_time:.2f}s",
                 "tokens_per_second": f"{tokens_per_second:.1f}"
             })
+
+            # CRITICAL: Clean up tensors to prevent OOM on next generation
+            # The inputs tensor and KV cache from generation stay in GPU memory
+            # until explicitly deleted and cache is cleared
+            del inputs
+            del streamer
+            # Force garbage collection to free memory NOW, not later
+            import gc
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()  # Ensure cleanup completes
+                self.logger.debug("Cleaned up generation tensors and cleared CUDA cache")
 
             # Final yield
             yield {

@@ -21,12 +21,17 @@ class HybridSearchEngine:
         self.embedding_model = embedding_model
         self.reranker_model = reranker_model
         self.logger = get_logger("HybridSearch")
-        
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        
+
+        # Use the same device as embedding model (supports multi-GPU distribution)
+        # In multi-GPU setup, embedding model may be on cuda:1, not cuda:0
+        if hasattr(embedding_model, 'device'):
+            self.device = embedding_model.device
+        else:
+            self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
         # Cache for normalized embeddings
         self._normalized_embeddings = None
-        
+
         self.logger.info("HybridSearchEngine initialized", {"device": str(self.device)})
     
     def search_with_persona(
@@ -160,9 +165,11 @@ class HybridSearchEngine:
         """Get cached normalized document embeddings"""
         if self._normalized_embeddings is None:
             self.logger.info("Normalizing document embeddings (one-time operation)")
+            # Move embeddings to same device as embedding model (for multi-GPU support)
+            doc_embeddings = self.data_loader.embeddings.to(self.device)
             self._normalized_embeddings = torch.nn.functional.normalize(
-                self.data_loader.embeddings, 
-                p=2, 
+                doc_embeddings,
+                p=2,
                 dim=1
             )
         return self._normalized_embeddings
