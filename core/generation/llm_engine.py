@@ -229,6 +229,7 @@ class LLMEngine:
                 'top_k': top_k or self.top_k,
                 'repetition_penalty': self.repetition_penalty,
                 'do_sample': True,
+                'use_cache': False,  # CRITICAL: Don't cache KV for next generation
                 'pad_token_id': self._tokenizer.pad_token_id,
                 'eos_token_id': self._tokenizer.eos_token_id,
             }
@@ -279,8 +280,12 @@ class LLMEngine:
             del inputs
             del outputs
             del generated_ids
+            # Force garbage collection to free memory NOW, not later
+            import gc
+            gc.collect()
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
+                torch.cuda.synchronize()  # Ensure cleanup completes
                 self.logger.debug("Cleaned up generation tensors and cleared CUDA cache")
 
             return {
@@ -392,6 +397,7 @@ class LLMEngine:
                 'top_k': top_k or self.top_k,
                 'repetition_penalty': self.repetition_penalty,
                 'do_sample': True,
+                'use_cache': False,  # CRITICAL: Don't cache KV for next generation
                 'pad_token_id': self._tokenizer.pad_token_id,
                 'eos_token_id': self._tokenizer.eos_token_id,
             }
@@ -443,8 +449,13 @@ class LLMEngine:
             # The inputs tensor and KV cache from generation stay in GPU memory
             # until explicitly deleted and cache is cleared
             del inputs
+            del streamer
+            # Force garbage collection to free memory NOW, not later
+            import gc
+            gc.collect()
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
+                torch.cuda.synchronize()  # Ensure cleanup completes
                 self.logger.debug("Cleaned up generation tensors and cleared CUDA cache")
 
             # Final yield
