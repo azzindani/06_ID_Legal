@@ -47,17 +47,43 @@ class ModelManager:
     """
     Centralized model management with lazy loading and caching
     """
-    
+
     def __init__(self):
         self.logger = get_logger("ModelManager")
-        self.device = torch.device(DEVICE if torch.cuda.is_available() else 'cpu')
-        
+
+        # Smart device allocation for multi-GPU setups
+        self.num_gpus = torch.cuda.device_count() if torch.cuda.is_available() else 0
+
+        if self.num_gpus > 1:
+            # Multi-GPU: distribute models across GPUs to reduce memory pressure
+            # LLM uses device_map='auto' in llm_engine.py (may use GPU 0 or spread)
+            # Embedding model -> GPU 1 (or next available)
+            # Reranker model -> GPU 2 (or wrap around if needed)
+            self.embedding_device = torch.device(f'cuda:{min(1, self.num_gpus - 1)}')
+            self.reranker_device = torch.device(f'cuda:{min(2, self.num_gpus - 1)}')
+            self.logger.info(f"Multi-GPU detected ({self.num_gpus} GPUs) - distributing models", {
+                "embedding_device": str(self.embedding_device),
+                "reranker_device": str(self.reranker_device),
+                "llm_device": "device_map='auto' (distributed)"
+            })
+        else:
+            # Single GPU or CPU: use default device for all models
+            self.embedding_device = torch.device(DEVICE if torch.cuda.is_available() else 'cpu')
+            self.reranker_device = self.embedding_device
+            self.logger.info("Single device mode", {
+                "device": str(self.embedding_device),
+                "num_gpus": self.num_gpus
+            })
+
+        # Legacy device for compatibility
+        self.device = self.embedding_device
+
         # Model cache
         self._embedding_model = None
         self._embedding_tokenizer = None
         self._reranker_model = None
-        
-        self.logger.info("ModelManager initialized", {"device": str(self.device)})
+
+        self.logger.info("ModelManager initialized")
     
     def load_embedding_model(
         self,
@@ -101,24 +127,24 @@ class ModelManager:
                 model = AutoModel.from_pretrained(
                     model_name,
                     cache_dir=CACHE_DIR,
-                    torch_dtype=torch.float16 if self.device.type == 'cuda' else torch.float32,
+                    torch_dtype=torch.float16 if self.embedding_device.type == 'cuda' else torch.float32,
                     trust_remote_code=True
                 )
-                
-                # Move to device and set eval mode
-                model.to(self.device)
+
+                # Move to dedicated embedding device and set eval mode
+                model.to(self.embedding_device)
                 model.eval()
-                
+
                 # Create wrapper with proper tokenize method
                 self._embedding_model = EmbeddingModelWrapper(
                     model=model,
                     tokenizer=self._embedding_tokenizer,
-                    device=self.device
+                    device=self.embedding_device
                 )
                 
                 self.logger.success("Embedding model loaded successfully", {
                     "model": model_name,
-                    "device": str(self.device),
+                    "device": str(self.embedding_device),
                     "dtype": str(model.dtype)
                 })
                 
@@ -182,7 +208,7 @@ class ModelManager:
                     self._reranker_model = CrossEncoder(
                         model_name,
                         max_length=512,
-                        device=self.device
+                        device=str(self.reranker_device)  # CrossEncoder expects string like 'cuda:0'
                     )
 
                     # Fix padding token issue for batch processing
@@ -231,18 +257,18 @@ class ModelManager:
                     model = AutoModel.from_pretrained(
                         model_name,
                         cache_dir=CACHE_DIR,
-                        torch_dtype=torch.float16 if self.device.type == 'cuda' else torch.float32,
+                        torch_dtype=torch.float16 if self.reranker_device.type == 'cuda' else torch.float32,
                         trust_remote_code=True
                     )
-                    model.to(self.device)
+                    model.to(self.reranker_device)
                     model.eval()
-                    
+
                     # Create wrapper
-                    self._reranker_model = TransformersReranker(model, tokenizer, self.device)
-                
+                    self._reranker_model = TransformersReranker(model, tokenizer, self.reranker_device)
+
                 self.logger.success("Reranker model loaded successfully", {
                     "model": model_name,
-                    "device": str(self.device)
+                    "device": str(self.reranker_device)
                 })
                 
                 return self._reranker_model
