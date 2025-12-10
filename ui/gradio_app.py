@@ -27,7 +27,10 @@ from threading import Thread
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from pipeline import RAGPipeline
-from conversation import ConversationManager, MarkdownExporter, JSONExporter, HTMLExporter, get_context_cache
+from conversation import (
+    ConversationManager, MarkdownExporter, JSONExporter, HTMLExporter,
+    get_context_cache, create_conversational_service
+)
 from providers import get_provider, switch_provider, list_providers
 from config import (
     LLM_PROVIDER, EMBEDDING_DEVICE, LLM_DEVICE,
@@ -134,8 +137,19 @@ def change_provider(provider_type: str):
 # MAIN CHAT FUNCTION - Kaggle_Demo Style with FULL Streaming Progress
 # =============================================================================
 
+def clear_conversation():
+    """Clear conversation history"""
+    global manager, current_session
+
+    current_session, history, text = clear_conversation_session(manager)
+    return history, text
 def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_sources=True, show_metadata=True):
-    """Main chat function with ADVANCED QUERY ANALYSIS, HYBRID SEARCH, and LIVE STREAMING"""
+    """
+    Main chat function with conversational RAG - Now uses ConversationalRAGService
+
+    This is a thin wrapper around ConversationalRAGService that handles Gradio-specific
+    display formatting and progress updates.
+    """
     if not message.strip():
         return history, ""
 
@@ -144,483 +158,190 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
         if pipeline is None:
             initialize_system()
 
+        # Create conversational service
+        service = create_conversational_service(pipeline, manager, current_provider)
+
+        # Track progress for Gradio display
         current_progress = []
+        all_phase_metadata = {}
+        streamed_answer = ""
+        result = None
 
         def add_progress(msg):
             """Helper to add progress updates in Gradio 6.x message format"""
             current_progress.append(msg)
             progress_display = "\n".join([f"🔄 {m}" for m in current_progress])
-            # Gradio 6.x format: list of message dicts with 'role' and 'content'
             return history + [
                 {"role": "user", "content": message},
                 {"role": "assistant", "content": f"**Mencari dan menganalisis...**\n\n{progress_display}"}
             ]
 
-        yield add_progress("🚀 Memulai analisis query..."), ""
+        # Process query with service
+        for event in service.process_query(
+            message,
+            current_session,
+            config_dict,
+            progress_callback=lambda msg: current_progress.append(msg)
+        ):
+            event_type = event.get('type')
+            data = event.get('data', {})
 
-        # *** ADVANCED QUERY ANALYSIS DISPLAY - MATCHING ORIGINAL ***
-        try:
-            if hasattr(pipeline, 'search_orchestrator') and hasattr(pipeline.search_orchestrator, 'query_analyzer'):
-                query_analysis = pipeline.search_orchestrator.query_analyzer.analyze_query(message)
+            if event_type == 'progress':
+                # Show progress update
+                yield add_progress(data['message']), ""
 
-                yield add_progress(f"🧠 Strategy: {query_analysis['search_strategy']} ({query_analysis['confidence']:.0%})"), ""
+            elif event_type == 'query_analysis':
+                # Query analysis completed - progress already added by callback
+                yield add_progress("Query analysis complete"), ""
 
-                if query_analysis.get('reasoning'):
-                    yield add_progress(f"💡 {query_analysis['reasoning']}"), ""
+            elif event_type == 'metadata_chunk':
+                # Store metadata
+                if 'phase_metadata' in data:
+                    phase_key = data.get('phase', data.get('researcher', 'unknown'))
+                    all_phase_metadata[phase_key] = data['phase_metadata']
 
-                if query_analysis.get('key_phrases'):
-                    phrases = [p['phrase'] for p in query_analysis['key_phrases']]
-                    yield add_progress(f"🎯 Key phrases: {', '.join(phrases)}"), ""
+            elif event_type == 'streaming_chunk':
+                # Accumulate streamed text
+                streamed_answer = data['accumulated']
+                chunk_count = data['chunk_count']
 
-                if query_analysis.get('law_name_detected'):
-                    law_name = query_analysis['specific_entities'][0]['name']
-                    yield add_progress(f"📜 Law name detected: {law_name}"), ""
-            else:
-                query_analysis = None
-        except Exception as e:
-            logger.debug(f"Query analysis display skipped: {e}")
-            query_analysis = None
+                # Build streaming display
+                progress_header = '<details open><summary>📋 <b>Proses Penelitian</b></summary>\n\n'
+                progress_header += "\n".join([f"🔄 {m}" for m in current_progress])
+                progress_header += '\n</details>\n\n'
 
-        # Get conversation context - no hardcoded limits, use natural conversation flow
-        # OOM prevention is handled at the LLM engine level with proper tensor cleanup
-        context = manager.get_context_for_query(current_session) if current_session else None
+                display_text = progress_header + f"**✍️ Generating answer...**\n\n{streamed_answer}"
 
-        if context:
-            logger.info(f"Using {len(context)} messages from conversation history")
-        else:
-            logger.info("No conversation context available (first message)")
-
-        # *** RESEARCHER PROGRESS - MATCHING ORIGINAL ***
-        yield add_progress("🔍 Conducting intelligent search..."), ""
-
-        # Show team assembly
-        try:
-            team_size = config_dict.get('research_team_size', 4)
-            yield add_progress(f"👥 Assembling research team ({team_size} members)..."), ""
-        except Exception:
-            pass
-
-        try:
-            # Use REAL streaming for LLM output
-            result = None
-            all_phase_metadata = {}
-
-            # Build progress header for display during streaming
-            progress_header = f'<details open><summary>📋 <b>Proses Penelitian</b></summary>\n\n'
-            progress_header += "\n".join([f"🔄 {m}" for m in current_progress])
-            progress_header += '\n</details>\n\n'
-
-            # Build final_progress for use in streaming display
-            final_progress = "\n".join([msg for msg in current_progress])
-
-            # Use streaming for local provider (pipeline handles streaming internally)
-            use_real_streaming = (current_provider == 'local')
-            logger.info(f"Streaming mode: {use_real_streaming} (provider: {current_provider})")
-
-            if use_real_streaming:
-                streamed_answer = ""
-                chunk_count = 0
-                result = None
-
-                try:
-                    # Clear GPU cache and run garbage collection BEFORE generation
-                    # This prevents OOM errors on follow-up conversations
-                    import gc
-                    gc.collect()
-                    try:
-                        import torch
-                        if torch.cuda.is_available():
-                            torch.cuda.empty_cache()
-                            torch.cuda.synchronize()  # Ensure cache clearing completes
-                            logger.debug("Cleared CUDA cache before streaming generation")
-                    except Exception as cache_error:
-                        logger.debug(f"Could not clear CUDA cache before generation: {cache_error}")
-
-                    stream_response = pipeline.query(message, conversation_history=context, stream=True)
-
-                    # Check if we got a generator or a dict (dict means no streaming/error)
-                    if isinstance(stream_response, dict):
-                        # Not a generator - use as result directly
-                        result = stream_response
-                        logger.info("Pipeline returned dict instead of stream")
-                    else:
-                        # Iterate over the stream (like original with TextIteratorStreamer)
-                        for chunk in stream_response:
-                            chunk_type = chunk.get('type', '')
-
-                            if chunk_type == 'token':
-                                new_text = chunk.get('token', '')
-                                streamed_answer += new_text
-                                chunk_count += 1
-
-                                # Simple streaming - just show progress + accumulated answer
-                                display_text = f"**Proses Penelitian:**\n\n{final_progress}\n\n---\n\n**Menghasilkan jawaban...**\n\n{streamed_answer}"
-
-                                # Yield every token
-                                yield history + [
-                                    {"role": "user", "content": message},
-                                    {"role": "assistant", "content": display_text}
-                                ], ""
-
-                                # Log first few tokens for debugging
-                                if chunk_count <= 3:
-                                    logger.debug(f"Yielded token #{chunk_count}: {new_text[:20]}...")
-
-                            elif chunk_type == 'complete':
-                                # Get the final answer from the complete chunk
-                                response_text = chunk.get('answer', streamed_answer)
-                                thinking_content = chunk.get('thinking', '')
-
-                                # Build final output with collapsible sections
-                                final_output = f'<details><summary>📋 <b>Proses Penelitian Selesai (klik untuk melihat)</b></summary>\n\n{final_progress}\n</details>\n\n'
-
-                                if thinking_content and show_thinking:
-                                    final_output += (
-                                        '<details><summary>🧠 <b>Proses berfikir (klik untuk melihat)</b></summary>\n\n'
-                                        + thinking_content +
-                                        '\n</details>\n\n'
-                                        + '-----\n✅ **Jawaban:**\n'
-                                        + response_text
-                                    )
-                                else:
-                                    final_output += f"✅ **Jawaban:**\n{response_text}"
-
-                                result = {
-                                    'answer': response_text,
-                                    'sources': chunk.get('sources', []),
-                                    'citations': chunk.get('citations', []),
-                                    'metadata': chunk.get('metadata', {}),
-                                    'phase_metadata': chunk.get('phase_metadata', {}),
-                                    'thinking': thinking_content,
-                                    'consensus_data': chunk.get('consensus_data', {}),
-                                    'research_data': chunk.get('research_data', {}),
-                                    'communities': chunk.get('communities', [])
-                                }
-                                all_phase_metadata = result.get('phase_metadata', {})
-
-                            elif chunk_type == 'error':
-                                error_msg = chunk.get('error', 'Unknown error')
-                                yield history + [
-                                    {"role": "user", "content": message},
-                                    {"role": "assistant", "content": progress_header + f"❌ Error: {error_msg}"}
-                                ], ""
-                                result = {'answer': '', 'sources': [], 'metadata': {}}
-                                break
-
-                        if result is None and streamed_answer:
-                            result = {
-                                'answer': streamed_answer,
-                                'sources': [],
-                                'metadata': {},
-                                'phase_metadata': {}
-                            }
-
-                        logger.info(f"Streaming completed: {chunk_count} tokens")
-
-                        # Clear GPU cache to prevent OOM on next conversation
-                        try:
-                            import torch
-                            if torch.cuda.is_available():
-                                torch.cuda.empty_cache()
-                                logger.debug("Cleared CUDA cache after streaming")
-                        except Exception as cache_error:
-                            logger.debug(f"Could not clear CUDA cache: {cache_error}")
-
-                except Exception as stream_error:
-                    logger.warning(f"Streaming failed, falling back to non-streaming: {stream_error}")
-                    # Clear cache before fallback
-                    import gc
-                    gc.collect()
-                    try:
-                        import torch
-                        if torch.cuda.is_available():
-                            torch.cuda.empty_cache()
-                            torch.cuda.synchronize()
-                            logger.debug("Cleared CUDA cache before fallback generation")
-                    except Exception as cache_error:
-                        logger.debug(f"Could not clear CUDA cache: {cache_error}")
-
-                    # Fall back to non-streaming
-                    result = pipeline.query(message, conversation_history=context, stream=False)
-                    all_phase_metadata = result.get('phase_metadata', result.get('all_retrieved_metadata', {}))
-
-            else:
-                # Non-streaming: show progress while waiting
                 yield history + [
                     {"role": "user", "content": message},
-                    {"role": "assistant", "content": progress_header + "⏳ **Menghasilkan jawaban...**"}
+                    {"role": "assistant", "content": display_text}
                 ], ""
 
-                # Clear GPU cache and run garbage collection BEFORE generation
-                import gc
-                gc.collect()
-                try:
-                    import torch
-                    if torch.cuda.is_available():
-                        torch.cuda.empty_cache()
-                        torch.cuda.synchronize()
-                        logger.debug("Cleared CUDA cache before non-streaming generation")
-                except Exception as cache_error:
-                    logger.debug(f"Could not clear CUDA cache before generation: {cache_error}")
+            elif event_type == 'final_result':
+                # Final result received
+                result = data
+                break
 
-                result = pipeline.query(message, conversation_history=context, stream=False)
-                all_phase_metadata = result.get('phase_metadata', result.get('all_retrieved_metadata', {}))
+            elif event_type == 'error':
+                # Error occurred
+                error_msg = data.get('error', 'Unknown error')
+                error_display = f"❌ **Error:**\n\n{error_msg}"
+                yield history + [
+                    {"role": "user", "content": message},
+                    {"role": "assistant", "content": error_display}
+                ], ""
+                return
 
-                # Clear GPU cache after non-streaming generation
-                try:
-                    import torch
-                    if torch.cuda.is_available():
-                        torch.cuda.empty_cache()
-                        logger.debug("Cleared CUDA cache after generation")
-                except Exception as cache_error:
-                    logger.debug(f"Could not clear CUDA cache: {cache_error}")
+        # Format final output
+        if result:
+            final_output = ""
+            response_text = result.get('answer', streamed_answer)
 
-        except Exception as e:
-            yield history + [
-                {"role": "user", "content": message},
-                {"role": "assistant", "content": f"❌ Error: {str(e)}"}
-            ], ""
-            import traceback
-            traceback.print_exc()
-            result = {'answer': '', 'sources': [], 'metadata': {}}
+            # Extract thinking if present
+            thinking_content, response_text = parse_think_tags(response_text)
 
-        # Build final progress for collapsible section
-        final_progress = "\n".join([msg for msg in current_progress])
+            # Add thinking section if available
+            if show_thinking and thinking_content:
+                final_output += (
+                    '<details><summary>🧠 <b>Proses berfikir (klik untuk melihat)</b></summary>\n\n'
+                    + thinking_content +
+                    '\n</details>\n\n'
+                    + '-----\n✅ **Jawaban:**\n'
+                    + response_text
+                )
+            else:
+                final_output += f"✅ **Jawaban:**\n{response_text}"
 
-        if result and result.get('answer'):
-            try:
-                # Use thinking and answer extracted during streaming (no need to re-parse)
-                thinking_content = result.get('thinking', '')
-                response_text = result.get('answer', '')
+            # Add community clusters if available
+            if result.get('communities') or result.get('clusters'):
+                communities = result.get('communities', result.get('clusters', []))
+                if communities:
+                    final_output += "\n\n---\n\n### 🌐 Discovered Thematic Clusters\n\n"
+                    final_output += "_The research team identified these interconnected legal themes:_\n\n"
 
-                # Build final output with collapsible sections (matching original format)
-                final_output = f'<details><summary>📋 <b>Proses Penelitian Selesai (klik untuk melihat)</b></summary>\n\n{final_progress}\n</details>\n\n'
+                    for cluster_idx, cluster_data in enumerate(communities[:5], 1):
+                        if isinstance(cluster_data, dict):
+                            name = cluster_data.get('name', f'Cluster {cluster_idx}')
+                            size = cluster_data.get('size', 0)
+                            theme = cluster_data.get('dominant_theme', cluster_data.get('theme', ''))
 
-                if thinking_content and show_thinking:
-                    final_output += (
-                        '<details><summary>🧠 <b>Proses berfikir (klik untuk melihat)</b></summary>\n\n'
-                        + thinking_content +
-                        '\n</details>\n\n'
-                        + '-----\n✅ **Jawaban:**\n'
-                        + response_text
-                    )
-                else:
-                    final_output += f"✅ **Jawaban:**\n{response_text}"
+                            final_output += f"**{name}** ({size} documents)\n"
+                            if theme:
+                                final_output += f"- **Theme:** {theme}\n"
+                            if cluster_data.get('top_keywords'):
+                                keywords = cluster_data['top_keywords']
+                                if isinstance(keywords, list):
+                                    keywords_str = ", ".join([f"`{kw}`" for kw in keywords[:8]])
+                                    final_output += f"- **Key Terms:** {keywords_str}\n"
+                            if cluster_data.get('primary_domain'):
+                                final_output += f"- **Domain:** {cluster_data['primary_domain']}\n"
+                            final_output += "\n"
 
-                # *** COMMUNITY CLUSTERS DISPLAY - MATCHING ORIGINAL ***
-                if result.get('communities') or result.get('clusters'):
-                    communities = result.get('communities', result.get('clusters', []))
-                    if communities:
-                        final_output += "\n\n---\n\n### 🌐 Discovered Thematic Clusters\n\n"
-                        final_output += "_The research team identified these interconnected legal themes:_\n\n"
+            # Add collapsible sections
+            collapsible_sections = []
 
-                        for cluster_idx, cluster_data in enumerate(communities[:5], 1):
-                            if isinstance(cluster_data, dict):
-                                name = cluster_data.get('name', f'Cluster {cluster_idx}')
-                                size = cluster_data.get('size', 0)
-                                theme = cluster_data.get('dominant_theme', cluster_data.get('theme', ''))
-
-                                final_output += f"**{name}** ({size} documents)\n"
-                                if theme:
-                                    final_output += f"- **Theme:** {theme}\n"
-                                if cluster_data.get('top_keywords'):
-                                    keywords = cluster_data['top_keywords']
-                                    if isinstance(keywords, list):
-                                        keywords_str = ", ".join([f"`{kw}`" for kw in keywords[:8]])
-                                        final_output += f"- **Key Terms:** {keywords_str}\n"
-                                if cluster_data.get('primary_domain'):
-                                    final_output += f"- **Domain:** {cluster_data['primary_domain']}\n"
-                                final_output += "\n"
-
-                # Add sources in collapsible section
-                collapsible_sections = []
-
-                if show_sources and result.get('citations'):
-                    citations = result['citations']
-                    if citations:
-                        sources_info = format_sources_info(citations, config_dict)
-                        collapsible_sections.append(
-                            f'<details><summary>📖 <b>Sumber Hukum Utama {len(citations)}</b></summary>\n\n{sources_info}\n</details>'
-                        )
-
-                # *** COMPLETE SEARCH METADATA - DETAILED RESEARCH PROCESS ***
-                if show_metadata and all_phase_metadata:
-                    metadata_info = format_retrieved_metadata(all_phase_metadata, config_dict)
-                    if metadata_info.strip():
-                        collapsible_sections.append(
-                            f'<details><summary>🔍 <b>RESEARCH PROCESS DETAILS</b></summary>\n\n{metadata_info}\n</details>'
-                        )
-
-                    # Add ALL Retrieved Documents (Article-Level Details) - Top 50
-                    # Pass full metadata including phase_metadata, research_data, consensus_data, sources
-                    full_metadata_for_docs = {
-                        'phase_metadata': all_phase_metadata,
-                        'research_data': result.get('research_data', {}),
-                        'research_log': result.get('metadata', {}).get('research_log', {}),
-                        'consensus_data': result.get('consensus_data', {}),
-                        'sources': result.get('sources', []),
-                        'citations': result.get('citations', [])
-                    }
-                    all_docs_info = format_all_documents(full_metadata_for_docs, max_docs=50)
-                    if all_docs_info.strip() and all_docs_info != "No documents retrieved during research process.":
-                        collapsible_sections.append(
-                            f'<details><summary>📄 <b>ALL Retrieved Documents (Article-Level Details) - TOP 50</b></summary>\n\n{all_docs_info}\n</details>'
-                        )
-
-                # Add research team info - more transparent
-                if result.get('consensus_data') or result.get('research_data'):
-                    consensus = result.get('consensus_data', {})
-                    research = result.get('research_data', {})
-
-                    team_content = "**Ringkasan Tim Peneliti:**\n\n"
-
-                    # Team members info
-                    team_members = research.get('team_members', [])
-                    if team_members:
-                        team_content += f"- **Anggota Tim ({len(team_members)}):**\n"
-                        for member in team_members[:5]:
-                            if isinstance(member, dict):
-                                name = member.get('name', member.get('persona', 'Unknown'))
-                                team_content += f"  - {name}\n"
-                            elif member in RESEARCH_TEAM_PERSONAS:
-                                persona = RESEARCH_TEAM_PERSONAS[member]
-                                team_content += f"  - {persona.get('emoji', '👤')} {persona.get('name', member)}\n"
-                            else:
-                                team_content += f"  - {member}\n"
-
-                    # Consensus details
-                    if consensus.get('agreement_level'):
-                        team_content += f"\n**Konsensus:**\n"
-                        team_content += f"- Tingkat Kesepakatan: **{consensus['agreement_level']:.0%}**\n"
-                    if consensus.get('final_results'):
-                        team_content += f"- Dokumen Akhir Terpilih: {len(consensus['final_results'])}\n"
-                    if consensus.get('voting_details'):
-                        team_content += f"- Detail Voting: {consensus['voting_details']}\n"
-
-                    # Research process details
-                    if research.get('rounds_executed'):
-                        team_content += f"\n**Proses Penelitian:**\n"
-                        team_content += f"- Ronde Dieksekusi: {research['rounds_executed']}/5\n"
-                    if research.get('total_candidates_evaluated'):
-                        team_content += f"- Total Dokumen Dievaluasi: {research['total_candidates_evaluated']:,}\n"
-                    if research.get('cross_validation_enabled'):
-                        team_content += f"- Cross-Validation: Aktif\n"
-                    if research.get('devil_advocate_enabled'):
-                        team_content += f"- Devil's Advocate: Aktif\n"
-
-                    if team_content.strip() != "**Ringkasan Tim Peneliti:**":
-                        collapsible_sections.append(
-                            f'<details><summary>👥 <b>Tim Peneliti & Konsensus</b></summary>\n\n{team_content}\n</details>'
-                        )
-
-                # Add query metadata - combined with query analysis
-                meta = result.get('metadata', {})
-                meta_content = ""
-
-                # Add query analysis info inside Metadata Pencarian
-                if query_analysis:
-                    meta_content += "**Analisis Query:**\n"
-                    if query_analysis.get('search_strategy'):
-                        meta_content += f"- Strategi Pencarian: **{query_analysis['search_strategy']}**\n"
-                    if query_analysis.get('confidence'):
-                        meta_content += f"- Confidence: {query_analysis['confidence']:.0%}\n"
-                    if query_analysis.get('reasoning'):
-                        meta_content += f"- Reasoning: {query_analysis['reasoning']}\n"
-                    if query_analysis.get('key_phrases'):
-                        phrases = [p['phrase'] for p in query_analysis['key_phrases'][:5]]
-                        meta_content += f"- Key Phrases: {', '.join(phrases)}\n"
-                    if query_analysis.get('law_name_detected') and query_analysis.get('specific_entities'):
-                        law_name = query_analysis['specific_entities'][0]['name']
-                        meta_content += f"- Law Name Detected: {law_name}\n"
-                    meta_content += "\n"
-
-                # Add other metadata
-                meta_content += "**Metadata Hasil:**\n"
-                if meta.get('query_type'):
-                    meta_content += f"- Tipe Query: {meta['query_type']}\n"
-                if meta.get('processing_time'):
-                    meta_content += f"- Waktu Proses: {meta['processing_time']:.2f}s\n"
-                if meta.get('total_results'):
-                    meta_content += f"- Total Hasil: {meta['total_results']}\n"
-                if meta.get('strategy'):
-                    meta_content += f"- Strategy: {meta['strategy']}\n"
-                if meta.get('retrieval_time'):
-                    meta_content += f"- Retrieval Time: {meta['retrieval_time']:.2f}s\n"
-                if meta.get('generation_time'):
-                    meta_content += f"- Generation Time: {meta['generation_time']:.2f}s\n"
-
-                if meta_content.strip():
+            # Add sources
+            if show_sources and result.get('citations'):
+                citations = result['citations']
+                if citations:
+                    sources_info = format_sources_info(citations, config_dict)
                     collapsible_sections.append(
-                        f'<details><summary>📊 <b>Metadata Pencarian</b></summary>\n\n{meta_content}\n</details>'
+                        f'<details><summary>📖 <b>Sumber Hukum Utama ({len(citations)})</b></summary>\n\n{sources_info}\n</details>'
                     )
 
-                if collapsible_sections:
-                    final_output += f"\n\n---\n\n" + "\n\n".join(collapsible_sections)
-
-                yield history + [
-                    {"role": "user", "content": message},
-                    {"role": "assistant", "content": final_output}
-                ], ""
-
-                # *** SAVE FULL RESEARCH LOG - MATCHING ORIGINAL ***
-                if current_session:
-                    # Build comprehensive metadata for export
-                    full_metadata = result.get('metadata', {})
-                    full_metadata['research_log'] = {
-                        'phase_results': all_phase_metadata,
-                        'team_members': list(RESEARCH_TEAM_PERSONAS.keys())[:config_dict.get('research_team_size', 4)],
-                        'total_documents_retrieved': sum(
-                            len(phase.get('candidates', phase.get('results', [])))
-                            for phase in all_phase_metadata.values()
-                            if isinstance(phase, dict)
-                        ) if all_phase_metadata else 0
-                    }
-
-                    manager.add_turn(
-                        session_id=current_session,
-                        query=message,
-                        answer=final_output,
-                        metadata=full_metadata
+            # Add metadata
+            if show_metadata and all_phase_metadata:
+                metadata_info = format_retrieved_metadata(all_phase_metadata, config_dict)
+                if metadata_info.strip():
+                    collapsible_sections.append(
+                        f'<details><summary>🔬 <b>Detail Proses Penelitian</b></summary>\n\n{metadata_info}\n</details>'
                     )
 
-            except Exception as e:
-                error_output = f'<details><summary>📋 <b>Proses Penelitian Selesai (klik untuk melihat)</b></summary>\n\n{final_progress}\n</details>\n\n'
-                error_output += f"❌ **Error generating response:** {str(e)}\n\n"
-                error_output += "Maaf, terjadi kesalahan saat membuat respons. Silakan coba lagi."
+            # Add all retrieved documents
+            if show_metadata:
+                all_docs_formatted = format_all_documents(result, max_docs=50)
+                if all_docs_formatted:
+                    collapsible_sections.append(
+                        f'<details><summary>📚 <b>Semua Dokumen yang Ditemukan</b></summary>\n\n{all_docs_formatted}\n</details>'
+                    )
 
-                yield history + [
-                    {"role": "user", "content": message},
-                    {"role": "assistant", "content": error_output}
-                ], ""
+            # Combine all sections
+            if collapsible_sections:
+                final_output += "\n\n---\n\n" + "\n\n".join(collapsible_sections)
 
-                import traceback
-                traceback.print_exc()
+            # Update conversation history
+            service.update_conversation(
+                current_session,
+                message,
+                result.get('answer', streamed_answer),
+                result
+            )
 
-        else:
-            final_output = f'<details><summary>📋 <b>Proses Penelitian Selesai (klik untuk melihat)</b></summary>\n\n{final_progress}\n</details>\n\n'
-            final_output += "❌ **Tidak ada hasil ditemukan**\n\n"
-            final_output += "Maaf, tidak ditemukan dokumen hukum yang relevan dengan pertanyaan Anda. Silakan coba:\n"
-            final_output += "- Menggunakan kata kunci yang berbeda\n"
-            final_output += "- Memperjelas pertanyaan Anda\n"
-            final_output += "- Menggunakan istilah hukum yang lebih spesifik"
-
-            yield history + [
+            # Return final result
+            final_history = history + [
                 {"role": "user", "content": message},
                 {"role": "assistant", "content": final_output}
+            ]
+
+            yield final_history, ""
+
+        else:
+            # No result received
+            yield history + [
+                {"role": "user", "content": message},
+                {"role": "assistant", "content": "❌ No response received"}
             ], ""
 
     except Exception as e:
-        error_msg = f"❌ **Terjadi kesalahan sistem:**\n\n{str(e)}\n\n"
-        error_msg += "Silakan coba lagi atau hubungi administrator jika masalah berlanjut."
-        yield history + [
-            {"role": "user", "content": message},
-            {"role": "assistant", "content": error_msg}
-        ], ""
-
+        logger.error(f"Chat error: {e}")
         import traceback
         traceback.print_exc()
 
-
+        error_display = f"❌ **Error:**\n\n{str(e)}"
+        yield history + [
+            {"role": "user", "content": message},
+            {"role": "assistant", "content": error_display}
+        ], ""
 def clear_conversation():
     """Clear conversation history"""
     global manager, current_session

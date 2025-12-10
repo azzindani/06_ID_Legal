@@ -1,0 +1,380 @@
+"""
+Conversational RAG Service
+
+This module provides a reusable service for conversational RAG interactions,
+separating core conversation logic from UI-specific concerns.
+
+This service can be used by:
+- Gradio UI (conversational interface)
+- API endpoints (REST/GraphQL)
+- CLI tools
+- Tests
+- Batch processing
+- Other UIs
+
+File: conversation/conversational_service.py
+"""
+
+from typing import Dict, Any, List, Optional, Callable, Generator
+from logger_utils import get_logger
+
+logger = get_logger(__name__)
+
+
+class ConversationalRAGService:
+    """
+    Service for managing conversational RAG interactions
+
+    This class handles the core logic of conversational RAG, including:
+    - Query analysis
+    - Context retrieval
+    - RAG pipeline execution
+    - Progress tracking via callbacks
+    - Result formatting
+
+    Different UIs can provide their own progress callbacks to handle
+    updates in their own way (Gradio yields, API events, CLI prints, etc.)
+    """
+
+    def __init__(
+        self,
+        pipeline,
+        conversation_manager,
+        current_provider: str = 'local'
+    ):
+        """
+        Initialize conversational service
+
+        Args:
+            pipeline: RAG pipeline instance
+            conversation_manager: Conversation manager instance
+            current_provider: Current LLM provider name
+        """
+        self.pipeline = pipeline
+        self.manager = conversation_manager
+        self.current_provider = current_provider
+        self.logger = logger
+
+    def process_query(
+        self,
+        message: str,
+        session_id: str,
+        config_dict: Dict[str, Any],
+        progress_callback: Optional[Callable[[str], None]] = None,
+        stream_callback: Optional[Callable[[str], None]] = None
+    ) -> Generator[Dict[str, Any], None, None]:
+        """
+        Process a conversational query with streaming support
+
+        Args:
+            message: User query text
+            session_id: Conversation session ID
+            config_dict: Configuration dictionary
+            progress_callback: Optional callback for progress updates (progress_callback(message))
+            stream_callback: Optional callback for streaming tokens (stream_callback(token))
+
+        Yields:
+            Dictionary with progress updates and results:
+            {
+                'type': 'progress' | 'query_analysis' | 'streaming_chunk' | 'final_result' | 'error',
+                'data': {...}
+            }
+        """
+        if not message.strip():
+            yield {'type': 'error', 'data': {'error': 'Empty message'}}
+            return
+
+        try:
+            # Step 1: Query Analysis
+            if progress_callback:
+                progress_callback("🚀 Memulai analisis query...")
+
+            yield {'type': 'progress', 'data': {'message': '🚀 Memulai analisis query...'}}
+
+            query_analysis = self._analyze_query(message, progress_callback)
+            if query_analysis:
+                yield {'type': 'query_analysis', 'data': query_analysis}
+
+            # Step 2: Get Conversation Context
+            context = self._get_conversation_context(session_id)
+
+            # Step 3: Execute RAG Pipeline
+            if progress_callback:
+                progress_callback("🔍 Conducting intelligent search...")
+
+            yield {'type': 'progress', 'data': {'message': '🔍 Conducting intelligent search...'}}
+
+            # Show team assembly
+            team_size = config_dict.get('research_team_size', 4)
+            if progress_callback:
+                progress_callback(f"👥 Assembling research team ({team_size} members)...")
+
+            yield {'type': 'progress', 'data': {'message': f'👥 Assembling research team ({team_size} members)...'}}
+
+            # Execute pipeline with streaming
+            use_streaming = (self.current_provider == 'local')
+
+            if use_streaming:
+                # Stream results
+                for chunk in self._execute_with_streaming(message, context, config_dict, stream_callback):
+                    yield chunk
+            else:
+                # Non-streaming execution
+                result = self._execute_without_streaming(message, context, config_dict)
+                yield {'type': 'final_result', 'data': result}
+
+        except Exception as e:
+            self.logger.error(f"Error processing query: {e}")
+            import traceback
+            traceback.print_exc()
+            yield {'type': 'error', 'data': {'error': str(e), 'traceback': traceback.format_exc()}}
+
+    def _analyze_query(
+        self,
+        message: str,
+        progress_callback: Optional[Callable[[str], None]] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Analyze query and extract information
+
+        Args:
+            message: User query
+            progress_callback: Optional progress callback
+
+        Returns:
+            Query analysis dictionary or None
+        """
+        try:
+            if hasattr(self.pipeline, 'search_orchestrator') and \
+               hasattr(self.pipeline.search_orchestrator, 'query_analyzer'):
+
+                analysis = self.pipeline.search_orchestrator.query_analyzer.analyze_query(message)
+
+                # Report analysis to callback
+                if progress_callback and analysis:
+                    strategy = analysis.get('search_strategy', 'unknown')
+                    confidence = analysis.get('confidence', 0)
+                    progress_callback(f"🧠 Strategy: {strategy} ({confidence:.0%})")
+
+                    if analysis.get('reasoning'):
+                        progress_callback(f"💡 {analysis['reasoning']}")
+
+                    if analysis.get('key_phrases'):
+                        phrases = [p['phrase'] for p in analysis['key_phrases']]
+                        progress_callback(f"🎯 Key phrases: {', '.join(phrases)}")
+
+                    if analysis.get('law_name_detected'):
+                        law_name = analysis['specific_entities'][0]['name']
+                        progress_callback(f"📜 Law name detected: {law_name}")
+
+                return analysis
+
+            return None
+
+        except Exception as e:
+            self.logger.debug(f"Query analysis skipped: {e}")
+            return None
+
+    def _get_conversation_context(self, session_id: str) -> Optional[List[Dict]]:
+        """
+        Get conversation context for the session
+
+        Args:
+            session_id: Session ID
+
+        Returns:
+            List of context messages or None
+        """
+        try:
+            context = self.manager.get_context_for_query(session_id) if session_id else None
+
+            if context:
+                self.logger.info(f"Using {len(context)} messages from conversation history")
+            else:
+                self.logger.info("No conversation context available (first message)")
+
+            return context
+
+        except Exception as e:
+            self.logger.error(f"Error getting context: {e}")
+            return None
+
+    def _execute_with_streaming(
+        self,
+        message: str,
+        context: Optional[List[Dict]],
+        config_dict: Dict[str, Any],
+        stream_callback: Optional[Callable[[str], None]] = None
+    ) -> Generator[Dict[str, Any], None, None]:
+        """
+        Execute RAG pipeline with streaming
+
+        Args:
+            message: User query
+            context: Conversation context
+            config_dict: Configuration
+            stream_callback: Optional callback for streaming tokens
+
+        Yields:
+            Progress and result dictionaries
+        """
+        # Clear GPU cache before generation
+        self._clear_gpu_cache()
+
+        streamed_answer = ""
+        chunk_count = 0
+        result = None
+        all_phase_metadata = {}
+
+        try:
+            # Execute pipeline with streaming generator
+            for chunk in self.pipeline.query_with_conversation_streaming(
+                message,
+                conversation_context=context,
+                config=config_dict
+            ):
+                if isinstance(chunk, dict):
+                    # Metadata chunk
+                    if 'phase_metadata' in chunk:
+                        phase_key = chunk.get('phase', chunk.get('researcher', 'unknown'))
+                        all_phase_metadata[phase_key] = chunk['phase_metadata']
+
+                    if chunk.get('final_result'):
+                        result = chunk
+
+                    # Yield metadata
+                    yield {'type': 'metadata_chunk', 'data': chunk}
+
+                elif isinstance(chunk, str):
+                    # Text chunk (streaming)
+                    streamed_answer += chunk
+                    chunk_count += 1
+
+                    # Call stream callback
+                    if stream_callback:
+                        stream_callback(chunk)
+
+                    # Yield streaming chunk
+                    yield {
+                        'type': 'streaming_chunk',
+                        'data': {
+                            'chunk': chunk,
+                            'accumulated': streamed_answer,
+                            'chunk_count': chunk_count
+                        }
+                    }
+
+            # Build final result
+            if result:
+                result['answer'] = streamed_answer
+                result['phase_metadata'] = all_phase_metadata
+                result['chunk_count'] = chunk_count
+
+                yield {'type': 'final_result', 'data': result}
+            else:
+                # Fallback if no final result received
+                yield {
+                    'type': 'final_result',
+                    'data': {
+                        'answer': streamed_answer,
+                        'phase_metadata': all_phase_metadata,
+                        'chunk_count': chunk_count
+                    }
+                }
+
+        finally:
+            # Clean up GPU memory
+            self._clear_gpu_cache()
+
+    def _execute_without_streaming(
+        self,
+        message: str,
+        context: Optional[List[Dict]],
+        config_dict: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Execute RAG pipeline without streaming (for non-local providers)
+
+        Args:
+            message: User query
+            context: Conversation context
+            config_dict: Configuration
+
+        Returns:
+            Result dictionary
+        """
+        try:
+            result = self.pipeline.query_with_conversation(
+                message,
+                conversation_context=context,
+                config=config_dict
+            )
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Pipeline execution failed: {e}")
+            raise
+
+    def _clear_gpu_cache(self):
+        """Clear GPU cache to prevent OOM"""
+        try:
+            import gc
+            gc.collect()
+
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()
+                self.logger.debug("Cleared CUDA cache")
+
+        except Exception as e:
+            self.logger.debug(f"Cache clearing skipped: {e}")
+
+    def update_conversation(
+        self,
+        session_id: str,
+        user_message: str,
+        assistant_message: str,
+        metadata: Optional[Dict[str, Any]] = None
+    ):
+        """
+        Update conversation history
+
+        Args:
+            session_id: Session ID
+            user_message: User's message
+            assistant_message: Assistant's response
+            metadata: Optional metadata to store
+        """
+        try:
+            self.manager.add_turn(
+                session_id,
+                user_message,
+                assistant_message,
+                metadata
+            )
+        except Exception as e:
+            self.logger.error(f"Error updating conversation: {e}")
+
+
+def create_conversational_service(
+    pipeline,
+    conversation_manager,
+    current_provider: str = 'local'
+) -> ConversationalRAGService:
+    """
+    Factory function to create a conversational service
+
+    Args:
+        pipeline: RAG pipeline instance
+        conversation_manager: Conversation manager instance
+        current_provider: Current LLM provider
+
+    Returns:
+        ConversationalRAGService instance
+    """
+    return ConversationalRAGService(
+        pipeline,
+        conversation_manager,
+        current_provider
+    )
