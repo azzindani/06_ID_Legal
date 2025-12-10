@@ -712,15 +712,6 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                 chunk_count = 0
                 result = None
 
-                # Variables for <think> tag processing (like original)
-                thinking_content = []
-                final_answer = []
-                live_output = []
-                in_thinking_block = False
-                saw_think_tag = False
-                thinking_header_shown = False
-                accumulated_text = ''
-
                 try:
                     stream_response = pipeline.query(message, conversation_history=context, stream=True)
 
@@ -737,55 +728,15 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                             if chunk_type == 'token':
                                 new_text = chunk.get('token', '')
                                 streamed_answer += new_text
-                                accumulated_text += new_text
                                 chunk_count += 1
 
-                                # Process <think> tags DURING streaming (like original)
-                                if '<think>' in new_text:
-                                    in_thinking_block = True
-                                    saw_think_tag = True
-                                    new_text = new_text.replace('<think>', '')
-                                    if not thinking_header_shown and show_thinking:
-                                        live_output = [f"**Proses Penelitian:**\n\n{final_progress}\n\n---\n\n🧠 **Sedang berfikir...**\n"]
-                                        thinking_header_shown = True
+                                # Simple streaming - just show progress + accumulated answer
+                                display_text = f"**Proses Penelitian:**\n\n{final_progress}\n\n---\n\n**Menghasilkan jawaban...**\n\n{streamed_answer}"
 
-                                if '</think>' in new_text:
-                                    in_thinking_block = False
-                                    new_text = new_text.replace('</think>', '')
-                                    if show_thinking:
-                                        live_output.append('\n\n-----\n✅ **Jawaban:**\n')
-
-                                # Append to appropriate section (like original)
-                                if saw_think_tag:
-                                    if in_thinking_block:
-                                        thinking_content.append(new_text)
-                                        if show_thinking:
-                                            live_output.append(new_text)
-                                    else:
-                                        final_answer.append(new_text)
-                                        live_output.append(new_text)
-                                else:
-                                    # No <think> tag seen yet
-                                    if len(accumulated_text) > 20 and not saw_think_tag:
-                                        if not thinking_header_shown:
-                                            live_output = [f"**Proses Penelitian:**\n\n{final_progress}\n\n---\n\n⭐ **Jawaban langsung:**\n\n"]
-                                            thinking_header_shown = True
-                                        final_answer.append(new_text)
-                                        live_output.append(new_text)
-                                    else:
-                                        # Initial tokens before we determine if there's thinking
-                                        final_answer.append(new_text)  # Always add to final answer
-                                        if not thinking_header_shown:
-                                            progress_with_generation = final_progress + f"\n\n🤖 Generating response..."
-                                            live_output = [f"**Proses Penelitian:**\n\n{progress_with_generation}\n\n{new_text}"]
-                                            thinking_header_shown = True  # FIX: Set flag to prevent resetting
-                                        else:
-                                            live_output.append(new_text)
-
-                                # Yield with live output (like original)
+                                # Yield every token
                                 yield history + [
                                     {"role": "user", "content": message},
-                                    {"role": "assistant", "content": ''.join(live_output)}
+                                    {"role": "assistant", "content": display_text}
                                 ], ""
 
                                 # Log first few tokens for debugging
@@ -793,17 +744,17 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                                     logger.debug(f"Yielded token #{chunk_count}: {new_text[:20]}...")
 
                             elif chunk_type == 'complete':
-                                # Extract response text from live answer (like original)
-                                response_text = ''.join(final_answer).strip()
+                                # Get the final answer from the complete chunk
+                                response_text = chunk.get('answer', streamed_answer)
+                                thinking_content = chunk.get('thinking', '')
 
-                                # Build final output with collapsible sections (like original)
+                                # Build final output with collapsible sections
                                 final_output = f'<details><summary>📋 <b>Proses Penelitian Selesai (klik untuk melihat)</b></summary>\n\n{final_progress}\n</details>\n\n'
 
                                 if thinking_content and show_thinking:
-                                    thinking_text = ''.join(thinking_content).strip()
                                     final_output += (
                                         '<details><summary>🧠 <b>Proses berfikir (klik untuk melihat)</b></summary>\n\n'
-                                        + thinking_text +
+                                        + thinking_content +
                                         '\n</details>\n\n'
                                         + '-----\n✅ **Jawaban:**\n'
                                         + response_text
@@ -812,12 +763,12 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                                     final_output += f"✅ **Jawaban:**\n{response_text}"
 
                                 result = {
-                                    'answer': chunk.get('answer', response_text),
+                                    'answer': response_text,
                                     'sources': chunk.get('sources', []),
                                     'citations': chunk.get('citations', []),
                                     'metadata': chunk.get('metadata', {}),
                                     'phase_metadata': chunk.get('phase_metadata', {}),
-                                    'thinking': ''.join(thinking_content).strip(),
+                                    'thinking': thinking_content,
                                     'consensus_data': chunk.get('consensus_data', {}),
                                     'research_data': chunk.get('research_data', {}),
                                     'communities': chunk.get('communities', [])
