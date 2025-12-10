@@ -21,11 +21,11 @@ class EmbeddingModelWrapper:
         self.to = model.to
         
     def tokenize(self, texts, padding=True, truncation=True, max_length=512, **kwargs):
-        """Tokenize texts properly"""
+        """Tokenize texts properly and move to correct device"""
         if isinstance(texts, str):
             texts = [texts]
-        
-        return self.tokenizer(
+
+        tokens = self.tokenizer(
             texts,
             return_tensors='pt',
             padding=padding,
@@ -33,6 +33,10 @@ class EmbeddingModelWrapper:
             max_length=max_length,
             **kwargs
         )
+
+        # Move all tensors to the model's device (critical for multi-GPU setups)
+        tokens = {k: v.to(self.device) for k, v in tokens.items()}
+        return tokens
     
     def __call__(self, *args, **kwargs):
         """Forward call to model"""
