@@ -681,13 +681,19 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
             query_analysis = None
 
         # Get conversation context
-        context = manager.get_context_for_query(current_session) if current_session else None
+        # TEMPORARILY DISABLED: Conversation context causes OOM errors
+        # The model + context + generation KV cache exceeds GPU memory (14GB)
+        # Each follow-up question is now treated independently
+        # TODO: Re-enable with reduced max_new_tokens or implement sliding window
+        context = None
+        # context = manager.get_context_for_query(current_session) if current_session else None
 
         # Limit conversation history to prevent OOM errors
         # Keep only the last 4 messages (2 user + 2 assistant) to manage GPU memory
-        if context and len(context) > 4:
-            context = context[-4:]
-            logger.debug(f"Limited conversation context to last 4 messages to conserve GPU memory")
+        # if context and len(context) > 4:
+        #     context = context[-4:]
+        #     logger.debug(f"Limited conversation context to last 4 messages to conserve GPU memory")
+        logger.info("Conversation context disabled to prevent OOM errors")
 
         # *** RESEARCHER PROGRESS - MATCHING ORIGINAL ***
         yield add_progress("🔍 Conducting intelligent search..."), ""
