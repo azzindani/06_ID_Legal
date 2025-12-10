@@ -874,7 +874,7 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                     if citations:
                         sources_info = format_sources_info(citations, config_dict)
                         collapsible_sections.append(
-                            f'<details><summary>📖 <b>LEGAL REFERENCES (Top K Documents Used in LLM Prompt) - {len(citations)} documents</b></summary>\n\n{sources_info}\n</details>'
+                            f'<details><summary>📖 <b>LEGAL REFERENCES {len(citations)} Articles</b></summary>\n\n{sources_info}\n</details>'
                         )
 
                 # *** COMPLETE SEARCH METADATA - DETAILED RESEARCH PROCESS ***
@@ -882,7 +882,7 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                     metadata_info = format_retrieved_metadata(all_phase_metadata, config_dict)
                     if metadata_info.strip():
                         collapsible_sections.append(
-                            f'<details><summary>🔍 <b>RESEARCH PROCESS DETAILS (ALL Retrieved Documents)</b></summary>\n\n{metadata_info}\n</details>'
+                            f'<details><summary>🔍 <b>RESEARCH PROCESS DETAILS</b></summary>\n\n{metadata_info}\n</details>'
                         )
 
                     # Add ALL Retrieved Documents (Article-Level Details) - Top 50
@@ -1883,3 +1883,4 @@ def launch_app(share: bool = False, server_port: int = 7860):
 
 if __name__ == "__main__":
     launch_app()
+
