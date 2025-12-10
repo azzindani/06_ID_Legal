@@ -683,6 +683,12 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
         # Get conversation context
         context = manager.get_context_for_query(current_session) if current_session else None
 
+        # Limit conversation history to prevent OOM errors
+        # Keep only the last 4 messages (2 user + 2 assistant) to manage GPU memory
+        if context and len(context) > 4:
+            context = context[-4:]
+            logger.debug(f"Limited conversation context to last 4 messages to conserve GPU memory")
+
         # *** RESEARCHER PROGRESS - MATCHING ORIGINAL ***
         yield add_progress("🔍 Conducting intelligent search..."), ""
 
@@ -716,6 +722,19 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                 result = None
 
                 try:
+                    # Clear GPU cache and run garbage collection BEFORE generation
+                    # This prevents OOM errors on follow-up conversations
+                    import gc
+                    gc.collect()
+                    try:
+                        import torch
+                        if torch.cuda.is_available():
+                            torch.cuda.empty_cache()
+                            torch.cuda.synchronize()  # Ensure cache clearing completes
+                            logger.debug("Cleared CUDA cache before streaming generation")
+                    except Exception as cache_error:
+                        logger.debug(f"Could not clear CUDA cache before generation: {cache_error}")
+
                     stream_response = pipeline.query(message, conversation_history=context, stream=True)
 
                     # Check if we got a generator or a dict (dict means no streaming/error)
@@ -808,6 +827,18 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
 
                 except Exception as stream_error:
                     logger.warning(f"Streaming failed, falling back to non-streaming: {stream_error}")
+                    # Clear cache before fallback
+                    import gc
+                    gc.collect()
+                    try:
+                        import torch
+                        if torch.cuda.is_available():
+                            torch.cuda.empty_cache()
+                            torch.cuda.synchronize()
+                            logger.debug("Cleared CUDA cache before fallback generation")
+                    except Exception as cache_error:
+                        logger.debug(f"Could not clear CUDA cache: {cache_error}")
+
                     # Fall back to non-streaming
                     result = pipeline.query(message, conversation_history=context, stream=False)
                     all_phase_metadata = result.get('phase_metadata', result.get('all_retrieved_metadata', {}))
@@ -818,6 +849,18 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                     {"role": "user", "content": message},
                     {"role": "assistant", "content": progress_header + "⏳ **Menghasilkan jawaban...**"}
                 ], ""
+
+                # Clear GPU cache and run garbage collection BEFORE generation
+                import gc
+                gc.collect()
+                try:
+                    import torch
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                        torch.cuda.synchronize()
+                        logger.debug("Cleared CUDA cache before non-streaming generation")
+                except Exception as cache_error:
+                    logger.debug(f"Could not clear CUDA cache before generation: {cache_error}")
 
                 result = pipeline.query(message, conversation_history=context, stream=False)
                 all_phase_metadata = result.get('phase_metadata', result.get('all_retrieved_metadata', {}))
