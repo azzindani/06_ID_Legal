@@ -30,6 +30,7 @@ from config import (
     RESEARCH_TEAM_PERSONAS
 )
 from logger_utils import get_logger
+from utils.formatting import _extract_all_documents_from_metadata
 
 logger = get_logger(__name__)
 
@@ -181,52 +182,7 @@ def format_score_bar(score: float, label: str, color: str = "#1e3a5f") -> str:
 """
 
 
-def extract_all_documents(result: Dict) -> List[Dict]:
-    """Extract ALL retrieved documents from various metadata locations"""
-    all_docs = []
-    seen_ids = set()
-
-    # Try phase_metadata first (most complete)
-    phase_metadata = result.get('phase_metadata', {})
-    for phase_name, phase_data in phase_metadata.items():
-        if isinstance(phase_data, dict):
-            candidates = phase_data.get('candidates', phase_data.get('results', []))
-            for doc in candidates:
-                doc_id = doc.get('record', doc).get('global_id', str(hash(str(doc))))
-                if doc_id not in seen_ids:
-                    seen_ids.add(doc_id)
-                    # Add phase info
-                    doc['_phase'] = phase_name
-                    doc['_researcher'] = phase_data.get('researcher', 'unknown')
-                    all_docs.append(doc)
-
-    # Try research_data
-    if not all_docs:
-        research_data = result.get('research_data', {})
-        all_results = research_data.get('all_results', [])
-        for doc in all_results:
-            doc_id = doc.get('record', doc).get('global_id', str(hash(str(doc))))
-            if doc_id not in seen_ids:
-                seen_ids.add(doc_id)
-                all_docs.append(doc)
-
-    # Try consensus_data
-    if not all_docs:
-        consensus_data = result.get('consensus_data', {})
-        final_results = consensus_data.get('final_results', [])
-        for doc in final_results:
-            doc_id = doc.get('record', doc).get('global_id', str(hash(str(doc))))
-            if doc_id not in seen_ids:
-                seen_ids.add(doc_id)
-                all_docs.append(doc)
-
-    # Fallback to sources
-    if not all_docs:
-        sources = result.get('sources', result.get('citations', []))
-        for doc in sources:
-            all_docs.append(doc)
-
-    return all_docs
+# extract_all_documents is now imported from utils.formatting as _extract_all_documents_from_metadata
 
 
 def format_document_card(doc: Dict, index: int) -> str:
@@ -332,7 +288,7 @@ def format_document_card(doc: Dict, index: int) -> str:
 
 def format_all_documents(result: Dict) -> str:
     """Format ALL retrieved documents with complete metadata"""
-    all_docs = extract_all_documents(result)
+    all_docs = _extract_all_documents_from_metadata(result)
 
     if not all_docs:
         return "❌ Tidak ada dokumen yang ditemukan."
@@ -454,7 +410,7 @@ def format_summary(result: Dict) -> str:
         output.append(f"{answer}\n\n")
 
     # Quick stats
-    all_docs = extract_all_documents(result)
+    all_docs = _extract_all_documents_from_metadata(result)
     sources = result.get('sources', result.get('citations', []))
 
     output.append("---\n\n")
@@ -513,7 +469,7 @@ def export_results(export_format: str) -> Tuple[str, Optional[str]]:
 
     try:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        all_docs = extract_all_documents(last_search_result)
+        all_docs = _extract_all_documents_from_metadata(last_search_result)
 
         if export_format == "JSON":
             # Full JSON export

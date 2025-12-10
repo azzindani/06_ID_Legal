@@ -25,6 +25,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 from logger_utils import get_logger, initialize_logging
 from pipeline import RAGPipeline
+from utils.formatting import _extract_all_documents_from_metadata
 
 
 class CompleteOutputTester:
@@ -141,7 +142,7 @@ class CompleteOutputTester:
         phase_metadata = metadata.get('phase_metadata', metadata.get('all_retrieved_metadata', {}))
 
         # Also extract all documents for the detailed listing
-        all_documents = self._extract_all_documents(metadata)
+        all_documents = _extract_all_documents_from_metadata(metadata)
 
         has_research_info = False
 
@@ -324,76 +325,7 @@ class CompleteOutputTester:
 
         return "\n".join(lines)
 
-    def _extract_all_documents(self, metadata: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Extract all retrieved documents from various metadata locations"""
-        all_docs = []
-        seen_ids = set()
-
-        # Try phase_metadata first (most complete)
-        phase_metadata = metadata.get('phase_metadata', {})
-        for phase_name, phase_data in phase_metadata.items():
-            if isinstance(phase_data, dict):
-                candidates = phase_data.get('candidates', phase_data.get('results', []))
-                for doc in candidates:
-                    doc_id = doc.get('record', doc).get('global_id', str(hash(str(doc))))
-                    if doc_id not in seen_ids:
-                        seen_ids.add(doc_id)
-                        all_docs.append(doc)
-
-        # Try research_data
-        if not all_docs:
-            research_data = metadata.get('research_data', {})
-            all_results = research_data.get('all_results', [])
-            for doc in all_results:
-                doc_id = doc.get('record', doc).get('global_id', str(hash(str(doc))))
-                if doc_id not in seen_ids:
-                    seen_ids.add(doc_id)
-                    all_docs.append(doc)
-
-        # Try research_log
-        if not all_docs:
-            research_log = metadata.get('research_log', {})
-            phase_results = research_log.get('phase_results', {})
-            for phase_name, phase_data in phase_results.items():
-                if isinstance(phase_data, dict):
-                    candidates = phase_data.get('candidates', phase_data.get('results', []))
-                    for doc in candidates:
-                        doc_id = doc.get('record', doc).get('global_id', str(hash(str(doc))))
-                        if doc_id not in seen_ids:
-                            seen_ids.add(doc_id)
-                            all_docs.append(doc)
-
-        # Try consensus_data
-        if not all_docs:
-            consensus_data = metadata.get('consensus_data', {})
-            final_results = consensus_data.get('final_results', [])
-            for doc in final_results:
-                doc_id = doc.get('record', doc).get('global_id', str(hash(str(doc))))
-                if doc_id not in seen_ids:
-                    seen_ids.add(doc_id)
-                    all_docs.append(doc)
-
-        # Try sources/citations at top level (fallback)
-        if not all_docs:
-            sources = metadata.get('sources', metadata.get('citations', []))
-            for doc in sources:
-                doc_id = doc.get('global_id', doc.get('regulation_number', str(hash(str(doc)))))
-                if doc_id not in seen_ids:
-                    seen_ids.add(doc_id)
-                    # Convert source format to document format
-                    all_docs.append({
-                        'record': doc,
-                        'scores': {
-                            'final': doc.get('score', 0),
-                            'semantic': doc.get('semantic_score', 0),
-                            'keyword': doc.get('keyword_score', 0),
-                            'kg': doc.get('kg_score', 0),
-                            'authority': doc.get('authority_score', 0),
-                            'temporal': doc.get('temporal_score', 0)
-                        }
-                    })
-
-        return all_docs
+    # _extract_all_documents is now imported from utils.formatting as _extract_all_documents_from_metadata
 
     def run_query_with_streaming(self, query: str, query_num: int) -> Dict[str, Any]:
         """Run a single query with streaming output"""
@@ -553,7 +485,7 @@ class CompleteOutputTester:
                     self.logger.info(f"   - Chunks: {stats.get('chunk_count', 0)}, Duration: {stats.get('duration', 0):.2f}s")
 
                     # Document count
-                    all_docs = self._extract_all_documents(result['metadata'])
+                    all_docs = _extract_all_documents_from_metadata(result['metadata'])
                     self.logger.info(f"   - Documents Retrieved: {len(all_docs)}")
 
             self.logger.info("-" * 100)
