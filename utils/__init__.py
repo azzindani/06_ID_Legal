@@ -17,6 +17,22 @@ from .formatting import (
     final_selection_with_kg
 )
 
+from .text_utils import (
+    parse_think_tags,
+    truncate_text,
+    clean_whitespace
+)
+
+from .health import (
+    system_health_check,
+    format_health_report
+)
+
+from .system_info import (
+    format_system_info,
+    get_dataset_statistics
+)
+
 __all__ = [
     # Export helpers
     'format_complete_search_metadata',
@@ -28,5 +44,15 @@ __all__ = [
     '_extract_all_documents_from_metadata',
     'format_all_documents',
     'format_retrieved_metadata',
-    'final_selection_with_kg'
+    'final_selection_with_kg',
+    # Text utilities
+    'parse_think_tags',
+    'truncate_text',
+    'clean_whitespace',
+    # Health monitoring
+    'system_health_check',
+    'format_health_report',
+    # System information
+    'format_system_info',
+    'get_dataset_statistics'
 ]

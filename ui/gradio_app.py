@@ -42,6 +42,14 @@ from utils.formatting import (
     format_retrieved_metadata,
     final_selection_with_kg
 )
+from utils.text_utils import parse_think_tags
+from utils.health import system_health_check, format_health_report
+from utils.system_info import format_system_info, get_dataset_statistics
+from ui.services.system_service import (
+    initialize_rag_system,
+    change_llm_provider,
+    clear_conversation_session
+)
 
 # Import TextIteratorStreamer for live streaming
 try:
@@ -76,40 +84,26 @@ def initialize_system(provider_type: str = None):
     global search_engine, knowledge_graph, reranker, llm_generator, llm_model, llm_tokenizer
     global conversation_manager, dataset_loader
 
-    if provider_type:
-        current_provider = provider_type
-
     if pipeline is None:
-        logger.info(f"Initializing RAG system with provider: {current_provider}")
-        pipeline = RAGPipeline({'llm_provider': current_provider})
-        if not pipeline.initialize():
-            return "Failed to initialize pipeline"
-        logger.info("Pipeline initialized")
+        pipeline, manager, current_session, current_provider, components = initialize_rag_system(
+            RAGPipeline,
+            ConversationManager,
+            provider_type,
+            current_provider
+        )
 
-        # Extract component references for direct access
-        if hasattr(pipeline, 'search_orchestrator'):
-            search_engine = pipeline.search_orchestrator
-        if hasattr(pipeline, 'knowledge_graph'):
-            knowledge_graph = pipeline.knowledge_graph
-        if hasattr(pipeline, 'reranker'):
-            reranker = pipeline.reranker
-        if hasattr(pipeline, 'generator'):
-            llm_generator = pipeline.generator
-        if hasattr(pipeline, 'llm_model'):
-            llm_model = pipeline.llm_model
-        if hasattr(pipeline, 'llm_tokenizer'):
-            llm_tokenizer = pipeline.llm_tokenizer
-        if hasattr(pipeline, 'data_loader'):
-            dataset_loader = pipeline.data_loader
-
-    if manager is None:
-        manager = ConversationManager()
+        # Extract component references
+        search_engine = components.get('search_engine')
+        knowledge_graph = components.get('knowledge_graph')
+        reranker = components.get('reranker')
+        llm_generator = components.get('llm_generator')
+        llm_model = components.get('llm_model')
+        llm_tokenizer = components.get('llm_tokenizer')
+        dataset_loader = components.get('dataset_loader')
         conversation_manager = manager
 
-    if current_session is None:
-        current_session = manager.start_session()
+        initialization_complete = True
 
-    initialization_complete = True
     device_info = f"Embedding: {EMBEDDING_DEVICE}, LLM: {LLM_DEVICE}"
     return f"Initialized with {current_provider} provider. {device_info}"
 
@@ -118,118 +112,22 @@ def change_provider(provider_type: str):
     """Switch to a different LLM provider"""
     global pipeline, current_provider
 
-    try:
-        if pipeline:
-            pipeline.shutdown()
-            pipeline = None
+    pipeline, current_provider, message = change_llm_provider(
+        pipeline,
+        provider_type,
+        current_provider
+    )
+    return message
 
-        current_provider = provider_type
-        return initialize_system(provider_type)
-    except Exception as e:
-        return f"Failed to switch provider: {e}"
-
-
-def parse_think_tags(text: str) -> Tuple[str, str]:
-    """Extract content from <think> tags and return (thinking, answer)"""
-    import re
-    think_pattern = r'<think>(.*?)</think>'
-    matches = re.findall(think_pattern, text, re.DOTALL)
-    thinking = '\n\n'.join(matches) if matches else ''
-    answer = re.sub(think_pattern, '', text, flags=re.DOTALL).strip()
-    return thinking, answer
+# parse_think_tags is now imported from utils.text_utils
 
 
 # =============================================================================
-# FORMATTING FUNCTIONS - Now imported from utils.formatting
-# (format_sources_info, _extract_all_documents_from_metadata, format_all_documents,
-#  format_retrieved_metadata, final_selection_with_kg)
+# UTILITY FUNCTIONS - Now imported from utils modules
+# - parse_think_tags from utils.text_utils
+# - system_health_check, format_health_report from utils.health
+# - format_sources_info, _extract_all_documents_from_metadata, etc. from utils.formatting
 # =============================================================================
-
-
-def system_health_check() -> Dict[str, Any]:
-    """Run system health check and return results"""
-    import psutil
-
-    health = {
-        'status': 'healthy',
-        'components': {},
-        'memory': {},
-        'gpu': {},
-        'issues': []
-    }
-
-    # Check initialization
-    health['components']['pipeline'] = pipeline is not None
-    health['components']['manager'] = manager is not None
-    health['components']['initialization'] = initialization_complete
-
-    # Memory check
-    mem = psutil.virtual_memory()
-    health['memory']['used_gb'] = mem.used / 1024**3
-    health['memory']['total_gb'] = mem.total / 1024**3
-    health['memory']['percent'] = mem.percent
-
-    if mem.percent > 90:
-        health['issues'].append("Critical: Memory usage above 90%")
-        health['status'] = 'critical'
-    elif mem.percent > 80:
-        health['issues'].append("Warning: Memory usage above 80%")
-        if health['status'] == 'healthy':
-            health['status'] = 'warning'
-
-    # GPU check
-    if torch.cuda.is_available():
-        for i in range(torch.cuda.device_count()):
-            mem_used = torch.cuda.memory_allocated(i) / 1024**3
-            mem_total = torch.cuda.get_device_properties(i).total_memory / 1024**3
-            health['gpu'][f'gpu_{i}'] = {
-                'used_gb': mem_used,
-                'total_gb': mem_total,
-                'percent': (mem_used / mem_total) * 100 if mem_total > 0 else 0
-            }
-    else:
-        health['gpu']['available'] = False
-
-    return health
-
-
-def format_health_report(health: Dict[str, Any]) -> str:
-    """Format health check results for display"""
-    status_emoji = {
-        'healthy': '✅',
-        'warning': '⚠️',
-        'critical': '❌'
-    }
-
-    report = f"## {status_emoji.get(health['status'], '❓')} System Health: {health['status'].upper()}\n\n"
-
-    # Components
-    report += "### Components\n"
-    for comp, status in health['components'].items():
-        emoji = '✅' if status else '❌'
-        report += f"- {comp}: {emoji}\n"
-
-    # Memory
-    report += f"\n### Memory\n"
-    report += f"- Used: {health['memory']['used_gb']:.1f} / {health['memory']['total_gb']:.1f} GB ({health['memory']['percent']:.1f}%)\n"
-
-    # GPU
-    if health['gpu']:
-        report += f"\n### GPU\n"
-        if 'available' in health['gpu'] and not health['gpu']['available']:
-            report += "- No GPU available\n"
-        else:
-            for gpu_id, gpu_info in health['gpu'].items():
-                if isinstance(gpu_info, dict):
-                    report += f"- {gpu_id}: {gpu_info['used_gb']:.1f} / {gpu_info['total_gb']:.1f} GB ({gpu_info['percent']:.1f}%)\n"
-
-    # Issues
-    if health['issues']:
-        report += f"\n### Issues\n"
-        for issue in health['issues']:
-            report += f"- {issue}\n"
-
-    return report
 
 
 # =============================================================================
@@ -727,58 +625,27 @@ def clear_conversation():
     """Clear conversation history"""
     global manager, current_session
 
-    try:
-        if manager:
-            current_session = manager.start_session()
-        return [], ""
-    except Exception as e:
-        print(f"Error clearing conversation: {e}")
-        return [], ""
+    current_session, history, text = clear_conversation_session(manager)
+    return history, text
 
 
 def get_system_info():
-    """Get system information with DATASET STATISTICS - MATCHING ORIGINAL"""
-    if not initialization_complete:
-        return "Sistem belum selesai inisialisasi."
-
+    """Get system information with dataset statistics"""
     try:
         # Get dataset statistics
-        stats = {}
-        if dataset_loader and hasattr(dataset_loader, 'get_statistics'):
-            stats = dataset_loader.get_statistics()
+        stats = get_dataset_statistics(dataset_loader)
 
-        info = f"""## 📊 Enhanced KG Legal RAG System Information
-
-**Models:**
-- **Embedding:** {EMBEDDING_MODEL}
-- **Reranker:** {RERANKER_MODEL}
-- **LLM:** {LLM_MODEL}
-
-**Device Configuration:**
-- **Embedding Device:** {EMBEDDING_DEVICE}
-- **LLM Device:** {LLM_DEVICE}
-- **Provider:** {current_provider}
-"""
-
-        # Add dataset statistics if available - MATCHING ORIGINAL
-        if stats:
-            info += f"""
-**Dataset Statistics:**
-- **Total Documents:** {stats.get('total_records', 0):,}
-- **KG-Enhanced:** {stats.get('kg_enhanced', 0):,} ({stats.get('kg_enhancement_rate', 0):.1%})
-- **Avg Entities/Doc:** {stats.get('avg_entities_per_doc', 0):.1f}
-- **Avg Authority Score:** {stats.get('avg_authority_score', 0):.3f}
-- **Avg KG Connectivity:** {stats.get('avg_connectivity_score', stats.get('avg_kg_connectivity', 0)):.3f}
-
-**Performance Metrics:**
-- **Authority Tiers:** {stats.get('authority_tiers', 0)}
-- **Temporal Tiers:** {stats.get('temporal_tiers', 0)}
-- **KG Connectivity Tiers:** {stats.get('kg_connectivity_tiers', 0)}
-- **Unique Domains:** {stats.get('unique_domains', 0)}
-- **Memory Optimized:** {stats.get('memory_optimized', False)}
-"""
-
-        return info
+        # Format system information
+        return format_system_info(
+            EMBEDDING_MODEL,
+            RERANKER_MODEL,
+            LLM_MODEL,
+            EMBEDDING_DEVICE,
+            LLM_DEVICE,
+            current_provider,
+            stats,
+            initialization_complete
+        )
     except Exception as e:
         return f"Error getting system info: {e}"
 
