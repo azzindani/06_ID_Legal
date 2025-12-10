@@ -797,6 +797,15 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
 
                         logger.info(f"Streaming completed: {chunk_count} tokens")
 
+                        # Clear GPU cache to prevent OOM on next conversation
+                        try:
+                            import torch
+                            if torch.cuda.is_available():
+                                torch.cuda.empty_cache()
+                                logger.debug("Cleared CUDA cache after streaming")
+                        except Exception as cache_error:
+                            logger.debug(f"Could not clear CUDA cache: {cache_error}")
+
                 except Exception as stream_error:
                     logger.warning(f"Streaming failed, falling back to non-streaming: {stream_error}")
                     # Fall back to non-streaming
@@ -812,6 +821,15 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
 
                 result = pipeline.query(message, conversation_history=context, stream=False)
                 all_phase_metadata = result.get('phase_metadata', result.get('all_retrieved_metadata', {}))
+
+                # Clear GPU cache after non-streaming generation
+                try:
+                    import torch
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                        logger.debug("Cleared CUDA cache after generation")
+                except Exception as cache_error:
+                    logger.debug(f"Could not clear CUDA cache: {cache_error}")
 
         except Exception as e:
             yield history + [
