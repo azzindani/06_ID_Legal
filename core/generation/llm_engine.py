@@ -273,7 +273,16 @@ class LLMEngine:
                 "generation_time": f"{generation_time:.2f}s",
                 "tokens_per_second": f"{tokens_per_second:.1f}"
             })
-            
+
+            # CRITICAL: Clean up tensors to prevent OOM on next generation
+            # Delete inputs and outputs to free GPU memory immediately
+            del inputs
+            del outputs
+            del generated_ids
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                self.logger.debug("Cleaned up generation tensors and cleared CUDA cache")
+
             return {
                 'generated_text': generated_text.strip(),
                 'tokens_generated': tokens_generated,
@@ -429,6 +438,14 @@ class LLMEngine:
                 "generation_time": f"{generation_time:.2f}s",
                 "tokens_per_second": f"{tokens_per_second:.1f}"
             })
+
+            # CRITICAL: Clean up tensors to prevent OOM on next generation
+            # The inputs tensor and KV cache from generation stay in GPU memory
+            # until explicitly deleted and cache is cleared
+            del inputs
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                self.logger.debug("Cleaned up generation tensors and cleared CUDA cache")
 
             # Final yield
             yield {

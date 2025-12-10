@@ -680,18 +680,11 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
             logger.debug(f"Query analysis display skipped: {e}")
             query_analysis = None
 
-        # Get conversation context with strict memory management
-        # Strategy: Keep only the IMMEDIATE previous exchange (last Q+A pair)
-        # This provides follow-up context while minimizing GPU memory usage
+        # Get conversation context - no hardcoded limits, use natural conversation flow
+        # OOM prevention is handled at the LLM engine level with proper tensor cleanup
         context = manager.get_context_for_query(current_session) if current_session else None
 
-        # CRITICAL: Limit to last 2 messages only (1 user question + 1 assistant answer)
-        # This allows follow-up questions while preventing OOM on 14GB GPU
-        # Model (13.57GB) + minimal context + KV cache (2048 tokens) should fit
-        if context and len(context) > 2:
-            context = context[-2:]
-            logger.info(f"Limited context to last exchange only (2 messages) - conserving GPU memory")
-        elif context:
+        if context:
             logger.info(f"Using {len(context)} messages from conversation history")
         else:
             logger.info("No conversation context available (first message)")
