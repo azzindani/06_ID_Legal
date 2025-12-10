@@ -646,9 +646,14 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
         current_progress = []
 
         def add_progress(msg):
+            """Helper to add progress updates in Gradio 6.x message format"""
             current_progress.append(msg)
             progress_display = "\n".join([f"🔄 {m}" for m in current_progress])
-            return history + [[message, f"**Mencari dan menganalisis...**\n\n{progress_display}"]]
+            # Gradio 6.x format: list of message dicts with 'role' and 'content'
+            return history + [
+                {"role": "user", "content": message},
+                {"role": "assistant", "content": f"**Mencari dan menganalisis...**\n\n{progress_display}"}
+            ]
 
         yield add_progress("🚀 Memulai analisis query..."), ""
 
@@ -704,7 +709,10 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
 
             if use_real_streaming:
                 # Show "generating" status before tokens start
-                yield history + [[message, progress_header + "⏳ **Menghasilkan jawaban...**"]], ""
+                yield history + [
+                    {"role": "user", "content": message},
+                    {"role": "assistant", "content": progress_header + "⏳ **Menghasilkan jawaban...**"}
+                ], ""
 
                 streamed_answer = ""
                 chunk_count = 0
@@ -728,8 +736,11 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                                 streamed_answer += token
                                 chunk_count += 1
 
-                                # Yield EVERY token for real-time streaming (like original code)
-                                yield history + [[message, progress_header + streamed_answer]], ""
+                                # Yield EVERY token for real-time streaming (Gradio 6.x format)
+                                yield history + [
+                                    {"role": "user", "content": message},
+                                    {"role": "assistant", "content": progress_header + streamed_answer}
+                                ], ""
 
                                 # Log first few tokens for debugging
                                 if chunk_count <= 3:
@@ -738,7 +749,10 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                             elif chunk_type == 'complete':
                                 # Final yield to show any remaining tokens
                                 if streamed_answer:
-                                    yield history + [[message, progress_header + streamed_answer]], ""
+                                    yield history + [
+                                        {"role": "user", "content": message},
+                                        {"role": "assistant", "content": progress_header + streamed_answer}
+                                    ], ""
 
                                 result = {
                                     'answer': chunk.get('answer', streamed_answer),
@@ -755,7 +769,10 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
 
                             elif chunk_type == 'error':
                                 error_msg = chunk.get('error', 'Unknown error')
-                                yield history + [[message, progress_header + f"❌ Error: {error_msg}"]], ""
+                                yield history + [
+                                    {"role": "user", "content": message},
+                                    {"role": "assistant", "content": progress_header + f"❌ Error: {error_msg}"}
+                                ], ""
                                 result = {'answer': '', 'sources': [], 'metadata': {}}
                                 break
 
@@ -777,13 +794,19 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
 
             else:
                 # Non-streaming: show progress while waiting
-                yield history + [[message, progress_header + "⏳ **Menghasilkan jawaban...**"]], ""
+                yield history + [
+                    {"role": "user", "content": message},
+                    {"role": "assistant", "content": progress_header + "⏳ **Menghasilkan jawaban...**"}
+                ], ""
 
                 result = pipeline.query(message, conversation_history=context, stream=False)
                 all_phase_metadata = result.get('phase_metadata', result.get('all_retrieved_metadata', {}))
 
         except Exception as e:
-            yield history + [[message, f"❌ Error: {str(e)}"]], ""
+            yield history + [
+                {"role": "user", "content": message},
+                {"role": "assistant", "content": f"❌ Error: {str(e)}"}
+            ], ""
             import traceback
             traceback.print_exc()
             result = {'answer': '', 'sources': [], 'metadata': {}}
@@ -968,7 +991,10 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                 if collapsible_sections:
                     final_output += f"\n\n---\n\n" + "\n\n".join(collapsible_sections)
 
-                yield history + [[message, final_output]], ""
+                yield history + [
+                    {"role": "user", "content": message},
+                    {"role": "assistant", "content": final_output}
+                ], ""
 
                 # *** SAVE FULL RESEARCH LOG - MATCHING ORIGINAL ***
                 if current_session:
@@ -996,7 +1022,10 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                 error_output += f"❌ **Error generating response:** {str(e)}\n\n"
                 error_output += "Maaf, terjadi kesalahan saat membuat respons. Silakan coba lagi."
 
-                yield history + [[message, error_output]], ""
+                yield history + [
+                    {"role": "user", "content": message},
+                    {"role": "assistant", "content": error_output}
+                ], ""
 
                 import traceback
                 traceback.print_exc()
@@ -1009,12 +1038,18 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
             final_output += "- Memperjelas pertanyaan Anda\n"
             final_output += "- Menggunakan istilah hukum yang lebih spesifik"
 
-            yield history + [[message, final_output]], ""
+            yield history + [
+                {"role": "user", "content": message},
+                {"role": "assistant", "content": final_output}
+            ], ""
 
     except Exception as e:
         error_msg = f"❌ **Terjadi kesalahan sistem:**\n\n{str(e)}\n\n"
         error_msg += "Silakan coba lagi atau hubungi administrator jika masalah berlanjut."
-        yield history + [[message, error_msg]], ""
+        yield history + [
+            {"role": "user", "content": message},
+            {"role": "assistant", "content": error_msg}
+        ], ""
 
         import traceback
         traceback.print_exc()
