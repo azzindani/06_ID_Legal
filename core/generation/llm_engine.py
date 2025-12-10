@@ -229,7 +229,8 @@ class LLMEngine:
                 'top_k': top_k or self.top_k,
                 'repetition_penalty': self.repetition_penalty,
                 'do_sample': True,
-                'use_cache': False,  # CRITICAL: Don't cache KV for next generation
+                # use_cache=True by default - cache is used WITHIN generation, not between calls
+                # Deleting outputs frees the cache (past_key_values)
                 'pad_token_id': self._tokenizer.pad_token_id,
                 'eos_token_id': self._tokenizer.eos_token_id,
             }
@@ -397,7 +398,8 @@ class LLMEngine:
                 'top_k': top_k or self.top_k,
                 'repetition_penalty': self.repetition_penalty,
                 'do_sample': True,
-                'use_cache': False,  # CRITICAL: Don't cache KV for next generation
+                # use_cache=True by default - cache is used WITHIN generation, not between calls
+                # The thread-based generation completes and cache is freed when outputs are deleted
                 'pad_token_id': self._tokenizer.pad_token_id,
                 'eos_token_id': self._tokenizer.eos_token_id,
             }

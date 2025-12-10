@@ -153,6 +153,13 @@ class ModelManager:
                 model.to(self.embedding_device)
                 model.eval()
 
+                # Verify actual device placement
+                actual_device = next(model.parameters()).device
+                if actual_device != self.embedding_device:
+                    self.logger.warning(f"Device mismatch! Assigned: {self.embedding_device}, Actual: {actual_device}")
+                else:
+                    self.logger.debug(f"Embedding model correctly placed on {actual_device}")
+
                 # Create wrapper with proper tokenize method
                 self._embedding_model = EmbeddingModelWrapper(
                     model=model,
@@ -281,8 +288,20 @@ class ModelManager:
                     model.to(self.reranker_device)
                     model.eval()
 
+                    # Verify actual device placement
+                    actual_device = next(model.parameters()).device
+                    if actual_device != self.reranker_device:
+                        self.logger.warning(f"Reranker device mismatch! Assigned: {self.reranker_device}, Actual: {actual_device}")
+                    else:
+                        self.logger.debug(f"Reranker model correctly placed on {actual_device}")
+
                     # Create wrapper
                     self._reranker_model = TransformersReranker(model, tokenizer, self.reranker_device)
+
+                # Verify CrossEncoder device (if using CrossEncoder)
+                if hasattr(self._reranker_model, 'model') and hasattr(self._reranker_model.model, 'device'):
+                    actual_device = self._reranker_model.model.device
+                    self.logger.debug(f"CrossEncoder on device: {actual_device}")
 
                 self.logger.success("Reranker model loaded successfully", {
                     "model": model_name,
