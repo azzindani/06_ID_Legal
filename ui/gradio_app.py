@@ -680,20 +680,21 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
             logger.debug(f"Query analysis display skipped: {e}")
             query_analysis = None
 
-        # Get conversation context
-        # TEMPORARILY DISABLED: Conversation context causes OOM errors
-        # The model + context + generation KV cache exceeds GPU memory (14GB)
-        # Each follow-up question is now treated independently
-        # TODO: Re-enable with reduced max_new_tokens or implement sliding window
-        context = None
-        # context = manager.get_context_for_query(current_session) if current_session else None
+        # Get conversation context with strict memory management
+        # Strategy: Keep only the IMMEDIATE previous exchange (last Q+A pair)
+        # This provides follow-up context while minimizing GPU memory usage
+        context = manager.get_context_for_query(current_session) if current_session else None
 
-        # Limit conversation history to prevent OOM errors
-        # Keep only the last 4 messages (2 user + 2 assistant) to manage GPU memory
-        # if context and len(context) > 4:
-        #     context = context[-4:]
-        #     logger.debug(f"Limited conversation context to last 4 messages to conserve GPU memory")
-        logger.info("Conversation context disabled to prevent OOM errors")
+        # CRITICAL: Limit to last 2 messages only (1 user question + 1 assistant answer)
+        # This allows follow-up questions while preventing OOM on 14GB GPU
+        # Model (13.57GB) + minimal context + KV cache (2048 tokens) should fit
+        if context and len(context) > 2:
+            context = context[-2:]
+            logger.info(f"Limited context to last exchange only (2 messages) - conserving GPU memory")
+        elif context:
+            logger.info(f"Using {len(context)} messages from conversation history")
+        else:
+            logger.info("No conversation context available (first message)")
 
         # *** RESEARCHER PROGRESS - MATCHING ORIGINAL ***
         yield add_progress("🔍 Conducting intelligent search..."), ""
