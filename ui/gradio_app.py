@@ -773,9 +773,12 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                                         final_answer.append(new_text)
                                         live_output.append(new_text)
                                     else:
+                                        # Initial tokens before we determine if there's thinking
+                                        final_answer.append(new_text)  # Always add to final answer
                                         if not thinking_header_shown:
                                             progress_with_generation = final_progress + f"\n\n🤖 Generating response..."
                                             live_output = [f"**Proses Penelitian:**\n\n{progress_with_generation}\n\n{new_text}"]
+                                            thinking_header_shown = True  # FIX: Set flag to prevent resetting
                                         else:
                                             live_output.append(new_text)
 
