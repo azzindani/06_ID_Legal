@@ -703,6 +703,9 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
             progress_header += "\n".join([f"🔄 {m}" for m in current_progress])
             progress_header += '\n</details>\n\n'
 
+            # Build final_progress for use in streaming display
+            final_progress = "\n".join([msg for msg in current_progress])
+
             # Use streaming for local provider (pipeline handles streaming internally)
             use_real_streaming = (current_provider == 'local')
             logger.info(f"Streaming mode: {use_real_streaming} (provider: {current_provider})")
