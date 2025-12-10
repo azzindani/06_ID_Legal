@@ -1036,20 +1036,6 @@ def get_system_info():
             stats = dataset_loader.get_statistics()
 
         info = f"""## 📊 Enhanced KG Legal RAG System Information
-
-**Enhanced Features:**
-- **Realistic Research Team**: 5 distinct researcher personas with unique expertise
-- **Query-Specific Assembly**: Optimal team selection based on query type
-- **Multi-Stage Process**: Individual → Cross-validation → Devil's Advocate → Consensus
-- **Advanced Customization**: Granular control over all search phases
-
-**Research Team Personas:**
-- **👨‍⚖️ Senior Legal Researcher**: 15 years exp, authority-focused
-- **👩‍⚖️ Junior Legal Researcher**: 3 years exp, comprehensive coverage
-- **📚 Knowledge Graph Specialist**: 8 years exp, relationship-focused
-- **⚖️ Procedural Law Expert**: 12 years exp, methodical analysis
-- **🔍 Devil's Advocate**: 10 years exp, critical challenges
-
 **Models:**
 - **Embedding:** {EMBEDDING_MODEL}
 - **Reranker:** {RERANKER_MODEL}
@@ -1567,82 +1553,6 @@ def create_gradio_interface():
                 outputs=[export_output, download_file]
             )
 
-            # About Tab
-            with gr.TabItem("ℹ️ About Enhanced System", id="about"):
-                with gr.Column(elem_classes="main-chat-area"):
-                    gr.Markdown("""
-                    # 🏛️ Enhanced KG-Indonesian Legal RAG System
-
-                    ## 🆕 Enhanced Features
-
-                    ### 👥 Realistic Research Team Simulation
-                    The system now features **5 distinct researcher personas** with unique characteristics:
-
-                    - **👨‍⚖️ Senior Legal Researcher**: 15 years experience, authority-focused, systematic approach
-                    - **👩‍⚖️ Junior Legal Researcher**: 3 years experience, broad comprehensive coverage
-                    - **📚 Knowledge Graph Specialist**: 8 years experience, relationship and semantic focus
-                    - **⚖️ Procedural Law Expert**: 12 years experience, methodical step-by-step analysis
-                    - **🔍 Devil's Advocate**: 10 years experience, critical analysis and challenges
-
-                    ### 🎯 Query-Specific Team Assembly
-                    Teams are automatically assembled based on query type:
-                    - **Specific Article**: Senior + Specialist + Devil's Advocate
-                    - **Procedural**: Procedural Expert + Junior + Senior
-                    - **Definitional**: Senior + Specialist + Junior
-                    - **Sanctions**: Senior + Procedural Expert + Devil's Advocate
-                    - **General**: All researchers (customizable team size)
-
-                    ### 🔄 Multi-Stage Research Process
-                    1. **Individual Research**: Each researcher conducts research based on their expertise
-                    2. **Cross-Validation**: Team members validate each other's findings
-                    3. **Devil's Advocate Review**: Critical challenges to prevent groupthink
-                    4. **Consensus Building**: Weighted consensus based on experience and accuracy
-
-                    ### ⚙️ Advanced Customization
-                    - **Granular Phase Control**: Enable/disable and adjust each search phase individually
-                    - **Team Configuration**: Control team size, cross-validation, devil's advocate
-                    - **Consensus Thresholds**: Adjust agreement requirements for final results
-                    - **Real-time Updates**: All settings apply immediately to the research process
-
-                    ## 🔧 Configuration Guide
-
-                    ### Recommended Settings
-                    - **Team Size**: 3-4 for optimal balance between coverage and efficiency
-                    - **Consensus Threshold**: 0.6 for balanced precision/recall
-                    - **Cross-Validation**: Enable for complex queries requiring validation
-                    - **Devil's Advocate**: Enable for critical decisions and sanctions queries
-
-                    ### Search Phase Optimization
-                    - **Initial Scan**: High candidate count, low thresholds for broad coverage
-                    - **Focused Review**: Moderate filtering for promising candidates
-                    - **Deep Analysis**: Strict thresholds for quality documents
-                    - **Verification**: Highest standards for final validation
-                    - **Expert Review**: Optional phase for complex specialized queries
-
-                    ### Performance Tuning
-                    - **Lower thresholds**: Increase recall but may reduce precision
-                    - **Higher candidate counts**: More comprehensive but slower processing
-                    - **Team size optimization**: Larger teams for complex queries, smaller for simple ones
-
-                    ## 📊 Research Analytics
-
-                    The enhanced system provides detailed insights into the research process:
-                    - **Per-Researcher Metrics**: Success rates and specialization effectiveness
-                    - **Phase Analysis**: Which phases contribute most to final results
-                    - **Consensus Tracking**: Team agreement patterns and conflict resolution
-                    - **Query Success Patterns**: Learning from successful query-answer pairs
-
-                    ## 🚀 Technical Improvements
-
-                    - **Memory Optimization**: Efficient handling of large legal document collections
-                    - **Parallel Processing**: Multiple researchers work simultaneously
-                    - **Smart Caching**: Researchers build on each other's work
-                    - **Error Handling**: Robust fallback mechanisms for edge cases
-                    - **Streaming Responses**: Real-time progress updates during research
-
-                    **Note**: This enhanced system combines human-like legal research methodology with AI efficiency, providing transparency into the research process while maintaining high accuracy and comprehensive coverage.
-                    """)
-
         # Hidden state for enhanced configuration
         config_state = gr.State(DEFAULT_CONFIG)
 
@@ -1838,3 +1748,4 @@ def launch_app(share: bool = False, server_port: int = 7860):
 
 if __name__ == "__main__":
     launch_app()
+
