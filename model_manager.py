@@ -59,16 +59,30 @@ class ModelManager:
         self.num_gpus = torch.cuda.device_count() if torch.cuda.is_available() else 0
 
         if self.num_gpus > 1:
-            # Multi-GPU: distribute models across GPUs to reduce memory pressure
-            # LLM uses device_map='auto' in llm_engine.py (may use GPU 0 or spread)
-            # Embedding model -> GPU 1 (or next available)
-            # Reranker model -> GPU 2 (or wrap around if needed)
-            self.embedding_device = torch.device(f'cuda:{min(1, self.num_gpus - 1)}')
-            self.reranker_device = torch.device(f'cuda:{min(2, self.num_gpus - 1)}')
-            self.logger.info(f"Multi-GPU detected ({self.num_gpus} GPUs) - distributing models", {
+            # Multi-GPU: distribute models across available GPUs
+            # Strategy: LLM on GPU 0, spread embedding/reranker on other GPUs
+
+            # Create list of available GPU indices
+            available_gpus = list(range(self.num_gpus))
+
+            # LLM will use cuda:0 via device_map='auto' (or spread across GPUs)
+            # Distribute embedding and reranker on remaining GPUs
+
+            if self.num_gpus == 2:
+                # 2 GPUs: LLM on 0, embedding and reranker share GPU 1
+                self.embedding_device = torch.device('cuda:1')
+                self.reranker_device = torch.device('cuda:1')
+            elif self.num_gpus >= 3:
+                # 3+ GPUs: LLM on 0, embedding on 1, reranker on 2
+                self.embedding_device = torch.device('cuda:1')
+                self.reranker_device = torch.device('cuda:2')
+
+            self.logger.info(f"Multi-GPU setup detected", {
+                "total_gpus": self.num_gpus,
+                "available_gpus": available_gpus,
+                "llm_device": "cuda:0 (device_map='auto')",
                 "embedding_device": str(self.embedding_device),
-                "reranker_device": str(self.reranker_device),
-                "llm_device": "device_map='auto' (distributed)"
+                "reranker_device": str(self.reranker_device)
             })
         else:
             # Single GPU or CPU: use default device for all models
