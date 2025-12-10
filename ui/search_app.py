@@ -24,7 +24,6 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from pipeline import RAGPipeline
-from providers import list_providers
 from config import (
     LLM_PROVIDER, EMBEDDING_DEVICE, LLM_DEVICE,
     RESEARCH_TEAM_PERSONAS

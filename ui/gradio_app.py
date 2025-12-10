@@ -31,7 +31,6 @@ from conversation import (
     ConversationManager, MarkdownExporter, JSONExporter, HTMLExporter,
     get_context_cache, create_conversational_service
 )
-from providers import get_provider, switch_provider, list_providers
 from config import (
     LLM_PROVIDER, EMBEDDING_DEVICE, LLM_DEVICE,
     DEFAULT_CONFIG, DEFAULT_SEARCH_PHASES, RESEARCH_TEAM_PERSONAS,

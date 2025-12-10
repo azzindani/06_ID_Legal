@@ -284,42 +284,7 @@ Instruksi:
 5. Berikan kesimpulan yang jelas
 
 Jawaban:"""
-    
-    def build_citation_prompt(
-        self,
-        query: str,
-        retrieved_results: List[Dict[str, Any]]
-    ) -> str:
-        """
-        Build prompt specifically for generating citations
-        
-        Args:
-            query: User query
-            retrieved_results: Retrieved documents
-            
-        Returns:
-            Prompt for citation generation
-        """
-        context = self._format_context(retrieved_results)
-        
-        prompt = f"""Berikan daftar lengkap peraturan perundang-undangan yang relevan untuk pertanyaan berikut:
 
-Pertanyaan: {query}
-
-Dokumen yang tersedia:
-{context}
-
-Format setiap kutipan:
-- Jenis peraturan
-- Nomor peraturan
-- Tahun
-- Tentang
-- Pasal/ayat (jika spesifik)
-
-Daftar kutipan:"""
-        
-        return prompt
-    
     def estimate_tokens(self, text: str) -> int:
         """
         Estimate token count (rough approximation)

@@ -28,7 +28,7 @@ This system provides intelligent legal consultation by combining:
 | **Semantic + Keyword Search** | ✅ Production Ready | [core/search/README.md](core/search/README.md) |
 | **Knowledge Graph Enhancement** | ✅ Production Ready | [core/knowledge_graph/README.md](core/knowledge_graph/README.md) |
 | **Multi-Researcher Simulation** | ✅ Working | [core/search/README.md](core/search/README.md) |
-| **LLM Generation (5 Providers)** | ✅ Production Ready | [providers/README.md](providers/README.md) |
+| **LLM Generation (Local)** | ✅ Production Ready | [core/generation/](core/generation/) |
 | **Streaming Responses** | ✅ Production Ready | [pipeline/README.md](pipeline/README.md) |
 | **Session Management** | ✅ Functional (in-memory) | [conversation/README.md](conversation/README.md) |
 | **Export (MD/JSON/HTML)** | ✅ Production Ready | [conversation/README.md](conversation/README.md) |
@@ -278,8 +278,8 @@ cat REVIEW_2025-12-02.md
 
 | Feature | Description | Status | Notes |
 |---------|-------------|--------|-------|
-| **Local Inference Flexibility** | CPU/GPU split, quantization support | ✅ Implemented | Code: `providers/local.py`, Supports 4-bit/8-bit quantization |
-| **API Provider Support** | Claude, Gemini, OpenAI, OpenRouter | ✅ Implemented | Code: `providers/` (5 providers), All tested and working |
+| **Local Inference Flexibility** | CPU/GPU split, quantization support | ✅ Implemented | Code: `core/generation/llm_engine.py`, Supports 4-bit/8-bit quantization |
+| **LLM Generation** | Local HuggingFace models | ✅ Implemented | Local-only implementation, extensible for API providers |
 | **Context Cache Management** | Efficient conversation caching | ✅ Implemented | Code: `conversation/context_cache.py`, LRU cache with compression |
 | **Multi-GPU Support** | Auto-detection and workload distribution | ⚠️ Code Exists | Code: `hardware_detection.py`, Not tested |
 | **Document Upload & Analysis** | PDF/DOCX parsing and analysis | ⚠️ Code Exists | Code: `core/document_parser.py`, Not tested |
@@ -324,6 +324,15 @@ cat REVIEW_2025-12-02.md
        └─────────────┴──────┬──────┴─────────────────┘
                             │
 ┌───────────────────────────▼───────────────────────────────────┐
+│                  Conversational Service Layer                 │
+├───────────────────────────────────────────────────────────────┤
+│  ┌──────────────────────────────────────────────────────┐     │
+│  │         ConversationalRAGService                     │     │
+│  │  (Reusable business logic for all interfaces)       │     │
+│  └──────────────────────────────────────────────────────┘     │
+└───────────────────────────┬───────────────────────────────────┘
+                            │
+┌───────────────────────────▼───────────────────────────────────┐
 │                     RAG Pipeline Layer                        │
 ├───────────────────────────────────────────────────────────────┤
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐   │
@@ -351,17 +360,11 @@ cat REVIEW_2025-12-02.md
 └───────────────────────────┬───────────────────────────────────┘
                             │
 ┌───────────────────────────▼───────────────────────────────────┐
-│                    Core Components                            │
+│                    Core Components & Utilities                │
 ├─────────────┬─────────────┬─────────────┬────────────────────┤
-│   Model     │    Data     │  Knowledge  │     Hardware       │
-│   Manager   │   Loader    │    Graph    │    Detection       │
-└─────────────┴─────────────┴─────────────┴────────────────────┘
-                            │
-┌───────────────────────────▼───────────────────────────────────┐
-│                   LLM Provider Layer                          │
-├─────────────┬─────────────┬─────────────┬────────────────────┤
-│    Local    │   OpenAI    │  Anthropic  │  Google/OpenRouter │
-│ (HuggingFace)│   (GPT)    │  (Claude)   │  (Gemini/Multi)    │
+│   Model     │    Data     │  Knowledge  │     Utilities      │
+│   Manager   │   Loader    │    Graph    │  (formatting,      │
+│             │             │             │   health, text)    │
 └─────────────┴─────────────┴─────────────┴────────────────────┘
 ```
 
@@ -409,11 +412,58 @@ User Query
 | Layer | Components | Purpose |
 |-------|------------|---------|
 | **Interface** | Gradio, FastAPI, CLI | User interaction |
+| **Service** | ConversationalRAGService | Reusable business logic for all interfaces |
 | **Pipeline** | RAGPipeline, SessionManager | High-level orchestration |
 | **Search** | HybridSearch, StagesResearch, Consensus | Document retrieval |
 | **Generation** | GenerationEngine, PromptBuilder | Response creation |
 | **Infrastructure** | ModelManager, DataLoader, HardwareDetection | Resource management |
-| **Providers** | Local, OpenAI, Anthropic, Google | LLM abstraction |
+| **Utilities** | Formatting, Health, Text, SystemInfo | Shared utilities across system |
+
+### Modular Architecture Benefits
+
+**Recent Refactoring (December 2025):** The codebase has been significantly refactored to improve maintainability and reusability:
+
+#### Conversational Service Layer
+- **ConversationalRAGService** (`conversation/conversational_service.py`) - 418 lines
+  - Reusable business logic extracted from UI layer
+  - Event-driven architecture with progress callbacks
+  - Can be used by Gradio, REST APIs, GraphQL, CLI tools, tests, batch processing
+  - Clean separation: UI handles presentation, service handles business logic
+
+#### Shared Utilities (`utils/`)
+- **formatting.py** - Document extraction and formatting utilities (5 functions)
+  - Eliminates ~650 lines of duplicate code across codebase
+  - Centralized document formatting, citation formatting, metadata extraction
+
+- **text_utils.py** - Text processing utilities
+  - `parse_think_tags()` - Extract thinking content from LLM responses
+  - `truncate_text()` - Smart text truncation
+  - `clean_whitespace()` - Normalize whitespace
+
+- **health.py** - System health monitoring
+  - `system_health_check()` - Comprehensive health status
+  - Memory tracking, GPU status, component verification
+
+- **system_info.py** - System information formatting
+  - Dataset statistics, model information, device allocation
+
+#### System Services (`ui/services/`)
+- **system_service.py** - System initialization and management
+  - `initialize_rag_system()` - Centralized initialization logic
+  - `change_llm_provider()` - Provider switching
+  - `clear_conversation_session()` - Session management
+
+#### Code Reduction Impact
+- **ui/gradio_app.py**: 1,863 → 1,054 lines (-809 lines, -43.4%)
+- **chat_with_legal_rag**: 488 → 199 lines (-289 lines, -59.2%)
+- **Removed dead code**: ~1,156 lines (providers + unused functions)
+- **Total cleanup**: ~2,600+ lines removed/consolidated
+- **Result**: More maintainable, focused codebase with reusable components
+
+#### Test Consolidation
+- All conversation tests moved to `tests/unit/conversation/`
+- Removed duplicate test files
+- Unified test structure for better organization
 
 ---
 
@@ -478,31 +528,25 @@ User Query
 │   ├── __init__.py                     # ✅ Exists
 │   └── dataloader.py                   # ✅ Dataset loading
 │
-├── providers/                           # ✅ LLM Provider abstraction
+├── utils/                               # ✅ Shared utilities
 │   ├── __init__.py                     # ✅ Package exports
-│   ├── base.py                         # ✅ Abstract base provider
-│   ├── factory.py                      # ✅ Provider factory
-│   ├── local.py                        # ✅ Local HuggingFace provider
-│   ├── openai_provider.py              # ✅ OpenAI GPT provider
-│   ├── anthropic_provider.py           # ✅ Anthropic Claude provider
-│   ├── google_provider.py              # ✅ Google Gemini provider
-│   └── openrouter_provider.py          # ✅ OpenRouter provider
+│   ├── formatting.py                   # ✅ Document formatting utilities
+│   ├── text_utils.py                   # ✅ Text processing (parse_think_tags, truncate)
+│   ├── health.py                       # ✅ System health monitoring
+│   └── system_info.py                  # ✅ System information formatting
 │
 ├── conversation/                        # ✅ Conversation management
 │   ├── __init__.py                     # ✅ Package exports
 │   ├── README.md                       # ✅ Module documentation
 │   ├── manager.py                      # ✅ Session state, history tracking
 │   ├── context_cache.py                # ✅ LRU context cache with compression
-│   ├── export/
-│   │   ├── __init__.py                 # ✅ Export package
-│   │   ├── base_exporter.py            # ✅ Abstract base class
-│   │   ├── markdown_exporter.py        # ✅ Markdown export
-│   │   ├── json_exporter.py            # ✅ JSON export
-│   │   └── html_exporter.py            # ✅ HTML export
-│   └── tests/
-│       ├── __init__.py                 # ✅ Test package
-│       ├── test_manager.py             # ✅ Manager tests
-│       └── test_exporters.py           # ✅ Export tests
+│   ├── conversational_service.py       # ✅ Reusable conversational RAG service
+│   └── export/
+│       ├── __init__.py                 # ✅ Export package
+│       ├── base_exporter.py            # ✅ Abstract base class
+│       ├── markdown_exporter.py        # ✅ Markdown export
+│       ├── json_exporter.py            # ✅ JSON export
+│       └── html_exporter.py            # ✅ HTML export
 │
 ├── api/                                 # ✅ API layer
 │   ├── __init__.py                     # ✅ Package exports
@@ -517,7 +561,11 @@ User Query
 │
 ├── ui/                                  # ✅ UI layer
 │   ├── __init__.py                     # ✅ Package exports
-│   ├── gradio_app.py                   # ✅ Gradio interface
+│   ├── gradio_app.py                   # ✅ Gradio interface (refactored)
+│   ├── search_app.py                   # ✅ Search-only interface
+│   ├── services/
+│   │   ├── __init__.py                 # ✅ Services package
+│   │   └── system_service.py           # ✅ System initialization services
 │   └── components/
 │       └── __init__.py                 # ✅ Components package
 │
@@ -549,8 +597,15 @@ User Query
 │   │   ├── __init__.py
 │   │   ├── test_query_detection.py     # ✅ Query detection tests
 │   │   ├── test_consensus.py           # ✅ Consensus tests
-│   │   ├── test_providers.py           # ✅ Provider tests
-│   │   └── test_context_cache.py       # ✅ Context cache tests
+│   │   ├── test_context_cache.py       # ✅ Context cache tests
+│   │   ├── test_generation.py          # ✅ Generation tests
+│   │   ├── test_dataloader.py          # ✅ Data loader tests
+│   │   ├── test_hybrid_search.py       # ✅ Hybrid search tests
+│   │   ├── test_knowledge_graph.py     # ✅ KG tests
+│   │   └── conversation/               # ✅ Conversation module tests
+│   │       ├── __init__.py
+│   │       ├── test_manager.py         # ✅ Manager tests
+│   │       └── test_exporters.py       # ✅ Export tests
 │   │
 │   └── integration/                    # ✅ Integration tests
 │       ├── __init__.py
@@ -644,8 +699,8 @@ User Query
 | Query Detection Tests | `tests/unit/test_query_detection.py` | ✅ | ~70% coverage |
 | Consensus Tests | `tests/unit/test_consensus.py` | ✅ | ~60% coverage |
 | KG Tests | `tests/unit/test_knowledge_graph.py` | ✅ | ~50% coverage |
-| Provider Tests | `tests/unit/test_providers.py` | ✅ | ~70% coverage |
 | Context Cache Tests | `tests/unit/test_context_cache.py` | ✅ | ~80% coverage |
+| Conversation Tests | `tests/unit/conversation/` | ✅ | Manager & exporters |
 | E2E Tests | `tests/integration/test_end_to_end.py` | ✅ | Basic scenarios |
 | **API Tests** | N/A | ❌ | **0% coverage - no tests exist** |
 | **UI Tests** | N/A | ❌ | **0% coverage - no tests exist** |
@@ -677,14 +732,17 @@ User Query
 | K8s Service | `deploy/kubernetes/service.yaml` | ⚠️ | Exists but not tested |
 | **Production Testing** | N/A | ❌ | **Not tested in prod environment** |
 
-### Phase 6: User Interface (✅ Functional, ⚠️ Needs Refactoring)
+### Phase 6: User Interface (✅ Refactored, ⚠️ Tests Needed)
 
-| Component | File | Status | Issues |
-|-----------|------|--------|--------|
-| Gradio App | `ui/gradio_app.py` | ⚠️ | File too large (1000+ lines), No tests |
+| Component | File | Status | Notes |
+|-----------|------|--------|-------|
+| Gradio App | `ui/gradio_app.py` | ✅ | Refactored from 1,863 to 1,054 lines (-43.4%) |
+| Search App | `ui/search_app.py` | ✅ | Search-only interface |
+| System Services | `ui/services/system_service.py` | ✅ | Extracted initialization logic |
+| Conversational Service | `conversation/conversational_service.py` | ✅ | Reusable RAG business logic |
+| Shared Utilities | `utils/` | ✅ | Text, formatting, health, system info |
 | UI Package | `ui/__init__.py` | ✅ | None |
-| **UI Tests** | N/A | ❌ | **0% coverage** |
-| **Component Split** | N/A | ⚠️ | **Should be split into ui/components/** |
+| **UI Tests** | N/A | ❌ | **0% coverage - needed** |
 
 ### Phase 7: Agentic Workflows (⚠️ Basic Implementation)
 
