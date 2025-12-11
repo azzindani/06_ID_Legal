@@ -26,12 +26,11 @@ class RerankerEngine:
         else:
             self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-        self.final_top_k = config.get('final_top_k', 3)
         self.batch_size = config.get('rerank_batch_size', 8)  # Process in smaller batches to avoid OOM
 
         self.logger.info("RerankerEngine initialized", {
             "device": str(self.device),
-            "final_top_k": self.final_top_k,
+            "final_top_k": config.get('final_top_k', 3),
             "batch_size": self.batch_size
         })
     
@@ -43,17 +42,18 @@ class RerankerEngine:
     ) -> Dict[str, Any]:
         """
         Rerank consensus results using reranker model
-        
+
         Args:
             query: Original search query
             consensus_results: Results from consensus building
             top_k: Number of top results to return (default: from config)
-            
+
         Returns:
             Reranked results with metadata
         """
-        top_k = top_k or self.final_top_k
-        
+        # Get top_k from config (supports dynamic updates)
+        top_k = top_k or self.config.get('final_top_k', 3)
+
         self.logger.info("Starting reranking", {
             "query": query[:50] + "..." if len(query) > 50 else query,
             "candidates": len(consensus_results),
