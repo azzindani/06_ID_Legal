@@ -1,5 +1,5 @@
 """
-Model Manager - Fixed tokenizer integration
+Model Manager - Fixed tokenizer integration with intelligent hardware allocation
 """
 
 import torch
@@ -8,6 +8,7 @@ from typing import Optional, Any
 import time
 from logger_utils import get_logger
 from config import EMBEDDING_MODEL, RERANKER_MODEL, DEVICE, CACHE_DIR, get_model_path, USE_LOCAL_MODELS
+from hardware_detection import detect_hardware, HardwareConfig
 
 
 class EmbeddingModelWrapper:
@@ -49,59 +50,63 @@ class EmbeddingModelWrapper:
 
 class ModelManager:
     """
-    Centralized model management with lazy loading and caching
+    Centralized model management with lazy loading and caching.
+    Uses intelligent hardware detection for optimal model placement.
     """
 
-    def __init__(self):
+    def __init__(self, hardware_config: Optional[HardwareConfig] = None):
+        """
+        Initialize ModelManager with intelligent hardware allocation.
+
+        Args:
+            hardware_config: Optional pre-detected hardware config.
+                           If None, will auto-detect on initialization.
+        """
         self.logger = get_logger("ModelManager")
 
-        # Smart device allocation for multi-GPU setups
-        self.num_gpus = torch.cuda.device_count() if torch.cuda.is_available() else 0
-
-        if self.num_gpus > 1:
-            # Multi-GPU: distribute models across available GPUs
-            # Strategy: LLM on GPU 0, spread embedding/reranker on other GPUs
-
-            # Create list of available GPU indices
-            available_gpus = list(range(self.num_gpus))
-
-            # LLM will use cuda:0 via device_map='auto' (or spread across GPUs)
-            # Distribute embedding and reranker on remaining GPUs
-
-            if self.num_gpus == 2:
-                # 2 GPUs: LLM on 0, embedding and reranker share GPU 1
-                self.embedding_device = torch.device('cuda:1')
-                self.reranker_device = torch.device('cuda:1')
-            elif self.num_gpus >= 3:
-                # 3+ GPUs: LLM on 0, embedding on 1, reranker on 2
-                self.embedding_device = torch.device('cuda:1')
-                self.reranker_device = torch.device('cuda:2')
-
-            self.logger.info(f"Multi-GPU setup detected", {
-                "total_gpus": self.num_gpus,
-                "available_gpus": available_gpus,
-                "llm_device": "cuda:0 (device_map='auto')",
-                "embedding_device": str(self.embedding_device),
-                "reranker_device": str(self.reranker_device)
-            })
+        # Detect or use provided hardware configuration
+        if hardware_config is None:
+            self.logger.info("Auto-detecting hardware configuration...")
+            self.hardware_config = detect_hardware()
         else:
-            # Single GPU or CPU: use default device for all models
-            self.embedding_device = torch.device(DEVICE if torch.cuda.is_available() else 'cpu')
-            self.reranker_device = self.embedding_device
-            self.logger.info("Single device mode", {
-                "device": str(self.embedding_device),
-                "num_gpus": self.num_gpus
-            })
+            self.hardware_config = hardware_config
+
+        # Extract device assignments from hardware config
+        self.embedding_device = torch.device(self.hardware_config.embedding_device)
+        self.reranker_device = torch.device(self.hardware_config.reranker_device)
+        self.llm_device = torch.device(self.hardware_config.llm_device)
+        self.llm_quantization = self.hardware_config.llm_quantization
 
         # Legacy device for compatibility
         self.device = self.embedding_device
+        self.num_gpus = self.hardware_config.gpu_count
+
+        # Log configuration
+        self.logger.info("Intelligent hardware allocation applied", {
+            "allocation_score": f"{self.hardware_config.allocation_score:.3f}",
+            "embedding_device": str(self.embedding_device),
+            "reranker_device": str(self.reranker_device),
+            "llm_device": str(self.llm_device),
+            "llm_quantization": self.llm_quantization,
+            "gpu_count": self.num_gpus,
+            "total_vram_gb": f"{self.hardware_config.vram_available:.1f}",
+            "ram_gb": f"{self.hardware_config.ram_available:.1f}"
+        })
+
+        # Log memory breakdown
+        if self.hardware_config.memory_breakdown:
+            self.logger.debug("Memory allocation breakdown", {
+                "embedding_gb": f"{self.hardware_config.memory_breakdown.get('embedding', 0):.2f}",
+                "reranker_gb": f"{self.hardware_config.memory_breakdown.get('reranker', 0):.2f}",
+                "llm_gb": f"{self.hardware_config.memory_breakdown.get('llm', 0):.2f}"
+            })
 
         # Model cache
         self._embedding_model = None
         self._embedding_tokenizer = None
         self._reranker_model = None
 
-        self.logger.info("ModelManager initialized")
+        self.logger.info("ModelManager initialized with intelligent allocation")
     
     def load_embedding_model(
         self,
