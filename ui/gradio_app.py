@@ -179,8 +179,7 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
         for event in service.process_query(
             message,
             current_session,
-            config_dict,
-            progress_callback=lambda msg: current_progress.append(msg)
+            config_dict
         ):
             event_type = event.get('type')
             data = event.get('data', {})
@@ -313,11 +312,11 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
             if collapsible_sections:
                 final_output += "\n\n---\n\n" + "\n\n".join(collapsible_sections)
 
-            # Update conversation history
+            # Update conversation history with full formatted output (so export includes everything)
             service.update_conversation(
                 current_session,
                 message,
-                result.get('answer', streamed_answer),
+                final_output,  # Save the complete formatted output, not just plain answer
                 result
             )
 

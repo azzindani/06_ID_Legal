@@ -86,9 +86,6 @@ class ConversationalRAGService:
 
         try:
             # Step 1: Query Analysis
-            if progress_callback:
-                progress_callback("🚀 Memulai analisis query...")
-
             yield {'type': 'progress', 'data': {'message': '🚀 Memulai analisis query...'}}
 
             query_analysis = self._analyze_query(message, progress_callback)
@@ -99,16 +96,14 @@ class ConversationalRAGService:
             context = self._get_conversation_context(session_id)
 
             # Step 3: Execute RAG Pipeline
-            if progress_callback:
-                progress_callback("🔍 Conducting intelligent search...")
+            # Update pipeline configuration with user settings
+            if config_dict:
+                self.pipeline.update_config(**config_dict)
 
             yield {'type': 'progress', 'data': {'message': '🔍 Conducting intelligent search...'}}
 
             # Show team assembly
             team_size = config_dict.get('research_team_size', 4)
-            if progress_callback:
-                progress_callback(f"👥 Assembling research team ({team_size} members)...")
-
             yield {'type': 'progress', 'data': {'message': f'👥 Assembling research team ({team_size} members)...'}}
 
             # Execute pipeline with streaming
