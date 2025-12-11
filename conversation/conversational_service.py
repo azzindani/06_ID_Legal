@@ -228,10 +228,10 @@ class ConversationalRAGService:
 
         try:
             # Execute pipeline with streaming generator
-            for chunk in self.pipeline.query_with_conversation_streaming(
-                message,
-                conversation_context=context,
-                config=config_dict
+            for chunk in self.pipeline.query(
+                question=message,
+                conversation_history=context,
+                stream=True
             ):
                 if isinstance(chunk, dict):
                     # Metadata chunk
@@ -304,10 +304,10 @@ class ConversationalRAGService:
             Result dictionary
         """
         try:
-            result = self.pipeline.query_with_conversation(
-                message,
-                conversation_context=context,
-                config=config_dict
+            result = self.pipeline.query(
+                question=message,
+                conversation_history=context,
+                stream=False
             )
             return result
 
