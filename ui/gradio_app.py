@@ -232,20 +232,29 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
             final_output = ""
             response_text = result.get('answer', streamed_answer)
 
-            # Extract thinking if present
-            thinking_content, response_text = parse_think_tags(response_text)
+            # Get thinking content from result field first, then try parsing from answer
+            thinking_content = result.get('thinking', '')
+            if not thinking_content:
+                thinking_content, response_text = parse_think_tags(response_text)
+
+            # Add research process summary (what was done)
+            if current_progress:
+                final_output += '<details open><summary>📋 <b>Proses yang Sudah Dilakukan</b></summary>\n\n'
+                for msg in current_progress:
+                    final_output += f"✅ {msg}\n"
+                final_output += '\n</details>\n\n---\n\n'
 
             # Add thinking section if available
             if show_thinking and thinking_content:
                 final_output += (
-                    '<details><summary>🧠 <b>Proses berfikir (klik untuk melihat)</b></summary>\n\n'
+                    '<details><summary>🧠 <b>Proses Berpikir (klik untuk melihat)</b></summary>\n\n'
                     + thinking_content +
                     '\n</details>\n\n'
-                    + '-----\n✅ **Jawaban:**\n'
+                    + '---\n\n✅ **Jawaban:**\n\n'
                     + response_text
                 )
             else:
-                final_output += f"✅ **Jawaban:**\n{response_text}"
+                final_output += f"✅ **Jawaban:**\n\n{response_text}"
 
             # Add community clusters if available
             if result.get('communities') or result.get('clusters'):
