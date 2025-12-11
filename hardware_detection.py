@@ -87,15 +87,18 @@ class ModelPlacement:
     """Represents where and how a model should be placed"""
     model_name: str
     device_type: DeviceType
-    device_index: int  # GPU index or -1 for CPU
+    device_index: int  # GPU index or -1 for CPU, -2 for multi-GPU
     quantization: QuantizationType
     memory_required_gb: float
+    use_device_map_auto: bool = False  # For multi-GPU LLM splitting
 
     @property
     def device_string(self) -> str:
-        """Get device string (e.g., 'cuda:0', 'cpu')"""
+        """Get device string (e.g., 'cuda:0', 'cpu', 'auto')"""
         if self.device_type == DeviceType.CPU:
             return 'cpu'
+        if self.use_device_map_auto:
+            return 'auto'
         return f'cuda:{self.device_index}'
 
     def compute_score(self) -> float:
@@ -106,7 +109,13 @@ class ModelPlacement:
         speed = SPEED_FACTOR[self.device_type]
         quality = QUALITY_FACTOR[self.quantization]
         # Weighted combination: speed (60%) + quality (40%)
-        return 0.6 * speed + 0.4 * quality
+        score = 0.6 * speed + 0.4 * quality
+
+        # Bonus for multi-GPU LLM (better parallelism)
+        if self.use_device_map_auto and self.model_name == 'llm':
+            score *= 1.05  # 5% bonus for load balancing
+
+        return score
 
 
 @dataclass
@@ -272,7 +281,8 @@ def generate_model_candidates(
             device_type=DeviceType.CPU,
             device_index=-1,
             quantization=quant,
-            memory_required_gb=mem_required
+            memory_required_gb=mem_required,
+            use_device_map_auto=False
         ))
 
     # GPU placements
@@ -290,20 +300,45 @@ def generate_model_candidates(
                     device_type=DeviceType.GPU,
                     device_index=gpu.index,
                     quantization=quant,
-                    memory_required_gb=mem_required
+                    memory_required_gb=mem_required,
+                    use_device_map_auto=False
+                ))
+
+    # Multi-GPU placement for LLM only (device_map='auto')
+    if model_name == 'llm' and len(gpus) >= 2:
+        total_vram = sum(g.available_memory() for g in gpus)
+
+        for quant in QuantizationType:
+            mem_required = model_spec.get_size(quant) * MEMORY_OVERHEAD
+
+            # Only add if total VRAM is sufficient but single GPU is not
+            single_gpu_insufficient = all(mem_required > g.available_memory() for g in gpus)
+            total_vram_sufficient = mem_required <= total_vram
+
+            if total_vram_sufficient:
+                # Add multi-GPU candidate (splits across all available GPUs)
+                candidates.append(ModelPlacement(
+                    model_name=model_name,
+                    device_type=DeviceType.GPU,
+                    device_index=-2,  # -2 indicates multi-GPU
+                    quantization=quant,
+                    memory_required_gb=mem_required,
+                    use_device_map_auto=True
                 ))
 
     return candidates
 
 
 def compute_allocation_strategy(
-    placements: Dict[str, ModelPlacement]
+    placements: Dict[str, ModelPlacement],
+    gpus: List[GPUInfo]
 ) -> AllocationStrategy:
     """
     Compute allocation strategy from placements.
 
     Args:
         placements: Dictionary mapping model name to placement
+        gpus: List of available GPUs (for multi-GPU memory distribution)
 
     Returns:
         AllocationStrategy with computed scores and memory usage
@@ -326,8 +361,18 @@ def compute_allocation_strategy(
 
         # Track memory usage
         if placement.device_type == DeviceType.GPU:
-            gpu_idx = placement.device_index
-            memory_usage[gpu_idx] = memory_usage.get(gpu_idx, 0) + placement.memory_required_gb
+            if placement.use_device_map_auto:
+                # Multi-GPU: distribute memory across all GPUs proportionally
+                total_vram = sum(g.available_memory() for g in gpus)
+                for gpu in gpus:
+                    proportion = gpu.available_memory() / total_vram
+                    gpu_idx = gpu.index
+                    memory_usage[gpu_idx] = memory_usage.get(gpu_idx, 0) + \
+                                           (placement.memory_required_gb * proportion)
+            else:
+                # Single GPU
+                gpu_idx = placement.device_index
+                memory_usage[gpu_idx] = memory_usage.get(gpu_idx, 0) + placement.memory_required_gb
         else:
             cpu_memory += placement.memory_required_gb
 
@@ -378,7 +423,15 @@ def optimize_model_allocation(
         remaining_cpu_mem = ram_gb * 0.7  # Max 70% CPU RAM
 
         if llm_placement.device_type == DeviceType.GPU:
-            remaining_gpu_mem[llm_placement.device_index] -= llm_placement.memory_required_gb
+            if llm_placement.use_device_map_auto:
+                # Multi-GPU LLM: distribute memory proportionally
+                total_vram = sum(g.available_memory() for g in gpus)
+                for gpu in gpus:
+                    proportion = gpu.available_memory() / total_vram
+                    remaining_gpu_mem[gpu.index] -= llm_placement.memory_required_gb * proportion
+            else:
+                # Single GPU LLM
+                remaining_gpu_mem[llm_placement.device_index] -= llm_placement.memory_required_gb
         else:
             remaining_cpu_mem -= llm_placement.memory_required_gb
 
@@ -426,7 +479,7 @@ def optimize_model_allocation(
                     'llm': llm_placement
                 }
 
-                strategy = compute_allocation_strategy(placements)
+                strategy = compute_allocation_strategy(placements, gpus)
 
                 # Verify it's valid
                 if strategy.is_valid(gpus, ram_gb):
@@ -438,13 +491,16 @@ def optimize_model_allocation(
     if best_strategy is None:
         placements = {
             'embedding': ModelPlacement('embedding', DeviceType.CPU, -1,
-                                       QuantizationType.FP16, MODEL_SPECS['embedding'].size_fp16_gb * MEMORY_OVERHEAD),
+                                       QuantizationType.FP16, MODEL_SPECS['embedding'].size_fp16_gb * MEMORY_OVERHEAD,
+                                       use_device_map_auto=False),
             'reranker': ModelPlacement('reranker', DeviceType.CPU, -1,
-                                      QuantizationType.FP16, MODEL_SPECS['reranker'].size_fp16_gb * MEMORY_OVERHEAD),
+                                      QuantizationType.FP16, MODEL_SPECS['reranker'].size_fp16_gb * MEMORY_OVERHEAD,
+                                      use_device_map_auto=False),
             'llm': ModelPlacement('llm', DeviceType.CPU, -1,
-                                 QuantizationType.FP4, MODEL_SPECS['llm'].get_size(QuantizationType.FP4) * MEMORY_OVERHEAD)
+                                 QuantizationType.FP4, MODEL_SPECS['llm'].get_size(QuantizationType.FP4) * MEMORY_OVERHEAD,
+                                 use_device_map_auto=False)
         }
-        best_strategy = compute_allocation_strategy(placements)
+        best_strategy = compute_allocation_strategy(placements, gpus)
 
     return best_strategy
 
@@ -583,16 +639,30 @@ def print_hardware_info():
         '8bit': 'fp8',
         '4bit': 'fp4'
     }.get(config.llm_quantization, config.llm_quantization)
-    print(f"  LLM       → {config.llm_device:10s} ({llm_quant_display:4s}, {config.memory_breakdown['llm']:.2f} GB)")
+
+    llm_device_display = config.llm_device
+    if config.llm_device == 'auto':
+        llm_device_display = f"auto (multi-GPU)"
+
+    print(f"  LLM       → {llm_device_display:20s} ({llm_quant_display:4s}, {config.memory_breakdown['llm']:.2f} GB)")
 
     # Memory usage breakdown
-    if config.device_map:
+    if config.device_map or any(p.use_device_map_auto for p in [config.llm_device] if config.llm_device == 'auto'):
         print(f"\n💾 Memory Usage by Device:")
 
         # GPU memory usage
         gpu_mem_usage = {}
         for model_name, gpu_idx in config.device_map.items():
-            gpu_mem_usage[gpu_idx] = gpu_mem_usage.get(gpu_idx, 0) + config.memory_breakdown[model_name]
+            if gpu_idx >= 0:  # Regular GPU assignment
+                gpu_mem_usage[gpu_idx] = gpu_mem_usage.get(gpu_idx, 0) + config.memory_breakdown[model_name]
+
+        # Add multi-GPU LLM memory (distributed)
+        if config.llm_device == 'auto' and gpus:
+            total_vram = sum(g.available_memory() for g in gpus)
+            for gpu in gpus:
+                proportion = gpu.available_memory() / total_vram
+                gpu_mem_usage[gpu.index] = gpu_mem_usage.get(gpu.index, 0) + \
+                                          (config.memory_breakdown['llm'] * proportion)
 
         for gpu_idx, mem_used in sorted(gpu_mem_usage.items()):
             gpu = next((g for g in gpus if g.index == gpu_idx), None)
@@ -603,7 +673,8 @@ def print_hardware_info():
         # CPU memory usage
         cpu_mem = sum(config.memory_breakdown[m] for m in config.memory_breakdown
                      if m in ['embedding', 'reranker', 'llm'] and
-                     config.device_map.get(m) is None)
+                     config.device_map.get(m) is None and
+                     (m != 'llm' or config.llm_device != 'auto'))
         if cpu_mem > 0:
             cpu_utilization = (cpu_mem / (config.ram_available * 0.7)) * 100
             print(f"  CPU:    {cpu_mem:.2f} GB / {config.ram_available * 0.7:.1f} GB ({cpu_utilization:.1f}% utilized)")
