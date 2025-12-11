@@ -74,7 +74,15 @@ class ModelManager:
         # Extract device assignments from hardware config
         self.embedding_device = torch.device(self.hardware_config.embedding_device)
         self.reranker_device = torch.device(self.hardware_config.reranker_device)
-        self.llm_device = torch.device(self.hardware_config.llm_device)
+
+        # LLM device: keep as string if 'auto' (for device_map), otherwise convert to torch.device
+        if self.hardware_config.llm_device == 'auto':
+            self.llm_device = 'auto'  # String for HuggingFace device_map
+            self.llm_device_obj = None  # No torch.device for multi-GPU
+        else:
+            self.llm_device = torch.device(self.hardware_config.llm_device)
+            self.llm_device_obj = self.llm_device
+
         self.llm_quantization = self.hardware_config.llm_quantization
 
         # Legacy device for compatibility

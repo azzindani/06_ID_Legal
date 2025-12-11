@@ -101,10 +101,14 @@ class ModelPlacement:
             return 'auto'
         return f'cuda:{self.device_index}'
 
-    def compute_score(self) -> float:
+    def compute_score(self, gpu_load: Optional[Dict[int, float]] = None) -> float:
         """
         Compute placement quality score.
         Higher is better. Balances speed and quality.
+
+        Args:
+            gpu_load: Optional dict of GPU index -> current load (0.0 to 1.0)
+                     Used to prefer less loaded GPUs
         """
         speed = SPEED_FACTOR[self.device_type]
         quality = QUALITY_FACTOR[self.quantization]
@@ -114,6 +118,16 @@ class ModelPlacement:
         # Bonus for multi-GPU LLM (better parallelism)
         if self.use_device_map_auto and self.model_name == 'llm':
             score *= 1.05  # 5% bonus for load balancing
+
+        # Bonus for using less loaded GPUs (encourages distribution)
+        if gpu_load and self.device_type == DeviceType.GPU and self.device_index >= 0:
+            current_load = gpu_load.get(self.device_index, 0.0)
+            # 5% bonus for GPUs with < 20% load (encourages using idle GPUs)
+            if current_load < 0.2:
+                score *= 1.05
+            # 2% bonus for GPUs with < 50% load
+            elif current_load < 0.5:
+                score *= 1.02
 
         return score
 
@@ -346,20 +360,8 @@ def compute_allocation_strategy(
     memory_usage = {}  # GPU index -> memory used
     cpu_memory = 0.0
 
-    # Calculate total score and memory usage
-    total_score = 0.0
+    # First pass: calculate memory usage
     for model_name, placement in placements.items():
-        # Add model's score contribution
-        model_score = placement.compute_score()
-
-        # Weight scores by model importance
-        # LLM is most important (50%), embedding and reranker (25% each)
-        if model_name == 'llm':
-            total_score += model_score * 0.5
-        else:
-            total_score += model_score * 0.25
-
-        # Track memory usage
         if placement.device_type == DeviceType.GPU:
             if placement.use_device_map_auto:
                 # Multi-GPU: distribute memory across all GPUs proportionally
@@ -375,6 +377,26 @@ def compute_allocation_strategy(
                 memory_usage[gpu_idx] = memory_usage.get(gpu_idx, 0) + placement.memory_required_gb
         else:
             cpu_memory += placement.memory_required_gb
+
+    # Calculate GPU load ratios for scoring
+    gpu_load = {}
+    for gpu in gpus:
+        used = memory_usage.get(gpu.index, 0)
+        available = gpu.available_memory()
+        gpu_load[gpu.index] = used / available if available > 0 else 0
+
+    # Second pass: calculate scores with GPU load awareness
+    total_score = 0.0
+    for model_name, placement in placements.items():
+        # Add model's score contribution
+        model_score = placement.compute_score(gpu_load=gpu_load)
+
+        # Weight scores by model importance
+        # LLM is most important (50%), embedding and reranker (25% each)
+        if model_name == 'llm':
+            total_score += model_score * 0.5
+        else:
+            total_score += model_score * 0.25
 
     return AllocationStrategy(
         placements=placements,
@@ -435,8 +457,20 @@ def optimize_model_allocation(
         else:
             remaining_cpu_mem -= llm_placement.memory_required_gb
 
+        # Sort embedding candidates to prefer distributing across GPUs
+        # If multi-GPU and LLM is using device_map='auto', prefer different GPUs for small models
+        if len(gpus) >= 2:
+            # Prefer GPU placements, and prefer different GPUs from each other
+            embedding_candidates_sorted = sorted(embedding_candidates,
+                key=lambda p: (
+                    p.device_type != DeviceType.GPU,  # GPU first
+                    p.device_index if p.device_type == DeviceType.GPU else 999  # Prefer lower index
+                ))
+        else:
+            embedding_candidates_sorted = embedding_candidates
+
         # Try embedding placements
-        for emb_placement in embedding_candidates:
+        for emb_placement in embedding_candidates_sorted:
             # Check if embedding fits
             fits = False
             if emb_placement.device_type == DeviceType.GPU:
@@ -458,8 +492,21 @@ def optimize_model_allocation(
             else:
                 rem_cpu_mem -= emb_placement.memory_required_gb
 
+            # Sort reranker candidates to prefer different GPU than embedding
+            if len(gpus) >= 2 and emb_placement.device_type == DeviceType.GPU:
+                # Prefer placing reranker on a different GPU than embedding
+                emb_gpu = emb_placement.device_index
+                reranker_candidates_sorted = sorted(reranker_candidates,
+                    key=lambda p: (
+                        p.device_type != DeviceType.GPU,  # GPU first
+                        p.device_index == emb_gpu if p.device_type == DeviceType.GPU else False,  # Different GPU from embedding
+                        p.device_index if p.device_type == DeviceType.GPU else 999
+                    ))
+            else:
+                reranker_candidates_sorted = reranker_candidates
+
             # Try reranker placements
-            for rer_placement in reranker_candidates:
+            for rer_placement in reranker_candidates_sorted:
                 # Check if reranker fits
                 fits = False
                 if rer_placement.device_type == DeviceType.GPU:
