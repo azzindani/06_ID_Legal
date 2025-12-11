@@ -193,12 +193,6 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                 # Query analysis completed - progress already added by callback
                 yield add_progress("Query analysis complete"), ""
 
-            elif event_type == 'metadata_chunk':
-                # Store metadata
-                if 'phase_metadata' in data:
-                    phase_key = data.get('phase', data.get('researcher', 'unknown'))
-                    all_phase_metadata[phase_key] = data['phase_metadata']
-
             elif event_type == 'streaming_chunk':
                 # Accumulate streamed text
                 streamed_answer = data['accumulated']
@@ -219,6 +213,8 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
             elif event_type == 'final_result':
                 # Final result received
                 result = data
+                # Extract phase metadata from result
+                all_phase_metadata = result.get('phase_metadata', result.get('all_retrieved_metadata', {}))
                 break
 
             elif event_type == 'error':

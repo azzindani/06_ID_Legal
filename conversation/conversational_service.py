@@ -233,54 +233,71 @@ class ConversationalRAGService:
                 conversation_history=context,
                 stream=True
             ):
-                if isinstance(chunk, dict):
-                    # Metadata chunk
-                    if 'phase_metadata' in chunk:
-                        phase_key = chunk.get('phase', chunk.get('researcher', 'unknown'))
-                        all_phase_metadata[phase_key] = chunk['phase_metadata']
+                if not isinstance(chunk, dict):
+                    continue
 
-                    if chunk.get('final_result'):
-                        result = chunk
+                chunk_type = chunk.get('type', '')
 
-                    # Yield metadata
-                    yield {'type': 'metadata_chunk', 'data': chunk}
-
-                elif isinstance(chunk, str):
-                    # Text chunk (streaming)
-                    streamed_answer += chunk
+                if chunk_type == 'token':
+                    # Streaming token from LLM
+                    token = chunk.get('token', '')
+                    streamed_answer += token
                     chunk_count += 1
 
                     # Call stream callback
                     if stream_callback:
-                        stream_callback(chunk)
+                        stream_callback(token)
 
                     # Yield streaming chunk
                     yield {
                         'type': 'streaming_chunk',
                         'data': {
-                            'chunk': chunk,
+                            'chunk': token,
                             'accumulated': streamed_answer,
                             'chunk_count': chunk_count
                         }
                     }
 
-            # Build final result
-            if result:
-                result['answer'] = streamed_answer
-                result['phase_metadata'] = all_phase_metadata
-                result['chunk_count'] = chunk_count
+                elif chunk_type == 'complete':
+                    # Final result with all metadata
+                    result = chunk
 
-                yield {'type': 'final_result', 'data': result}
-            else:
-                # Fallback if no final result received
-                yield {
-                    'type': 'final_result',
-                    'data': {
-                        'answer': streamed_answer,
-                        'phase_metadata': all_phase_metadata,
-                        'chunk_count': chunk_count
+                    # Extract phase_metadata if present
+                    if 'phase_metadata' in chunk:
+                        all_phase_metadata = chunk['phase_metadata']
+
+                    # Use the answer from pipeline (not accumulated tokens, they may differ)
+                    final_answer = chunk.get('answer', streamed_answer)
+
+                    # Build final result
+                    yield {
+                        'type': 'final_result',
+                        'data': {
+                            'success': chunk.get('success', True),
+                            'answer': final_answer,
+                            'thinking': chunk.get('thinking', ''),
+                            'sources': chunk.get('sources', []),
+                            'citations': chunk.get('citations', []),
+                            'metadata': chunk.get('metadata', {}),
+                            'phase_metadata': all_phase_metadata,
+                            'all_retrieved_metadata': chunk.get('all_retrieved_metadata', {}),
+                            'consensus_data': chunk.get('consensus_data', {}),
+                            'research_data': chunk.get('research_data', {}),
+                            'research_log': chunk.get('research_log', {}),
+                            'communities': chunk.get('communities', []),
+                            'chunk_count': chunk_count
+                        }
                     }
-                }
+
+                elif chunk_type == 'error':
+                    # Error occurred
+                    yield {
+                        'type': 'error',
+                        'data': {
+                            'error': chunk.get('error', 'Unknown error'),
+                            'answer': streamed_answer if streamed_answer else 'Error occurred during processing'
+                        }
+                    }
 
         finally:
             # Clean up GPU memory
