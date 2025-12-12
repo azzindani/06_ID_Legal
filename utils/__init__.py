@@ -17,6 +17,11 @@ from .formatting import (
     final_selection_with_kg
 )
 
+from .research_transparency import (
+    format_detailed_research_process,
+    format_researcher_summary
+)
+
 from .text_utils import (
     parse_think_tags,
     truncate_text,
@@ -45,6 +50,9 @@ __all__ = [
     'format_all_documents',
     'format_retrieved_metadata',
     'final_selection_with_kg',
+    # Research transparency
+    'format_detailed_research_process',
+    'format_researcher_summary',
     # Text utilities
     'parse_think_tags',
     'truncate_text',

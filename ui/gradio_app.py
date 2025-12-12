@@ -44,6 +44,10 @@ from utils.formatting import (
     format_retrieved_metadata,
     final_selection_with_kg
 )
+from utils.research_transparency import (
+    format_detailed_research_process,
+    format_researcher_summary
+)
 from utils.text_utils import parse_think_tags
 from utils.health import system_health_check, format_health_report
 from utils.system_info import format_system_info, get_dataset_statistics
@@ -298,6 +302,18 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                 if metadata_info.strip():
                     collapsible_sections.append(
                         f'<details><summary>🔬 <b>Detail Proses Penelitian</b></summary>\n\n{metadata_info}\n</details>'
+                    )
+
+            # Add detailed step-by-step research process
+            if show_metadata:
+                detailed_research = format_detailed_research_process(
+                    result,
+                    top_n_per_researcher=20,
+                    show_content=False
+                )
+                if detailed_research.strip():
+                    collapsible_sections.append(
+                        f'<details><summary>🔬 <b>Detailed Research Process (Step-by-Step)</b></summary>\n\n{detailed_research}\n</details>'
                     )
 
             # Add all retrieved documents

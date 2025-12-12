@@ -26,6 +26,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 from logger_utils import get_logger, initialize_logging
 from pipeline import RAGPipeline
 from utils.formatting import _extract_all_documents_from_metadata
+from utils.research_transparency import format_detailed_research_process
 
 
 class CompleteOutputTester:
@@ -130,8 +131,17 @@ class CompleteOutputTester:
         else:
             lines.append("No documents in prompt (check retrieval)")
 
-        # Research Process Details - ALL documents from ALL phases with article-level metadata
-        lines.append(f"\n## RESEARCH PROCESS DETAILS (ALL Retrieved Documents)")
+        # Use new detailed research process formatter
+        detailed_research = format_detailed_research_process(
+            metadata,
+            top_n_per_researcher=20,
+            show_content=True
+        )
+        lines.append(detailed_research)
+        lines.append("")
+
+        # Also keep the old format for compatibility
+        lines.append(f"\n## LEGACY FORMAT: ALL Retrieved Documents")
         lines.append("-" * 80)
         lines.append("All documents retrieved during research process - for audit and verification.")
         lines.append("Content is truncated for readability. Use export for full content.")
