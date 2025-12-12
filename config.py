@@ -172,6 +172,28 @@ CONTEXT_COMPRESSION = os.getenv("CONTEXT_COMPRESSION", "true").lower() == "true"
 CONTEXT_SUMMARY_THRESHOLD = int(os.getenv("CONTEXT_SUMMARY_THRESHOLD", "4096"))
 
 # =============================================================================
+# ENHANCED MEMORY MANAGER CONFIGURATION
+# =============================================================================
+
+# Legal-optimized memory settings for conversational RAG
+# These defaults are 3x more context-aware than standard chatbots
+MEMORY_MAX_HISTORY_TURNS = int(os.getenv("MEMORY_MAX_HISTORY_TURNS", "100"))  # Total turns stored
+MEMORY_MAX_CONTEXT_TURNS = int(os.getenv("MEMORY_MAX_CONTEXT_TURNS", "30"))    # Turns passed to LLM
+MEMORY_MIN_CONTEXT_TURNS = int(os.getenv("MEMORY_MIN_CONTEXT_TURNS", "10"))    # Minimum context
+MEMORY_MAX_TOKENS = int(os.getenv("MEMORY_MAX_TOKENS", "16000"))               # Max tokens for context
+
+# Intelligent summarization settings
+MEMORY_ENABLE_SUMMARIZATION = os.getenv("MEMORY_ENABLE_SUMMARIZATION", "true").lower() == "true"
+MEMORY_SUMMARIZATION_THRESHOLD = int(os.getenv("MEMORY_SUMMARIZATION_THRESHOLD", "20"))
+
+# Key facts extraction for legal consultations
+MEMORY_ENABLE_KEY_FACTS = os.getenv("MEMORY_ENABLE_KEY_FACTS", "true").lower() == "true"
+
+# LRU cache for conversation contexts
+MEMORY_ENABLE_CACHE = os.getenv("MEMORY_ENABLE_CACHE", "true").lower() == "true"
+MEMORY_CACHE_SIZE = int(os.getenv("MEMORY_CACHE_SIZE", "100"))
+
+# =============================================================================
 # SYSTEM CONFIGURATION
 # =============================================================================
 LOG_DIR = os.getenv("LOG_DIR", "logs")

@@ -18,6 +18,7 @@ File: conversation/memory_manager.py
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 from logger_utils import get_logger
+import config as app_config
 
 from .manager import ConversationManager
 from .context_cache import ContextCache
@@ -42,31 +43,34 @@ class MemoryManager:
         Initialize memory manager with enhanced legal consultation support
 
         Args:
-            config: Optional configuration dictionary
-                - max_history_turns: Maximum turns to keep in history (default: 100 for legal)
-                - max_context_turns: Maximum turns to include in context (default: 30 for legal)
-                - enable_cache: Enable context caching (default: True)
-                - cache_size: LRU cache size (default: 100)
-                - max_tokens: Max tokens per context (default: 16000 for legal)
-                - enable_summarization: Auto-summarize old turns (default: True)
-                - summarization_threshold: Start summarizing after N turns (default: 20)
-                - enable_key_facts: Track important case facts (default: True)
-                - min_context_turns: Minimum recent turns to keep detailed (default: 10)
+            config: Optional configuration dictionary to override defaults
+                - max_history_turns: Maximum turns to keep in history (default: from config.MEMORY_MAX_HISTORY_TURNS or env var)
+                - max_context_turns: Maximum turns to include in context (default: from config.MEMORY_MAX_CONTEXT_TURNS or env var)
+                - min_context_turns: Minimum recent turns to keep detailed (default: from config.MEMORY_MIN_CONTEXT_TURNS or env var)
+                - enable_cache: Enable context caching (default: from config.MEMORY_ENABLE_CACHE or env var)
+                - cache_size: LRU cache size (default: from config.MEMORY_CACHE_SIZE or env var)
+                - max_tokens: Max tokens per context (default: from config.MEMORY_MAX_TOKENS or env var)
+                - enable_summarization: Auto-summarize old turns (default: from config.MEMORY_ENABLE_SUMMARIZATION or env var)
+                - summarization_threshold: Start summarizing after N turns (default: from config.MEMORY_SUMMARIZATION_THRESHOLD or env var)
+                - enable_key_facts: Track important case facts (default: from config.MEMORY_ENABLE_KEY_FACTS or env var)
+
+        Note: All defaults can be configured via environment variables (see config.py)
         """
         self.config = config or {}
         self.logger = logger
 
-        # Enhanced defaults for legal consultations
-        self.max_history_turns = self.config.get('max_history_turns', 100)
-        self.max_context_turns = self.config.get('max_context_turns', 30)
-        self.min_context_turns = self.config.get('min_context_turns', 10)
+        # Enhanced defaults for legal consultations (from config.py)
+        # These can be overridden by passing values in the config dict
+        self.max_history_turns = self.config.get('max_history_turns', app_config.MEMORY_MAX_HISTORY_TURNS)
+        self.max_context_turns = self.config.get('max_context_turns', app_config.MEMORY_MAX_CONTEXT_TURNS)
+        self.min_context_turns = self.config.get('min_context_turns', app_config.MEMORY_MIN_CONTEXT_TURNS)
 
-        # Summarization settings
-        self.enable_summarization = self.config.get('enable_summarization', True)
-        self.summarization_threshold = self.config.get('summarization_threshold', 20)
+        # Summarization settings (from config.py)
+        self.enable_summarization = self.config.get('enable_summarization', app_config.MEMORY_ENABLE_SUMMARIZATION)
+        self.summarization_threshold = self.config.get('summarization_threshold', app_config.MEMORY_SUMMARIZATION_THRESHOLD)
 
-        # Key facts tracking
-        self.enable_key_facts = self.config.get('enable_key_facts', True)
+        # Key facts tracking (from config.py)
+        self.enable_key_facts = self.config.get('enable_key_facts', app_config.MEMORY_ENABLE_KEY_FACTS)
         self.key_facts_storage = {}  # session_id -> list of key facts
         self.session_summaries = {}  # session_id -> consultation summary
 
@@ -77,12 +81,12 @@ class MemoryManager:
         }
         self.conversation_manager = ConversationManager(manager_config)
 
-        # Initialize context cache
-        self.enable_cache = self.config.get('enable_cache', True)
+        # Initialize context cache (from config.py)
+        self.enable_cache = self.config.get('enable_cache', app_config.MEMORY_ENABLE_CACHE)
         if self.enable_cache:
             cache_config = {
-                'cache_size': self.config.get('cache_size', 100),
-                'max_tokens': self.config.get('max_tokens', 16000),  # Increased for legal
+                'cache_size': self.config.get('cache_size', app_config.MEMORY_CACHE_SIZE),
+                'max_tokens': self.config.get('max_tokens', app_config.MEMORY_MAX_TOKENS),
                 'compression': self.config.get('compression', True),
                 'summary_threshold': self.config.get('summary_threshold', 10)
             }

@@ -50,7 +50,61 @@ This document verifies that the enhanced MemoryManager with intelligent long-ter
 
 ---
 
-## 2. Service Layer
+## 2. Configuration System ✓
+
+### Configurable Memory Parameters (config.py)
+**Status: ✓ Implemented with Environment Variable Support**
+
+All memory management parameters are now configurable via environment variables while maintaining legal-optimized defaults.
+
+**Configuration Parameters:**
+
+| Parameter | Default | Environment Variable | Description |
+|-----------|---------|---------------------|-------------|
+| `max_history_turns` | 100 | `MEMORY_MAX_HISTORY_TURNS` | Total turns stored in memory |
+| `max_context_turns` | 30 | `MEMORY_MAX_CONTEXT_TURNS` | Turns passed to LLM |
+| `min_context_turns` | 10 | `MEMORY_MIN_CONTEXT_TURNS` | Minimum recent turns kept detailed |
+| `max_tokens` | 16000 | `MEMORY_MAX_TOKENS` | Max tokens for context |
+| `enable_summarization` | true | `MEMORY_ENABLE_SUMMARIZATION` | Auto-summarize old turns |
+| `summarization_threshold` | 20 | `MEMORY_SUMMARIZATION_THRESHOLD` | Start summarizing after N turns |
+| `enable_key_facts` | true | `MEMORY_ENABLE_KEY_FACTS` | Track important case facts |
+| `enable_cache` | true | `MEMORY_ENABLE_CACHE` | Enable LRU caching |
+| `cache_size` | 100 | `MEMORY_CACHE_SIZE` | LRU cache size |
+
+**Configuration Methods:**
+
+1. **Use Defaults (Recommended for Legal Consultations)**
+   ```python
+   from conversation.memory_manager import MemoryManager
+   mm = MemoryManager()  # Uses legal-optimized defaults
+   ```
+
+2. **Override via Environment Variables**
+   ```bash
+   # For testing with constrained memory
+   export MEMORY_MAX_HISTORY_TURNS=50
+   export MEMORY_MAX_CONTEXT_TURNS=20
+   python tests/integration/test_stress_conversational.py
+   ```
+
+3. **Override via Config Dictionary (Backwards Compatible)**
+   ```python
+   from conversation.memory_manager import MemoryManager
+   mm = MemoryManager({
+       'max_history_turns': 150,
+       'max_context_turns': 40,
+       'enable_summarization': False  # Disable if needed
+   })
+   ```
+
+**Priority Order:**
+1. Config dict (highest priority) - passed directly to MemoryManager
+2. Environment variables (medium priority) - set before running
+3. Defaults from config.py (lowest priority) - legal-optimized defaults
+
+---
+
+## 3. Service Layer
 
 ### ConversationalRAGService (conversation/conversational_service.py)
 **Status: ✓ Fully Integrated with MemoryManager**
@@ -82,7 +136,7 @@ else:
 
 ---
 
-## 3. UI Integration
+## 4. UI Integration
 
 ### Gradio UI (ui/gradio_app.py)
 **Status: ✓ Using MemoryManager**
@@ -112,7 +166,7 @@ service = create_conversational_service(pipeline, manager, current_provider)
 
 ---
 
-## 4. System Service
+## 5. System Service
 
 ### System Service (ui/services/system_service.py)
 **Status: ✓ Generic Manager Instantiation**
@@ -131,7 +185,7 @@ manager = manager_class()
 
 ---
 
-## 5. Testing
+## 6. Testing
 
 ### A. Regular Conversational Test (tests/integration/test_conversational.py)
 **Status: ✓ Comprehensive Memory Testing Integrated**
