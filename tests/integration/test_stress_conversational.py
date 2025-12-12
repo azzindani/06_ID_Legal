@@ -273,7 +273,7 @@ class ConversationalStressTester:
         self.conversation = QUICK_CONVERSATION if quick_mode else STRESS_CONVERSATION_FULL
 
         self.pipeline = None
-        self.conversation_manager = None
+        self.memory_manager = None
         self.session_id = None
 
         # Results
@@ -308,11 +308,11 @@ class ConversationalStressTester:
     def initialize(self) -> bool:
         """Initialize pipeline and conversation manager"""
         self.logger.info("Initializing conversational stress test...")
-        print("Initializing RAG Pipeline and Conversation Manager...")
+        print("Initializing RAG Pipeline and Memory Manager...")
 
         try:
             from pipeline import RAGPipeline
-            from conversation import ConversationManager
+            from conversation import MemoryManager, create_memory_manager
 
             # Initialize pipeline
             self.pipeline = RAGPipeline(config=self.config)
@@ -322,15 +322,17 @@ class ConversationalStressTester:
 
             print("Pipeline initialized")
 
-            # Initialize conversation manager with high limits
-            self.conversation_manager = ConversationManager({
+            # Initialize memory manager with high limits for stress testing
+            self.memory_manager = create_memory_manager({
                 'max_history_turns': 50,       # Track many turns
                 'max_context_turns': 20,       # Use many for context
-                'compression_threshold': 100   # High threshold to avoid early compression
+                'enable_cache': True,           # Enable caching for performance
+                'cache_size': 100,              # Large cache for stress test
+                'max_tokens': 16000             # High token limit for stress
             })
 
-            self.session_id = self.conversation_manager.start_session()
-            print(f"Conversation session started: {self.session_id}")
+            self.session_id = self.memory_manager.start_session()
+            print(f"Memory manager session started: {self.session_id}")
 
             self.logger.success("All components ready for conversational stress test")
             return True
@@ -343,18 +345,13 @@ class ConversationalStressTester:
             return False
 
     def _get_conversation_context(self) -> List[Dict[str, str]]:
-        """Get conversation history for context"""
-        if not self.conversation_manager or not self.session_id:
+        """Get conversation history for context with caching"""
+        if not self.memory_manager or not self.session_id:
             return []
 
-        history = self.conversation_manager.get_history(self.session_id, max_turns=10)
-        context = []
-        for turn in history:
-            context.append({"role": "user", "content": turn['query']})
-            # Truncate long answers to fit context
-            answer = turn['answer'][:2000] if len(turn['answer']) > 2000 else turn['answer']
-            context.append({"role": "assistant", "content": answer})
-        return context
+        # MemoryManager.get_context() automatically handles caching and formatting
+        context = self.memory_manager.get_context(self.session_id, max_turns=10)
+        return context or []
 
     def run_turn(self, turn_data: Dict[str, Any]) -> Dict[str, Any]:
         """Run a single conversation turn"""
@@ -404,8 +401,8 @@ class ConversationalStressTester:
             turn_time = time.time() - start_time
             print(f"\n\n[Turn {turn_num}: {chunk_count} tokens in {turn_time:.2f}s]")
 
-            # Add to conversation history
-            self.conversation_manager.add_turn(
+            # Save to memory manager (with automatic caching)
+            self.memory_manager.save_turn(
                 self.session_id,
                 query,
                 full_answer,
@@ -566,11 +563,11 @@ class ConversationalStressTester:
         self.print_detailed_turn_output()
 
         # Print conversation context audit with FULL MEMORY CONTENT
-        if self.conversation_manager and self.session_id:
+        if self.memory_manager and self.session_id:
             print("\n" + "=" * 100)
             print("CONVERSATION MEMORY & CONTEXT AUDIT")
             print("=" * 100)
-            session_data = self.conversation_manager.get_session(self.session_id)
+            session_data = self.memory_manager.get_session(self.session_id)
             if session_data:
                 # Show full conversation content (not truncated)
                 conversation_audit = format_conversation_context(

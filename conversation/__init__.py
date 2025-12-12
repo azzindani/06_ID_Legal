@@ -8,6 +8,7 @@ from .manager import ConversationManager
 from .export import MarkdownExporter, JSONExporter, HTMLExporter
 from .context_cache import ContextCache, get_context_cache
 from .conversational_service import ConversationalRAGService, create_conversational_service
+from .memory_manager import MemoryManager, create_memory_manager, get_memory_manager
 
 __all__ = [
     'ConversationManager',
@@ -17,5 +18,8 @@ __all__ = [
     'ContextCache',
     'get_context_cache',
     'ConversationalRAGService',
-    'create_conversational_service'
+    'create_conversational_service',
+    'MemoryManager',
+    'create_memory_manager',
+    'get_memory_manager'
 ]

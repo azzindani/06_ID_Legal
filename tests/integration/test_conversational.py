@@ -4,16 +4,18 @@ Conversational RAG Test - Multi-Turn Conversation with Memory and Context Manage
 This test verifies the system's conversational capabilities using EXISTING MODULES:
 - QueryDetector (core/search/query_detection.py) - Query analysis, follow-up detection
 - KnowledgeGraphCore (core/knowledge_graph/kg_core.py) - Entity/regulation extraction
-- ConversationManager (conversation/manager.py) - Session and history management
+- MemoryManager (conversation/memory_manager.py) - Unified memory with caching
+- ConversationalRAGService (conversation/conversational_service.py) - Service layer
 - RAGPipeline (pipeline/rag_pipeline.py) - Complete RAG processing
 
 Features Tested:
-1. CONVERSATION MEMORY - ConversationManager tracks context across turns
-2. CONTEXT MANAGEMENT - QueryDetector detects follow-ups and topic changes
-3. SPECIFIC REGULATION RECOGNITION - KnowledgeGraphCore extracts UU No. 13 Tahun 2003
-4. ENTITY EXTRACTION - KnowledgeGraphCore identifies legal entities
-5. TOPIC CHANGE DETECTION - QueryDetector analyzes query patterns
-6. FOLLOW-UP QUESTION HANDLING - QueryDetector.is_followup detection
+1. CONVERSATION MEMORY - MemoryManager tracks context across turns with caching
+2. SERVICE LAYER - ConversationalRAGService provides consistent interface
+3. CONTEXT MANAGEMENT - QueryDetector detects follow-ups and topic changes
+4. SPECIFIC REGULATION RECOGNITION - KnowledgeGraphCore extracts UU No. 13 Tahun 2003
+5. ENTITY EXTRACTION - KnowledgeGraphCore identifies legal entities
+6. TOPIC CHANGE DETECTION - QueryDetector analyzes query patterns
+7. FOLLOW-UP QUESTION HANDLING - QueryDetector.is_followup detection
 
 Conversation Flow (5 Questions):
 ────────────────────────────────────────────────────────────────────────────────
@@ -50,7 +52,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 from logger_utils import get_logger, initialize_logging
 from pipeline import RAGPipeline
-from conversation import ConversationManager, get_context_cache
+from conversation import (
+    MemoryManager,
+    ConversationalRAGService,
+    create_conversational_service,
+    create_memory_manager
+)
 from core.search.query_detection import QueryDetector
 from core.knowledge_graph.kg_core import KnowledgeGraphCore
 from utils.research_transparency import format_detailed_research_process, format_researcher_summary
@@ -59,12 +66,13 @@ from utils.conversation_audit import format_conversation_context, print_conversa
 
 class ConversationalTester:
     """
-    Tests multi-turn conversational capabilities using existing system modules.
+    Tests multi-turn conversational capabilities using unified architecture.
 
     Uses:
     - QueryDetector for query analysis and follow-up detection
     - KnowledgeGraphCore for entity and regulation extraction
-    - ConversationManager for session tracking
+    - MemoryManager for unified memory with automatic caching
+    - ConversationalRAGService for consistent service layer
     - RAGPipeline for end-to-end processing
     """
 
@@ -75,7 +83,8 @@ class ConversationalTester:
 
         # Core components - use EXISTING modules
         self.pipeline: Optional[RAGPipeline] = None
-        self.conversation_manager: Optional[ConversationManager] = None
+        self.memory_manager: Optional[MemoryManager] = None
+        self.service: Optional[ConversationalRAGService] = None
         self.query_detector: Optional[QueryDetector] = None
         self.kg_core: Optional[KnowledgeGraphCore] = None
         self.session_id: Optional[str] = None
@@ -117,16 +126,26 @@ class ConversationalTester:
             self.kg_core = KnowledgeGraphCore()
             self.logger.info("KnowledgeGraphCore initialized (core/knowledge_graph/kg_core.py)")
 
-            # Initialize Conversation Manager - EXISTING MODULE
-            self.conversation_manager = ConversationManager({
+            # Initialize Memory Manager - UNIFIED MODULE with caching
+            self.memory_manager = create_memory_manager({
                 'max_history_turns': 50,
-                'max_context_turns': 10
+                'max_context_turns': 10,
+                'enable_cache': True,
+                'cache_size': 100
             })
-            self.logger.info("ConversationManager initialized (conversation/manager.py)")
+            self.logger.info("MemoryManager initialized (conversation/memory_manager.py)")
 
             # Start session
-            self.session_id = self.conversation_manager.start_session()
+            self.session_id = self.memory_manager.start_session()
             self.logger.info(f"Conversation session started: {self.session_id}")
+
+            # Initialize Conversational RAG Service - SERVICE LAYER
+            self.service = create_conversational_service(
+                self.pipeline,
+                self.memory_manager,
+                'local'
+            )
+            self.logger.info("ConversationalRAGService initialized (conversation/conversational_service.py)")
 
             self.logger.success("All modules initialized successfully")
             return True
@@ -137,17 +156,7 @@ class ConversationalTester:
             traceback.print_exc()
             return False
 
-    def _get_conversation_context(self) -> List[Dict[str, str]]:
-        """Get conversation history for context-aware queries"""
-        if not self.conversation_manager or not self.session_id:
-            return []
-
-        history = self.conversation_manager.get_history(self.session_id, max_turns=5)
-        context = []
-        for turn in history:
-            context.append({"role": "user", "content": turn['query']})
-            context.append({"role": "assistant", "content": turn['answer'][:500]})
-        return context
+    # Context retrieval is now handled by ConversationalRAGService automatically
 
     def _analyze_query_with_modules(self, query: str, previous_queries: List[str]) -> Dict[str, Any]:
         """
@@ -300,10 +309,10 @@ class ConversationalTester:
                 lines.append(f"│ ... and {len(sources) - 5} more documents                                                             │")
             lines.append(f"└{'─' * 98}┘")
 
-        # Context Memory (from ConversationManager)
+        # Context Memory (from MemoryManager)
         if turn_num > 1:
             lines.append(f"\n┌{'─' * 98}┐")
-            lines.append(f"│ CONVERSATION MEMORY (from ConversationManager)                                                │")
+            lines.append(f"│ CONVERSATION MEMORY (from MemoryManager)                                                     │")
             lines.append(f"├{'─' * 98}┤")
             context_used = len(analysis.get('previous_topics', []))
             lines.append(f"│ Previous turns tracked: {context_used:<71} │")
@@ -379,36 +388,40 @@ class ConversationalTester:
             chunk_count = 0
             start_time = time.time()
             final_metadata = {}
+            context_messages = 0
 
-            # Get conversation context for this turn
-            conversation_context = self._get_conversation_context()
-
-            # Stream the response using RAGPipeline with conversation history
-            for chunk in self.pipeline.query(
-                question=query,
-                conversation_history=conversation_context,
-                stream=True
+            # Process query through ConversationalRAGService
+            # Service automatically handles context retrieval and management
+            for event in self.service.process_query(
+                message=query,
+                session_id=self.session_id,
+                config_dict={}  # Use default config
             ):
-                chunk_type = chunk.get('type', '')
+                event_type = event.get('type', '')
+                data = event.get('data', {})
 
-                if chunk_type == 'token':
-                    token = chunk.get('token', '')
+                if event_type == 'progress':
+                    # Progress update - we can ignore in tests or log it
+                    progress_msg = data.get('message', '')
+                    self.logger.debug(f"Progress: {progress_msg}")
+
+                elif event_type == 'streaming_chunk':
+                    # Streaming token
+                    token = data.get('chunk', '')
+                    full_answer = data.get('accumulated', full_answer)
+                    chunk_count = data.get('chunk_count', chunk_count)
                     print(token, end='', flush=True)
-                    full_answer += token
-                    chunk_count += 1
 
-                elif chunk_type == 'complete':
-                    full_answer = chunk.get('answer', full_answer)
-                    final_metadata = chunk.get('metadata', {})
-                    final_metadata['thinking'] = chunk.get('thinking', '')
-                    final_metadata['sources'] = chunk.get('sources', [])
-                    final_metadata['citations'] = chunk.get('citations', [])
-                    final_metadata['query_type'] = chunk.get('query_type', 'general')
-                    final_metadata['phase_metadata'] = chunk.get('phase_metadata', {})
+                elif event_type == 'final_result':
+                    # Final result with all metadata
+                    final_metadata = data
+                    full_answer = data.get('answer', full_answer)
+                    break
 
-                elif chunk_type == 'error':
-                    error_msg = chunk.get('error', 'Unknown error')
-                    self.logger.error(f"Streaming error: {error_msg}")
+                elif event_type == 'error':
+                    # Error occurred
+                    error_msg = data.get('error', 'Unknown error')
+                    self.logger.error(f"Service error: {error_msg}")
                     result['error'] = error_msg
                     return result
 
@@ -416,23 +429,27 @@ class ConversationalTester:
             print(f"\n[Streamed {chunk_count} chunks in {duration:.2f}s]")
             print("-" * 80)
 
+            # Get context info from memory manager for statistics
+            context_info = self.memory_manager.get_context(self.session_id)
+            context_messages = len(context_info) if context_info else 0
+
             streaming_stats = {
                 'chunk_count': chunk_count,
                 'duration': duration,
                 'chars_per_second': len(full_answer) / duration if duration > 0 else 0
             }
 
-            # Add turn to ConversationManager (EXISTING MODULE)
-            if self.conversation_manager and self.session_id:
-                self.conversation_manager.add_turn(
-                    session_id=self.session_id,
-                    query=query,
-                    answer=full_answer,
-                    metadata={
-                        **final_metadata,
-                        'analysis': analysis
-                    }
-                )
+            # Save turn to MemoryManager (via service for consistency)
+            # Service automatically handles save_turn with caching
+            self.service.update_conversation(
+                session_id=self.session_id,
+                user_message=query,
+                assistant_message=full_answer,
+                metadata={
+                    **final_metadata,
+                    'analysis': analysis
+                }
+            )
 
             # Format and display output
             formatted_output = self.format_turn_output(
@@ -469,7 +486,7 @@ class ConversationalTester:
             result['analysis'] = analysis
             result['streaming_stats'] = streaming_stats
             result['formatted_output'] = formatted_output
-            result['context_messages'] = len(conversation_context)  # Track context size
+            result['context_messages'] = context_messages  # Track context size
 
             self.logger.success(f"Turn {turn_num} completed successfully")
             return result
@@ -517,12 +534,13 @@ class ConversationalTester:
         ]
 
         self.logger.info("\n" + "═" * 100)
-        self.logger.info("  CONVERSATIONAL RAG TEST - Using Existing System Modules")
+        self.logger.info("  CONVERSATIONAL RAG TEST - Unified Architecture")
         self.logger.info("═" * 100)
         self.logger.info("\n  Modules Being Tested:")
         self.logger.info("    • QueryDetector (core/search/query_detection.py)")
         self.logger.info("    • KnowledgeGraphCore (core/knowledge_graph/kg_core.py)")
-        self.logger.info("    • ConversationManager (conversation/manager.py)")
+        self.logger.info("    • MemoryManager (conversation/memory_manager.py) - WITH CACHING")
+        self.logger.info("    • ConversationalRAGService (conversation/conversational_service.py)")
         self.logger.info("    • RAGPipeline (pipeline/rag_pipeline.py)")
         self.logger.info(f"\n  Session ID: {self.session_id}")
         self.logger.info(f"  Questions: {len(conversation_script)}")
@@ -638,9 +656,15 @@ class ConversationalTester:
         if self.metrics['regulation_references']:
             print(f"     • References: {', '.join(self.metrics['regulation_references'][:5])}")
 
-        print(f"\n  ConversationManager Results:")
+        print(f"\n  MemoryManager Results:")
         print(f"     • Session tracked: {self.session_id}")
         print(f"     • Turns recorded: {len(self.conversation_log)}")
+
+        # Show cache statistics
+        if self.memory_manager:
+            mem_stats = self.memory_manager.get_stats()
+            print(f"     • Cache hit rate: {mem_stats.get('cache_hit_rate', 0):.1%}")
+            print(f"     • Cache size: {mem_stats.get('cache_stats', {}).get('size', 0)}")
 
         print(f"\n  RAGPipeline Results:")
         print(f"     • Total documents retrieved: {self.metrics['total_documents_retrieved']}")
@@ -662,8 +686,8 @@ class ConversationalTester:
         print("═" * 100 + "\n")
 
         # Print detailed conversation context audit with FULL CONTENT
-        if self.conversation_manager and self.session_id:
-            session_data = self.conversation_manager.get_session(self.session_id)
+        if self.memory_manager and self.session_id:
+            session_data = self.memory_manager.get_session(self.session_id)
             if session_data:
                 print("\n" + "=" * 100)
                 print("CONVERSATION MEMORY & CONTEXT AUDIT")
@@ -736,10 +760,12 @@ class ConversationalTester:
         export_data = {
             'export_timestamp': datetime.now().isoformat(),
             'session_id': self.session_id,
+            'architecture': 'Unified with MemoryManager and ConversationalRAGService',
             'modules_tested': [
                 'QueryDetector (core/search/query_detection.py)',
                 'KnowledgeGraphCore (core/knowledge_graph/kg_core.py)',
-                'ConversationManager (conversation/manager.py)',
+                'MemoryManager (conversation/memory_manager.py)',
+                'ConversationalRAGService (conversation/conversational_service.py)',
                 'RAGPipeline (pipeline/rag_pipeline.py)'
             ],
             'total_turns': len(self.turn_results),
@@ -792,9 +818,9 @@ def main():
     print("""
 ╔════════════════════════════════════════════════════════════════════════════════════════════════════╗
 ║                                                                                                    ║
-║   CONVERSATIONAL RAG TEST - Module Integration Verification                                        ║
+║   CONVERSATIONAL RAG TEST - Unified Architecture                                                   ║
 ║                                                                                                    ║
-║   Testing: QueryDetector | KnowledgeGraphCore | ConversationManager | RAGPipeline                 ║
+║   Using: MemoryManager | ConversationalRAGService | QueryDetector | KnowledgeGraphCore            ║
 ║                                                                                                    ║
 ╚════════════════════════════════════════════════════════════════════════════════════════════════════╝
     """)

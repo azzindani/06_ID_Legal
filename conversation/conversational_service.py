@@ -47,13 +47,22 @@ class ConversationalRAGService:
 
         Args:
             pipeline: RAG pipeline instance
-            conversation_manager: Conversation manager instance
+            conversation_manager: ConversationManager or MemoryManager instance
             current_provider: Current LLM provider name
         """
         self.pipeline = pipeline
         self.manager = conversation_manager
         self.current_provider = current_provider
         self.logger = logger
+
+        # Detect if using MemoryManager or ConversationManager
+        # MemoryManager has get_context() and save_turn()
+        # ConversationManager has get_context_for_query() and add_turn()
+        self.is_memory_manager = hasattr(conversation_manager, 'save_turn') and hasattr(conversation_manager, 'get_context')
+        if self.is_memory_manager:
+            self.logger.info("Using MemoryManager (unified with caching)")
+        else:
+            self.logger.info("Using ConversationManager (legacy mode)")
 
     def process_query(
         self,
@@ -174,6 +183,8 @@ class ConversationalRAGService:
         """
         Get conversation context for the session
 
+        Works with both MemoryManager and ConversationManager
+
         Args:
             session_id: Session ID
 
@@ -181,7 +192,17 @@ class ConversationalRAGService:
             List of context messages or None
         """
         try:
-            context = self.manager.get_context_for_query(session_id) if session_id else None
+            if not session_id:
+                self.logger.info("No session ID provided")
+                return None
+
+            # Use appropriate method based on manager type
+            if self.is_memory_manager:
+                # MemoryManager has get_context() with caching
+                context = self.manager.get_context(session_id)
+            else:
+                # ConversationManager has get_context_for_query()
+                context = self.manager.get_context_for_query(session_id)
 
             if context:
                 self.logger.info(f"Using {len(context)} messages from conversation history")
@@ -352,6 +373,8 @@ class ConversationalRAGService:
         """
         Update conversation history
 
+        Works with both MemoryManager and ConversationManager
+
         Args:
             session_id: Session ID
             user_message: User's message
@@ -359,12 +382,23 @@ class ConversationalRAGService:
             metadata: Optional metadata to store
         """
         try:
-            self.manager.add_turn(
-                session_id,
-                user_message,
-                assistant_message,
-                metadata
-            )
+            # Use appropriate method based on manager type
+            if self.is_memory_manager:
+                # MemoryManager has save_turn() with auto-caching
+                self.manager.save_turn(
+                    session_id,
+                    user_message,
+                    assistant_message,
+                    metadata
+                )
+            else:
+                # ConversationManager has add_turn()
+                self.manager.add_turn(
+                    session_id,
+                    user_message,
+                    assistant_message,
+                    metadata
+                )
         except Exception as e:
             self.logger.error(f"Error updating conversation: {e}")
 

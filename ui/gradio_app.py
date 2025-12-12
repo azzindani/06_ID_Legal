@@ -28,8 +28,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from pipeline import RAGPipeline
 from conversation import (
-    ConversationManager, MarkdownExporter, JSONExporter, HTMLExporter,
-    get_context_cache, create_conversational_service
+    MemoryManager, create_memory_manager,
+    MarkdownExporter, JSONExporter, HTMLExporter,
+    create_conversational_service
 )
 from config import (
     LLM_PROVIDER, EMBEDDING_DEVICE, LLM_DEVICE,
@@ -68,7 +69,7 @@ logger = get_logger(__name__)
 
 # Global instances
 pipeline: Optional[RAGPipeline] = None
-manager: Optional[ConversationManager] = None
+manager: Optional[MemoryManager] = None  # Unified memory manager with caching
 current_session: Optional[str] = None
 current_provider: str = LLM_PROVIDER
 initialization_complete: bool = False
@@ -80,7 +81,7 @@ reranker = None
 llm_generator = None
 llm_model = None
 llm_tokenizer = None
-conversation_manager = None
+memory_manager = None  # Renamed from conversation_manager
 dataset_loader = None
 
 
@@ -88,12 +89,12 @@ def initialize_system(provider_type: str = None):
     """Initialize the RAG system with specified provider"""
     global pipeline, manager, current_session, current_provider, initialization_complete
     global search_engine, knowledge_graph, reranker, llm_generator, llm_model, llm_tokenizer
-    global conversation_manager, dataset_loader
+    global memory_manager, dataset_loader
 
     if pipeline is None:
         pipeline, manager, current_session, current_provider, components = initialize_rag_system(
             RAGPipeline,
-            ConversationManager,
+            MemoryManager,
             provider_type,
             current_provider
         )
@@ -106,7 +107,7 @@ def initialize_system(provider_type: str = None):
         llm_model = components.get('llm_model')
         llm_tokenizer = components.get('llm_tokenizer')
         dataset_loader = components.get('dataset_loader')
-        conversation_manager = manager
+        memory_manager = manager
 
         initialization_complete = True
 
