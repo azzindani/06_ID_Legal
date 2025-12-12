@@ -126,14 +126,17 @@ class ConversationalTester:
             self.kg_core = KnowledgeGraphCore()
             self.logger.info("KnowledgeGraphCore initialized (core/knowledge_graph/kg_core.py)")
 
-            # Initialize Memory Manager - UNIFIED MODULE with caching
+            # Initialize Memory Manager - UNIFIED MODULE with enhanced legal defaults
             self.memory_manager = create_memory_manager({
-                'max_history_turns': 50,
-                'max_context_turns': 10,
+                # Use enhanced defaults for legal consultations
+                # max_context_turns: 30 (default for legal)
+                # max_history_turns: 100 (default for legal)
+                # enable_summarization: True (automatic)
+                # enable_key_facts: True (automatic)
                 'enable_cache': True,
                 'cache_size': 100
             })
-            self.logger.info("MemoryManager initialized (conversation/memory_manager.py)")
+            self.logger.info("MemoryManager initialized with Enhanced Legal Defaults")
 
             # Start session
             self.session_id = self.memory_manager.start_session()
@@ -660,11 +663,20 @@ class ConversationalTester:
         print(f"     • Session tracked: {self.session_id}")
         print(f"     • Turns recorded: {len(self.conversation_log)}")
 
-        # Show cache statistics
+        # Show enhanced memory statistics
         if self.memory_manager:
             mem_stats = self.memory_manager.get_stats()
             print(f"     • Cache hit rate: {mem_stats.get('cache_hit_rate', 0):.1%}")
             print(f"     • Cache size: {mem_stats.get('cache_stats', {}).get('size', 0)}")
+            print(f"     • Key facts extracted: {mem_stats.get('total_key_facts', 0)}")
+            print(f"     • Summaries created: {mem_stats.get('manager_stats', {}).get('summaries_created', 0)}")
+
+            # Show session summary if available
+            session_summary = self.memory_manager.get_session_summary_dict(self.session_id)
+            if session_summary and session_summary.get('topics_discussed'):
+                print(f"     • Topics discussed: {', '.join(session_summary['topics_discussed'])}")
+            if session_summary and session_summary.get('regulations_mentioned'):
+                print(f"     • Regulations tracked: {len(session_summary['regulations_mentioned'])}")
 
         print(f"\n  RAGPipeline Results:")
         print(f"     • Total documents retrieved: {self.metrics['total_documents_retrieved']}")
