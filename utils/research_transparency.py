@@ -19,7 +19,7 @@ from config import RESEARCH_TEAM_PERSONAS
 def format_detailed_research_process(
     result: Dict[str, Any],
     top_n_per_researcher: int = 20,
-    show_content: bool = False
+    show_content: bool = True
 ) -> str:
     """
     Format comprehensive step-by-step research process with per-researcher details
@@ -317,3 +317,4 @@ def format_researcher_summary(phase_metadata: Dict[str, Any]) -> str:
         lines.append(f"   - {name}: {count} docs ({percentage:.1f}%)")
 
     return '\n'.join(lines)
+
