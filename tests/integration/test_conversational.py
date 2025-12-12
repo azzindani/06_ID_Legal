@@ -53,6 +53,8 @@ from pipeline import RAGPipeline
 from conversation import ConversationManager, get_context_cache
 from core.search.query_detection import QueryDetector
 from core.knowledge_graph.kg_core import KnowledgeGraphCore
+from utils.research_transparency import format_detailed_research_process, format_researcher_summary
+from utils.conversation_audit import format_conversation_context, print_conversation_memory_summary
 
 
 class ConversationalTester:
@@ -650,6 +652,34 @@ class ConversationalTester:
             print("  VERDICT: NEEDS WORK - Module integration problems found")
 
         print("═" * 100 + "\n")
+
+        # Print detailed conversation context audit
+        if self.conversation_manager and self.session_id:
+            session_data = self.conversation_manager.get_session(self.session_id)
+            if session_data:
+                print("\n" + "=" * 100)
+                print("CONVERSATION CONTEXT AUDIT")
+                print("=" * 100)
+                conversation_audit = format_conversation_context(
+                    session_data,
+                    show_full_content=False,
+                    max_turns=None  # Show all turns
+                )
+                print(conversation_audit)
+
+        # Print detailed research process if available
+        if self.turn_results and self.turn_results[-1].get('success'):
+            last_result_metadata = self.turn_results[-1].get('metadata', {})
+            if last_result_metadata:
+                print("\n" + "=" * 100)
+                print("DETAILED RESEARCH PROCESS (Last Turn)")
+                print("=" * 100)
+                detailed_research = format_detailed_research_process(
+                    last_result_metadata,
+                    top_n_per_researcher=10,  # Show top 10 per researcher
+                    show_content=False
+                )
+                print(detailed_research)
 
     def export_results(self, output_path: Optional[str] = None) -> str:
         """Export all results to JSON"""

@@ -47,6 +47,8 @@ from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from logger_utils import get_logger, initialize_logging
+from utils.research_transparency import format_detailed_research_process, format_researcher_summary
+from utils.conversation_audit import format_conversation_context, print_conversation_memory_summary
 
 
 # Maximum stress test configuration for conversational
@@ -562,6 +564,34 @@ class ConversationalStressTester:
 
         # Print detailed output from last successful turn
         self.print_detailed_turn_output()
+
+        # Print conversation context audit
+        if self.conversation_manager and self.session_id:
+            print("\n" + "=" * 100)
+            print("CONVERSATION CONTEXT AUDIT")
+            print("=" * 100)
+            session_data = self.conversation_manager.get_session(self.session_id)
+            if session_data:
+                conversation_audit = format_conversation_context(
+                    session_data,
+                    show_full_content=False,
+                    max_turns=None  # Show all turns
+                )
+                print(conversation_audit)
+
+        # Print detailed research process from last turn
+        if self.turn_results:
+            last_turn = self.turn_results[-1]
+            if last_turn.get('success'):
+                print("\n" + "=" * 100)
+                print("DETAILED RESEARCH PROCESS (Last Turn)")
+                print("=" * 100)
+                detailed_research = format_detailed_research_process(
+                    last_turn,
+                    top_n_per_researcher=10,
+                    show_content=False
+                )
+                print(detailed_research)
 
         print("\n" + "=" * 100)
 

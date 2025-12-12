@@ -22,6 +22,13 @@ from .research_transparency import (
     format_researcher_summary
 )
 
+from .conversation_audit import (
+    format_conversation_context,
+    format_context_window,
+    print_conversation_memory_summary,
+    export_conversation_audit
+)
+
 from .text_utils import (
     parse_think_tags,
     truncate_text,
@@ -53,6 +60,11 @@ __all__ = [
     # Research transparency
     'format_detailed_research_process',
     'format_researcher_summary',
+    # Conversation auditing
+    'format_conversation_context',
+    'format_context_window',
+    'print_conversation_memory_summary',
+    'export_conversation_audit',
     # Text utilities
     'parse_think_tags',
     'truncate_text',
