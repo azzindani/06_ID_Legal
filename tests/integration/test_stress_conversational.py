@@ -565,19 +565,58 @@ class ConversationalStressTester:
         # Print detailed output from last successful turn
         self.print_detailed_turn_output()
 
-        # Print conversation context audit
+        # Print conversation context audit with FULL MEMORY CONTENT
         if self.conversation_manager and self.session_id:
             print("\n" + "=" * 100)
-            print("CONVERSATION CONTEXT AUDIT")
+            print("CONVERSATION MEMORY & CONTEXT AUDIT")
             print("=" * 100)
             session_data = self.conversation_manager.get_session(self.session_id)
             if session_data:
+                # Show full conversation content (not truncated)
                 conversation_audit = format_conversation_context(
                     session_data,
-                    show_full_content=False,
+                    show_full_content=True,  # ✅ Show FULL content
                     max_turns=None  # Show all turns
                 )
                 print(conversation_audit)
+
+                # Also show the conversation history structure
+                print("\n" + "=" * 100)
+                print("CONVERSATION MEMORY STRUCTURE")
+                print("=" * 100)
+                print("This is the actual conversation history stored in memory:")
+                print("")
+
+                turns = session_data.get('turns', [])
+                for idx, turn in enumerate(turns, 1):
+                    print(f"Turn {idx}:")
+                    print(f"  User Message: {turn.get('user_message', 'N/A')}")
+                    print(f"  Assistant Message: {turn.get('assistant_message', 'N/A')[:300]}...")
+                    print(f"  Metadata Keys: {list(turn.get('metadata', {}).keys())}")
+                    print("")
+
+                # Show what context is passed to pipeline at each turn
+                print("\n" + "=" * 100)
+                print("CONTEXT PASSED TO PIPELINE (Per Turn)")
+                print("=" * 100)
+                print("This shows what conversation history was sent to the pipeline at each turn:")
+                print("")
+
+                for idx, turn_result in enumerate(self.turn_results, 1):
+                    context_msgs = turn_result.get('context_messages', 0)
+                    print(f"Turn {idx}: {context_msgs} previous messages in context")
+
+                    # Show the actual context if available
+                    if idx > 1:  # Skip first turn (no context)
+                        print(f"  Context includes:")
+                        for prev_idx in range(1, idx):
+                            if prev_idx - 1 < len(turns):
+                                prev_turn = turns[prev_idx - 1]
+                                user_msg = prev_turn.get('user_message', '')[:80]
+                                asst_msg = prev_turn.get('assistant_message', '')[:80]
+                                print(f"    - Turn {prev_idx}: User: {user_msg}...")
+                                print(f"               Assistant: {asst_msg}...")
+                    print("")
 
         # Print detailed research process from last turn
         if self.turn_results:
