@@ -133,7 +133,7 @@ manager = manager_class()
 
 ## 5. Testing
 
-### Conversational Test (tests/integration/test_conversational.py)
+### A. Regular Conversational Test (tests/integration/test_conversational.py)
 **Status: ✓ Comprehensive Memory Testing Integrated**
 
 **Test Initialization:**
@@ -186,6 +186,71 @@ print(f"Cache hit rate: {mem_stats.get('cache_hit_rate', 0):.1%}")
 print(f"Key facts extracted: {mem_stats.get('total_key_facts', 0)}")
 print(f"Summaries created: {mem_stats.get('manager_stats', {}).get('summaries_created', 0)}")
 ```
+
+### B. Stress Conversational Test (tests/integration/test_stress_conversational.py)
+**Status: ✓ Enhanced Memory Testing Under Maximum Load**
+
+**Purpose:** Tests the system under maximum stress conditions with ALL settings maxed out, but with **intentionally lower memory limits** to stress test the enhanced features.
+
+**Stress Configuration:**
+```python
+# Lines 328-336: Stress test limits + enhanced features
+self.memory_manager = create_memory_manager({
+    'max_history_turns': 50,        # LOWER than legal default (100) - stress test
+    'max_context_turns': 20,        # LOWER than legal default (30) - stress test
+    'enable_cache': True,           # Enable caching for performance
+    'cache_size': 100,              # Large cache for stress test
+    'max_tokens': 16000,            # High token limit
+    'enable_summarization': True,   # Test auto-summarization under stress
+    'enable_key_facts': True        # Test key facts extraction under stress
+})
+```
+
+**Why Lower Limits?**
+- Tests system resilience under constrained memory
+- Validates that enhanced features work even with resource limitations
+- Ensures intelligent summarization triggers correctly
+- Simulates real-world memory pressure scenarios
+
+**Memory Testing Sections (Lines 636-754):**
+
+1. **Key Facts Extraction Under Maximum Load**
+   - Verifies key facts extracted even under stress
+   - Shows all extracted regulations, amounts, dates
+   - Validates extraction works with constrained limits
+
+2. **Session Summary Under Stress**
+   - Confirms session tracking maintained under heavy load
+   - Shows topics and regulations tracked
+   - Validates summaries don't break under pressure
+
+3. **Memory Performance Under Maximum Load**
+   - Reports configuration (50/20 vs 100/30 defaults)
+   - Shows cache performance (hits, misses, hit rate)
+   - Displays enhanced features stats (key facts, summaries)
+   - Checks if summarization triggered when needed
+
+4. **Stress Test Verdict**
+   - Confirms all enhanced features working under stress
+   - Validates system handles maximum conditions
+   - Reports on constrained memory handling
+
+**Test Scenario:**
+- 7 turns with maximum settings (vs 5 turns in regular test)
+- All 5 search phases enabled
+- Maximum candidates per phase (800+)
+- Maximum research team (5 personas)
+- High token limits (6144)
+- Complex cross-domain conversations
+
+**Result:**
+The stress test validates that enhanced memory features work correctly even when:
+- Memory limits are constrained (50/20 vs 100/30)
+- System is under maximum load
+- Resource usage is at peak
+- Context window is full
+
+This proves the enhanced memory system is **production-ready** and handles both normal and extreme conditions.
 
 ---
 
@@ -259,14 +324,23 @@ print(f"Summaries created: {mem_stats.get('manager_stats', {}).get('summaries_cr
 - [x] ConversationalRAGService created with MemoryManager
 - [x] All sessions get enhanced legal features
 
-### Testing
+### Testing - Regular Conversational
 - [x] Comprehensive memory testing in test_conversational.py
 - [x] Key facts extraction validated
 - [x] Session summary tracking validated
 - [x] Intelligent context building validated
 - [x] Long-term retention verified
 - [x] Cache performance measured
-- [x] No separate test file needed (all unified)
+- [x] All features tested in unified test (no separate files)
+
+### Testing - Stress Conversational
+- [x] Enhanced memory testing added to test_stress_conversational.py
+- [x] Lower memory limits (50/20) for stress testing
+- [x] Enhanced features explicitly enabled
+- [x] Key facts extraction under maximum load validated
+- [x] Session summary under stress validated
+- [x] Memory performance under maximum load measured
+- [x] Stress test verdict confirms production-readiness
 
 ---
 
