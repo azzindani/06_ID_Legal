@@ -380,8 +380,15 @@ class ConversationalTester:
             start_time = time.time()
             final_metadata = {}
 
-            # Stream the response using RAGPipeline
-            for chunk in self.pipeline.query(query, stream=True):
+            # Get conversation context for this turn
+            conversation_context = self._get_conversation_context()
+
+            # Stream the response using RAGPipeline with conversation history
+            for chunk in self.pipeline.query(
+                question=query,
+                conversation_history=conversation_context,
+                stream=True
+            ):
                 chunk_type = chunk.get('type', '')
 
                 if chunk_type == 'token':
@@ -462,6 +469,7 @@ class ConversationalTester:
             result['analysis'] = analysis
             result['streaming_stats'] = streaming_stats
             result['formatted_output'] = formatted_output
+            result['context_messages'] = len(conversation_context)  # Track context size
 
             self.logger.success(f"Turn {turn_num} completed successfully")
             return result
@@ -679,8 +687,8 @@ class ConversationalTester:
                 turns = session_data.get('turns', [])
                 for idx, turn in enumerate(turns, 1):
                     print(f"Turn {idx}:")
-                    print(f"  User Message: {turn.get('user_message', 'N/A')}")
-                    print(f"  Assistant Message: {turn.get('assistant_message', 'N/A')[:200]}...")
+                    print(f"  User Query: {turn.get('query', 'N/A')}")
+                    print(f"  Assistant Answer: {turn.get('answer', 'N/A')[:200]}...")
                     print(f"  Metadata Keys: {list(turn.get('metadata', {}).keys())}")
                     print("")
 
@@ -700,8 +708,8 @@ class ConversationalTester:
                         print(f"  Context includes:")
                         for prev_idx in range(1, idx):
                             prev_turn = turns[prev_idx - 1]
-                            user_msg = prev_turn.get('user_message', '')[:80]
-                            asst_msg = prev_turn.get('assistant_message', '')[:80]
+                            user_msg = prev_turn.get('query', '')[:80]
+                            asst_msg = prev_turn.get('answer', '')[:80]
                             print(f"    - Turn {prev_idx}: User: {user_msg}...")
                             print(f"               Assistant: {asst_msg}...")
                     print("")

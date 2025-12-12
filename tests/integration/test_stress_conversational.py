@@ -590,8 +590,8 @@ class ConversationalStressTester:
                 turns = session_data.get('turns', [])
                 for idx, turn in enumerate(turns, 1):
                     print(f"Turn {idx}:")
-                    print(f"  User Message: {turn.get('user_message', 'N/A')}")
-                    print(f"  Assistant Message: {turn.get('assistant_message', 'N/A')[:300]}...")
+                    print(f"  User Query: {turn.get('query', 'N/A')}")
+                    print(f"  Assistant Answer: {turn.get('answer', 'N/A')[:300]}...")
                     print(f"  Metadata Keys: {list(turn.get('metadata', {}).keys())}")
                     print("")
 
@@ -612,8 +612,8 @@ class ConversationalStressTester:
                         for prev_idx in range(1, idx):
                             if prev_idx - 1 < len(turns):
                                 prev_turn = turns[prev_idx - 1]
-                                user_msg = prev_turn.get('user_message', '')[:80]
-                                asst_msg = prev_turn.get('assistant_message', '')[:80]
+                                user_msg = prev_turn.get('query', '')[:80]
+                                asst_msg = prev_turn.get('answer', '')[:80]
                                 print(f"    - Turn {prev_idx}: User: {user_msg}...")
                                 print(f"               Assistant: {asst_msg}...")
                     print("")

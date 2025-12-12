@@ -70,8 +70,8 @@ def format_conversation_context(
         lines.append(f"#### Turn {idx}")
         lines.append("")
 
-        # User Question
-        user_msg = turn.get('user_message', '')
+        # User Question (ConversationManager stores as 'query', not 'user_message')
+        user_msg = turn.get('query', turn.get('user_message', ''))
         lines.append(f"**👤 User Question:**")
         lines.append(f"```")
         lines.append(user_msg)
@@ -111,8 +111,8 @@ def format_conversation_context(
 
             lines.append("")
 
-        # Assistant Answer
-        assistant_msg = turn.get('assistant_message', '')
+        # Assistant Answer (ConversationManager stores as 'answer', not 'assistant_message')
+        assistant_msg = turn.get('answer', turn.get('assistant_message', ''))
 
         if show_full_content:
             lines.append(f"**🤖 Assistant Answer:**")
