@@ -395,126 +395,181 @@ def get_system_info():
 # TEST RUNNERS - Stream test output to chat
 # =============================================================================
 
-def run_conversational_test_stream(history):
-    """Run conversational test and stream output to chat"""
-    import sys
-    from io import StringIO
-    import subprocess
+def run_conversational_test_auto(history, config_state, show_thinking, show_sources, show_metadata):
+    """
+    Run conversational test by auto-feeding questions into the chat
+    Uses the regular Gradio inference pipeline for realistic testing
+    """
+    # Define the 8 test questions
+    test_questions = [
+        # TOPIC 1: Tunjangan Guru & Dosen (3 Questions)
+        "Apakah terdapat pengaturan yang menjamin kesetaraan hak antara guru dan dosen dalam memperoleh tunjangan profesi?",
+        "Berdasarkan PP No. 41 Tahun 2009, sebutkan jenis-jenis tunjangan yang diatur di dalamnya.",
+        "Masih merujuk pada PP No. 41 Tahun 2009, jelaskan perbedaan kriteria penerima, besaran, dan sumber pendanaan antara Tunjangan Khusus dan Tunjangan Kehormatan Profesor",
 
-    # Add initial message
+        # TOPIC 2: Kepabeanan (2 Questions)
+        "Ganti topik. Jelaskan secara singkat pengertian kawasan pabean menurut Undang-Undang Kepabeanan.",
+        "Berdasarkan Undang-Undang Kepabeanan tersebut, jelaskan sanksi pidana bagi pihak yang dengan sengaja salah memberitahukan jenis dan jumlah barang impor sehingga merugikan negara.",
+
+        # TOPIC 3: Ketenagakerjaan (2 Questions)
+        "Sekarang beralih ke UU No. 13 Tahun 2003. Jelaskan secara umum ruang lingkup dan pokok bahasan undang-undang tersebut.",
+        "Apa yang diatur dalam Pasal 1 UU No. 13 Tahun 2003?",
+
+        # TOPIC 4: PP No. 8 Tahun 2007 (1 Question)
+        "Terakhir, jelaskan secara ringkas PP No. 8 Tahun 2007, termasuk fokus pengaturannya."
+    ]
+
+    # Initial message
     initial_msg = {
         "role": "assistant",
-        "content": "🧪 **Starting Conversational Test (8 Questions)**\n\nRunning comprehensive integration test...\n\n"
+        "content": f"🧪 **Starting Conversational Test (8 Questions)**\n\nAuto-feeding questions through regular inference pipeline...\n\n**Questions to test:**\n" +
+                   "\n".join([f"{i+1}. {q[:80]}..." for i, q in enumerate(test_questions)])
     }
     history = history + [initial_msg]
-    yield history
+    yield history, ""
 
-    try:
-        # Run the test as a subprocess to capture output
-        test_path = "tests/integration/test_conversational.py"
-        process = subprocess.Popen(
-            [sys.executable, test_path],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1
-        )
-
-        output_lines = []
-        for line in iter(process.stdout.readline, ''):
-            if line:
-                output_lines.append(line.rstrip())
-
-                # Update chat with accumulated output
-                output_text = "\n".join(output_lines[-50:])  # Keep last 50 lines
-                history[-1] = {
-                    "role": "assistant",
-                    "content": f"🧪 **Conversational Test Running...**\n\n```\n{output_text}\n```"
-                }
-                yield history
-
-        process.wait()
-
-        # Final result
-        if process.returncode == 0:
-            history[-1] = {
-                "role": "assistant",
-                "content": f"✅ **Conversational Test PASSED**\n\n```\n{chr(10).join(output_lines)}\n```"
-            }
-        else:
-            history[-1] = {
-                "role": "assistant",
-                "content": f"❌ **Conversational Test FAILED** (Exit code: {process.returncode})\n\n```\n{chr(10).join(output_lines)}\n```"
-            }
-        yield history
-
-    except Exception as e:
-        history[-1] = {
+    # Process each question through the regular chat pipeline
+    for i, question in enumerate(test_questions, 1):
+        # Add progress indicator
+        progress_msg = {
             "role": "assistant",
-            "content": f"❌ **Error running test:**\n\n```\n{str(e)}\n```"
+            "content": f"🔄 **Question {i}/8**\n\nProcessing: _{question[:100]}..._"
         }
-        yield history
+        history = history + [progress_msg]
+        yield history, ""
+
+        # Remove progress indicator and process question through chat
+        history = history[:-1]
+
+        # Call the regular chat function
+        for updated_history, cleared_input in chat_with_legal_rag(
+            question,
+            history,
+            config_state,
+            show_thinking,
+            show_sources,
+            show_metadata
+        ):
+            yield updated_history, cleared_input
+
+        # Update history with the final result
+        history = updated_history
+
+    # Final completion message
+    completion_msg = {
+        "role": "assistant",
+        "content": f"✅ **Conversational Test Complete**\n\nSuccessfully processed all {len(test_questions)} questions through the regular inference pipeline."
+    }
+    history = history + [completion_msg]
+    yield history, ""
 
 
-def run_stress_test_stream(history):
-    """Run stress test and stream output to chat"""
-    import sys
-    from io import StringIO
-    import subprocess
+def run_stress_test_auto(history, config_state, show_thinking, show_sources, show_metadata):
+    """
+    Run stress test by maxing out config then auto-feeding questions
+    Uses the regular Gradio inference pipeline with maximum settings
+    """
+    # Define the 8 test questions (same as conversational test)
+    test_questions = [
+        "Apakah terdapat pengaturan yang menjamin kesetaraan hak antara guru dan dosen dalam memperoleh tunjangan profesi?",
+        "Berdasarkan PP No. 41 Tahun 2009, sebutkan jenis-jenis tunjangan yang diatur di dalamnya.",
+        "Masih merujuk pada PP No. 41 Tahun 2009, jelaskan perbedaan kriteria penerima, besaran, dan sumber pendanaan antara Tunjangan Khusus dan Tunjangan Kehormatan Profesor",
+        "Ganti topik. Jelaskan secara singkat pengertian kawasan pabean menurut Undang-Undang Kepabeanan.",
+        "Berdasarkan Undang-Undang Kepabeanan tersebut, jelaskan sanksi pidana bagi pihak yang dengan sengaja salah memberitahukan jenis dan jumlah barang impor sehingga merugikan negara.",
+        "Sekarang beralih ke UU No. 13 Tahun 2003. Jelaskan secara umum ruang lingkup dan pokok bahasan undang-undang tersebut.",
+        "Apa yang diatur dalam Pasal 1 UU No. 13 Tahun 2003?",
+        "Terakhir, jelaskan secara ringkas PP No. 8 Tahun 2007, termasuk fokus pengaturannya."
+    ]
 
-    # Add initial message
+    # Create STRESS CONFIG with maximum settings
+    stress_config = {
+        'final_top_k': 30,
+        'research_team_size': 5,  # All 5 personas
+        'max_new_tokens': 6144,
+        'temperature': 0.7,
+        'top_p': 1.0,
+        'top_k': 80,
+        'min_p': 0.05,
+        'enable_cross_validation': True,
+        'enable_devil_advocate': True,
+        'consensus_threshold': 0.5,
+        'parallel_research': True,
+        'search_phases': {
+            'initial_scan': {
+                'candidates': 600,
+                'semantic_threshold': 0.18,
+                'keyword_threshold': 0.05,
+                'enabled': True
+            },
+            'focused_review': {
+                'candidates': 300,
+                'semantic_threshold': 0.28,
+                'keyword_threshold': 0.10,
+                'enabled': True
+            },
+            'deep_analysis': {
+                'candidates': 150,
+                'semantic_threshold': 0.38,
+                'keyword_threshold': 0.15,
+                'enabled': True
+            },
+            'verification': {
+                'candidates': 75,
+                'semantic_threshold': 0.48,
+                'keyword_threshold': 0.20,
+                'enabled': True
+            },
+            'expert_review': {
+                'candidates': 100,
+                'semantic_threshold': 0.43,
+                'keyword_threshold': 0.17,
+                'enabled': True
+            }
+        }
+    }
+
+    # Initial message
     initial_msg = {
         "role": "assistant",
-        "content": "⚡ **Starting Stress Test (8 Questions)**\n\nRunning stress test with maximum settings...\n\n"
+        "content": f"⚡ **Starting Stress Test (8 Questions)**\n\n**Configuration:** MAXIMUM SETTINGS\n- Team Size: 5 personas\n- Max Tokens: 6144\n- Initial Scan: 600 candidates\n- Total Search Budget: ~1225 candidates\n\n**Auto-feeding questions...**"
     }
     history = history + [initial_msg]
-    yield history
+    yield history, ""
 
-    try:
-        # Run the test as a subprocess to capture output
-        test_path = "tests/integration/test_stress_conversational.py"
-        process = subprocess.Popen(
-            [sys.executable, test_path, "--quick"],  # Use quick mode for faster testing
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1
-        )
-
-        output_lines = []
-        for line in iter(process.stdout.readline, ''):
-            if line:
-                output_lines.append(line.rstrip())
-
-                # Update chat with accumulated output
-                output_text = "\n".join(output_lines[-50:])  # Keep last 50 lines
-                history[-1] = {
-                    "role": "assistant",
-                    "content": f"⚡ **Stress Test Running...**\n\n```\n{output_text}\n```"
-                }
-                yield history
-
-        process.wait()
-
-        # Final result
-        if process.returncode == 0:
-            history[-1] = {
-                "role": "assistant",
-                "content": f"✅ **Stress Test PASSED**\n\n```\n{chr(10).join(output_lines)}\n```"
-            }
-        else:
-            history[-1] = {
-                "role": "assistant",
-                "content": f"❌ **Stress Test FAILED** (Exit code: {process.returncode})\n\n```\n{chr(10).join(output_lines)}\n```"
-            }
-        yield history
-
-    except Exception as e:
-        history[-1] = {
+    # Process each question with STRESS CONFIG
+    for i, question in enumerate(test_questions, 1):
+        # Add progress indicator
+        progress_msg = {
             "role": "assistant",
-            "content": f"❌ **Error running test:**\n\n```\n{str(e)}\n```"
+            "content": f"⚡ **Stress Test - Question {i}/8**\n\nProcessing with maximum settings: _{question[:100]}..._"
         }
-        yield history
+        history = history + [progress_msg]
+        yield history, ""
+
+        # Remove progress indicator
+        history = history[:-1]
+
+        # Call chat with STRESS CONFIG
+        for updated_history, cleared_input in chat_with_legal_rag(
+            question,
+            history,
+            stress_config,  # Use stress config instead of current config
+            show_thinking,
+            show_sources,
+            show_metadata
+        ):
+            yield updated_history, cleared_input
+
+        # Update history
+        history = updated_history
+
+    # Final completion message
+    completion_msg = {
+        "role": "assistant",
+        "content": f"✅ **Stress Test Complete**\n\nSuccessfully processed all {len(test_questions)} questions with maximum settings."
+    }
+    history = history + [completion_msg]
+    yield history, ""
 
 
 # =============================================================================
@@ -1172,21 +1227,21 @@ def create_gradio_interface():
         except Exception as e:
             print(f"Error setting up system info: {e}")
 
-        # Test runner buttons
+        # Test runner buttons with auto-feeding
         try:
             test_conversational_btn.click(
-                run_conversational_test_stream,
-                inputs=[chatbot],
-                outputs=[chatbot]
+                run_conversational_test_auto,
+                inputs=[chatbot, config_state, show_thinking, show_sources, show_metadata],
+                outputs=[chatbot, msg_input]
             )
         except Exception as e:
             print(f"Error setting up conversational test button: {e}")
 
         try:
             test_stress_btn.click(
-                run_stress_test_stream,
-                inputs=[chatbot],
-                outputs=[chatbot]
+                run_stress_test_auto,
+                inputs=[chatbot, config_state, show_thinking, show_sources, show_metadata],
+                outputs=[chatbot, msg_input]
             )
         except Exception as e:
             print(f"Error setting up stress test button: {e}")
