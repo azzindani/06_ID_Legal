@@ -374,6 +374,12 @@ class ConversationalStressTester:
             result = None
 
             for chunk in self.pipeline.query(query, conversation_history=context, stream=True):
+                # Handle different chunk types
+                if not isinstance(chunk, dict):
+                    # Safety check: if chunk is not a dict, log and skip
+                    print(f"\nWARNING: Received non-dict chunk: {type(chunk)}")
+                    continue
+
                 if chunk.get('type') == 'token':
                     token = chunk.get('token', '')
                     print(token, end='', flush=True)
@@ -381,6 +387,12 @@ class ConversationalStressTester:
                     chunk_count += 1
                 elif chunk.get('type') == 'complete':
                     result = chunk
+                    break
+                elif chunk.get('type') == 'error':
+                    # Handle error chunks
+                    error_msg = chunk.get('error', 'Unknown error')
+                    print(f"\nERROR from pipeline: {error_msg}")
+                    result = chunk  # Store error chunk as result
                     break
 
             turn_time = time.time() - start_time
