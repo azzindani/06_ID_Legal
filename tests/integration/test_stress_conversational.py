@@ -1,7 +1,7 @@
 """
 Stress Test - Multi-Turn Conversation with Maximum Settings
 
-This test runs a 7-turn complex legal conversation with ALL settings maxed out:
+This test runs an 8-turn complex legal conversation with ALL settings maxed out:
 - ALL 5 search phases enabled (including expert_review)
 - Maximum candidates per phase (800+)
 - Maximum research team size (5 personas)
@@ -10,14 +10,15 @@ This test runs a 7-turn complex legal conversation with ALL settings maxed out:
 - Maximum conversation history (50 turns tracked)
 - All validation features enabled
 
-Conversation Flow (7 Turns):
-- T1: Complex tax law question (establishes heavy context)
-- T2: Follow-up with specific regulation reference
-- T3: Cross-domain shift to labor law
-- T4: Back-reference to T1 context
-- T5: Complex procedural question spanning multiple domains
-- T6: Clarification request building on all previous context
-- T7: Summary request requiring full conversation memory
+Conversation Flow (8 Turns):
+- T1: Teacher/professor allowance equality (establishes context)
+- T2: Specific regulation PP No. 41 Tahun 2009
+- T3: Follow-up on allowance differences
+- T4: Topic shift to customs law - kawasan pabean
+- T5: Follow-up on customs sanctions
+- T6: Topic shift to labor law UU No. 13 Tahun 2003
+- T7: Specific article query in UU No. 13 Tahun 2003
+- T8: Summary of PP No. 8 Tahun 2007
 
 Purpose:
 - Verify conversation memory under maximum context load
@@ -25,12 +26,13 @@ Purpose:
 - Measure cumulative resource usage across turns
 - Validate that maxed settings don't cause OOM or timeouts
 - Test session management with heavy context
+- Test multi-domain topic switching
 
 Run with:
     python tests/integration/test_stress_conversational.py
 
 Options:
-    --quick      Use moderate settings (5 turns, reduced candidates)
+    --quick      Use moderate settings (8 turns, reduced candidates)
     --verbose    Show detailed output during processing
     --memory     Enable detailed memory profiling per turn
     --export     Export results to JSON
@@ -116,128 +118,107 @@ STRESS_SEARCH_PHASES_CONV = {
     }
 }
 
-# Full stress conversation - 7 complex turns
+# Full stress conversation - 8 questions covering teacher/professor allowances, customs, and labor law
 STRESS_CONVERSATION_FULL = [
     {
         'turn': 1,
-        'topic': 'PERPAJAKAN',
-        'type': 'complex_initial',
-        'query': """
-        Saya ingin memahami secara komprehensif tentang prosedur keberatan pajak.
-        Jelaskan secara detail tentang:
-        1. Dasar hukum pengajuan keberatan menurut UU KUP
-        2. Syarat-syarat formal dan materil yang harus dipenuhi
-        3. Jangka waktu pengajuan dan konsekuensi keterlambatan
-        4. Hak-hak wajib pajak selama proses keberatan
-        """
+        'topic': 'TUNJANGAN_PENDIDIK',
+        'type': 'initial',
+        'query': "Apakah terdapat pengaturan yang menjamin kesetaraan hak antara guru dan dosen dalam memperoleh tunjangan profesi?"
     },
     {
         'turn': 2,
-        'topic': 'PERPAJAKAN',
-        'type': 'followup_specific',
-        'query': """
-        Terkait penjelasan sebelumnya, bagaimana jika keberatan ditolak?
-        Jelaskan tentang mekanisme banding ke Pengadilan Pajak berdasarkan
-        UU Pengadilan Pajak dan hubungannya dengan proses keberatan yang sudah dijelaskan.
-        Sertakan juga tentang biaya yang diperlukan.
-        """
+        'topic': 'TUNJANGAN_PENDIDIK',
+        'type': 'specific_regulation',
+        'query': "Berdasarkan PP No. 41 Tahun 2009, sebutkan jenis-jenis tunjangan yang diatur di dalamnya."
     },
     {
         'turn': 3,
-        'topic': 'KETENAGAKERJAAN',
-        'type': 'topic_shift',
-        'query': """
-        Sekarang saya ingin bertanya tentang domain yang berbeda.
-        Jelaskan tentang hak-hak pekerja yang di-PHK menurut UU Ketenagakerjaan
-        dan UU Cipta Kerja. Bagaimana prosedur penyelesaian perselisihan PHK
-        dan kompensasi apa saja yang berhak diterima pekerja?
-        """
+        'topic': 'TUNJANGAN_PENDIDIK',
+        'type': 'followup_detailed',
+        'query': "Masih merujuk pada PP No. 41 Tahun 2009, jelaskan perbedaan kriteria penerima, besaran, dan sumber pendanaan antara Tunjangan Khusus dan Tunjangan Kehormatan Profesor"
     },
     {
         'turn': 4,
-        'topic': 'PERPAJAKAN',
-        'type': 'back_reference',
-        'query': """
-        Kembali ke pembahasan pajak di awal, jika wajib pajak yang sedang
-        mengajukan keberatan ternyata juga terlibat dalam perselisihan PHK
-        sebagai pengusaha, apakah ada keterkaitan antara kewajiban pajak
-        dengan pembayaran pesangon? Bagaimana perlakuan pajak atas pesangon?
-        """
+        'topic': 'KEPABEANAN',
+        'type': 'topic_shift',
+        'query': "Ganti topik. Jelaskan secara singkat pengertian kawasan pabean menurut Undang-Undang Kepabeanan."
     },
     {
         'turn': 5,
-        'topic': 'MULTI_DOMAIN',
-        'type': 'complex_procedural',
-        'query': """
-        Jelaskan prosedur lengkap yang harus dilakukan pengusaha yang:
-        1. Menghadapi sengketa keberatan pajak (seperti yang sudah dibahas)
-        2. Sedang dalam proses PHK massal (seperti yang sudah dijelaskan)
-        3. Ingin melakukan restrukturisasi perusahaan
-
-        Bagaimana urutan prioritas penyelesaian dan lembaga mana saja yang
-        harus dihubungi? Sertakan dasar hukumnya.
-        """
+        'topic': 'KEPABEANAN',
+        'type': 'followup_sanctions',
+        'query': "Berdasarkan Undang-Undang Kepabeanan tersebut, jelaskan sanksi pidana bagi pihak yang dengan sengaja salah memberitahukan jenis dan jumlah barang impor sehingga merugikan negara."
     },
     {
         'turn': 6,
-        'topic': 'CLARIFICATION',
-        'type': 'clarification',
-        'query': """
-        Dari semua penjelasan sebelumnya, saya masih bingung tentang:
-        1. Apakah pengusaha bisa menunda pembayaran pajak sambil menunggu keberatan?
-        2. Bagaimana jika dana untuk pesangon digunakan untuk bayar pajak dulu?
-        3. Apa sanksi jika tidak membayar pesangon tepat waktu karena masalah pajak?
-
-        Tolong jelaskan dengan mengacu pada konteks yang sudah kita bahas.
-        """
+        'topic': 'KETENAGAKERJAAN',
+        'type': 'topic_shift',
+        'query': "Sekarang beralih ke UU No. 13 Tahun 2003. Jelaskan secara umum ruang lingkup dan pokok bahasan undang-undang tersebut."
     },
     {
         'turn': 7,
-        'topic': 'SUMMARY',
-        'type': 'summary_request',
-        'query': """
-        Berdasarkan SELURUH pembahasan kita dari awal:
-        1. Buatkan ringkasan poin-poin kunci tentang prosedur keberatan pajak
-        2. Rangkum hak-hak pekerja yang di-PHK yang sudah dibahas
-        3. Jelaskan keterkaitan antara kedua aspek tersebut
-        4. Berikan rekomendasi langkah-langkah yang harus diambil pengusaha
-
-        Pastikan mengacu pada semua peraturan yang sudah disebutkan sebelumnya.
-        """
+        'topic': 'KETENAGAKERJAAN',
+        'type': 'specific_article',
+        'query': "Apa yang diatur dalam Pasal 1 UU No. 13 Tahun 2003?"
+    },
+    {
+        'turn': 8,
+        'topic': 'PP_8_2007',
+        'type': 'summary',
+        'query': "Terakhir, jelaskan secara ringkas PP No. 8 Tahun 2007, termasuk fokus pengaturannya."
     }
 ]
 
-# Quick mode conversation - 5 simpler turns
+# Quick mode conversation - 8 questions (same as full stress but with moderate config)
 QUICK_CONVERSATION = [
     {
         'turn': 1,
-        'topic': 'PERPAJAKAN',
+        'topic': 'TUNJANGAN_PENDIDIK',
         'type': 'initial',
-        'query': "Jelaskan tentang prosedur keberatan pajak menurut UU KUP."
+        'query': "Apakah terdapat pengaturan yang menjamin kesetaraan hak antara guru dan dosen dalam memperoleh tunjangan profesi?"
     },
     {
         'turn': 2,
-        'topic': 'PERPAJAKAN',
-        'type': 'followup',
-        'query': "Bagaimana jika keberatan ditolak? Apa langkah selanjutnya?"
+        'topic': 'TUNJANGAN_PENDIDIK',
+        'type': 'specific_regulation',
+        'query': "Berdasarkan PP No. 41 Tahun 2009, sebutkan jenis-jenis tunjangan yang diatur di dalamnya."
     },
     {
         'turn': 3,
-        'topic': 'KETENAGAKERJAAN',
-        'type': 'topic_shift',
-        'query': "Sekarang jelaskan tentang hak pekerja yang di-PHK."
+        'topic': 'TUNJANGAN_PENDIDIK',
+        'type': 'followup_detailed',
+        'query': "Masih merujuk pada PP No. 41 Tahun 2009, jelaskan perbedaan kriteria penerima, besaran, dan sumber pendanaan antara Tunjangan Khusus dan Tunjangan Kehormatan Profesor"
     },
     {
         'turn': 4,
-        'topic': 'MULTI',
-        'type': 'cross_reference',
-        'query': "Bagaimana hubungan antara pajak dan pembayaran pesangon?"
+        'topic': 'KEPABEANAN',
+        'type': 'topic_shift',
+        'query': "Ganti topik. Jelaskan secara singkat pengertian kawasan pabean menurut Undang-Undang Kepabeanan."
     },
     {
         'turn': 5,
-        'topic': 'SUMMARY',
+        'topic': 'KEPABEANAN',
+        'type': 'followup_sanctions',
+        'query': "Berdasarkan Undang-Undang Kepabeanan tersebut, jelaskan sanksi pidana bagi pihak yang dengan sengaja salah memberitahukan jenis dan jumlah barang impor sehingga merugikan negara."
+    },
+    {
+        'turn': 6,
+        'topic': 'KETENAGAKERJAAN',
+        'type': 'topic_shift',
+        'query': "Sekarang beralih ke UU No. 13 Tahun 2003. Jelaskan secara umum ruang lingkup dan pokok bahasan undang-undang tersebut."
+    },
+    {
+        'turn': 7,
+        'topic': 'KETENAGAKERJAAN',
+        'type': 'specific_article',
+        'query': "Apa yang diatur dalam Pasal 1 UU No. 13 Tahun 2003?"
+    },
+    {
+        'turn': 8,
+        'topic': 'PP_8_2007',
         'type': 'summary',
-        'query': "Rangkum pembahasan kita tentang pajak dan ketenagakerjaan."
+        'query': "Terakhir, jelaskan secara ringkas PP No. 8 Tahun 2007, termasuk fokus pengaturannya."
     }
 ]
 

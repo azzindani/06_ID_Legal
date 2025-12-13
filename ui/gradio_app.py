@@ -392,6 +392,132 @@ def get_system_info():
 
 
 # =============================================================================
+# TEST RUNNERS - Stream test output to chat
+# =============================================================================
+
+def run_conversational_test_stream(history):
+    """Run conversational test and stream output to chat"""
+    import sys
+    from io import StringIO
+    import subprocess
+
+    # Add initial message
+    initial_msg = {
+        "role": "assistant",
+        "content": "🧪 **Starting Conversational Test (8 Questions)**\n\nRunning comprehensive integration test...\n\n"
+    }
+    history = history + [initial_msg]
+    yield history
+
+    try:
+        # Run the test as a subprocess to capture output
+        test_path = "tests/integration/test_conversational.py"
+        process = subprocess.Popen(
+            [sys.executable, test_path],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1
+        )
+
+        output_lines = []
+        for line in iter(process.stdout.readline, ''):
+            if line:
+                output_lines.append(line.rstrip())
+
+                # Update chat with accumulated output
+                output_text = "\n".join(output_lines[-50:])  # Keep last 50 lines
+                history[-1] = {
+                    "role": "assistant",
+                    "content": f"🧪 **Conversational Test Running...**\n\n```\n{output_text}\n```"
+                }
+                yield history
+
+        process.wait()
+
+        # Final result
+        if process.returncode == 0:
+            history[-1] = {
+                "role": "assistant",
+                "content": f"✅ **Conversational Test PASSED**\n\n```\n{chr(10).join(output_lines)}\n```"
+            }
+        else:
+            history[-1] = {
+                "role": "assistant",
+                "content": f"❌ **Conversational Test FAILED** (Exit code: {process.returncode})\n\n```\n{chr(10).join(output_lines)}\n```"
+            }
+        yield history
+
+    except Exception as e:
+        history[-1] = {
+            "role": "assistant",
+            "content": f"❌ **Error running test:**\n\n```\n{str(e)}\n```"
+        }
+        yield history
+
+
+def run_stress_test_stream(history):
+    """Run stress test and stream output to chat"""
+    import sys
+    from io import StringIO
+    import subprocess
+
+    # Add initial message
+    initial_msg = {
+        "role": "assistant",
+        "content": "⚡ **Starting Stress Test (8 Questions)**\n\nRunning stress test with maximum settings...\n\n"
+    }
+    history = history + [initial_msg]
+    yield history
+
+    try:
+        # Run the test as a subprocess to capture output
+        test_path = "tests/integration/test_stress_conversational.py"
+        process = subprocess.Popen(
+            [sys.executable, test_path, "--quick"],  # Use quick mode for faster testing
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1
+        )
+
+        output_lines = []
+        for line in iter(process.stdout.readline, ''):
+            if line:
+                output_lines.append(line.rstrip())
+
+                # Update chat with accumulated output
+                output_text = "\n".join(output_lines[-50:])  # Keep last 50 lines
+                history[-1] = {
+                    "role": "assistant",
+                    "content": f"⚡ **Stress Test Running...**\n\n```\n{output_text}\n```"
+                }
+                yield history
+
+        process.wait()
+
+        # Final result
+        if process.returncode == 0:
+            history[-1] = {
+                "role": "assistant",
+                "content": f"✅ **Stress Test PASSED**\n\n```\n{chr(10).join(output_lines)}\n```"
+            }
+        else:
+            history[-1] = {
+                "role": "assistant",
+                "content": f"❌ **Stress Test FAILED** (Exit code: {process.returncode})\n\n```\n{chr(10).join(output_lines)}\n```"
+            }
+        yield history
+
+    except Exception as e:
+        history[-1] = {
+            "role": "assistant",
+            "content": f"❌ **Error running test:**\n\n```\n{str(e)}\n```"
+        }
+        yield history
+
+
+# =============================================================================
 # ENHANCED GRADIO INTERFACE - Kaggle_Demo Style
 # =============================================================================
 
@@ -733,6 +859,12 @@ def create_gradio_interface():
                             outputs=health_report_output
                         )
 
+                        with gr.Group(elem_classes="settings-panel"):
+                            gr.Markdown("#### 🧪 Production Test Runners")
+                            gr.Markdown("Run comprehensive integration tests and see results in the chat tab.")
+                            test_conversational_btn = gr.Button("🔬 Run Conversational Test (8 Questions)", variant="primary")
+                            test_stress_btn = gr.Button("⚡ Run Stress Test (8 Questions)", variant="secondary")
+
                     with gr.Column():
                         # Enhanced Search Phase Configuration
                         with gr.Group(elem_classes="settings-panel phase-settings"):
@@ -1039,6 +1171,25 @@ def create_gradio_interface():
             )
         except Exception as e:
             print(f"Error setting up system info: {e}")
+
+        # Test runner buttons
+        try:
+            test_conversational_btn.click(
+                run_conversational_test_stream,
+                inputs=[chatbot],
+                outputs=[chatbot]
+            )
+        except Exception as e:
+            print(f"Error setting up conversational test button: {e}")
+
+        try:
+            test_stress_btn.click(
+                run_stress_test_stream,
+                inputs=[chatbot],
+                outputs=[chatbot]
+            )
+        except Exception as e:
+            print(f"Error setting up stress test button: {e}")
 
     # Enable queue for streaming support
     # Note: Gradio 6.x has different queue parameters

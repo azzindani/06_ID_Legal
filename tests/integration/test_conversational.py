@@ -502,37 +502,53 @@ class ConversationalTester:
             return result
 
     def run_full_conversation(self) -> bool:
-        """Run the complete 5-question conversational test"""
+        """Run the complete 8-question conversational test"""
 
-        # Define the conversation flow
+        # Define the conversation flow - 8 questions covering teacher/professor allowances, customs, and labor law
         conversation_script = [
-            # TOPIC 1: Ketenagakerjaan (Labor Law) - 3 Questions
+            # TOPIC 1: Tunjangan Guru & Dosen (Teacher & Professor Allowances) - 3 Questions
             {
-                'query': "Apa saja hak-hak pekerja menurut peraturan ketenagakerjaan di Indonesia?",
+                'query': "Apakah terdapat pengaturan yang menjamin kesetaraan hak antara guru dan dosen dalam memperoleh tunjangan profesi?",
                 'type': "INITIAL QUERY",
-                'description': "General question establishing labor law context"
+                'description': "General question about equal rights in professional allowances"
             },
             {
-                'query': "Jelaskan pasal-pasal dalam UU Nomor 13 Tahun 2003 yang mengatur tentang pesangon dan bagaimana cara menghitungnya",
+                'query': "Berdasarkan PP No. 41 Tahun 2009, sebutkan jenis-jenis tunjangan yang diatur di dalamnya.",
                 'type': "SPECIFIC REGULATION",
-                'description': "Direct reference to UU No. 13 Tahun 2003 - tests KnowledgeGraphCore extraction"
+                'description': "Direct reference to PP No. 41 Tahun 2009 - tests KnowledgeGraphCore extraction"
             },
             {
-                'query': "Bagaimana jika perusahaan tidak membayar pesangon tersebut? Apa upaya hukum yang dapat dilakukan pekerja?",
+                'query': "Masih merujuk pada PP No. 41 Tahun 2009, jelaskan perbedaan kriteria penerima, besaran, dan sumber pendanaan antara Tunjangan Khusus dan Tunjangan Kehormatan Profesor",
                 'type': "FOLLOW-UP",
-                'description': "Follow-up using context - tests QueryDetector.is_followup"
+                'description': "Follow-up on specific regulation - tests context retention and detailed comparison"
             },
-            # TOPIC 2: Lingkungan Hidup (Environmental Law) - 1 Question
+            # TOPIC 2: Kepabeanan (Customs Law) - 2 Questions
             {
-                'query': "Sekarang saya ingin bertanya tentang izin lingkungan. Apa persyaratan untuk mendapatkan izin lingkungan berdasarkan peraturan yang berlaku?",
+                'query': "Ganti topik. Jelaskan secara singkat pengertian kawasan pabean menurut Undang-Undang Kepabeanan.",
                 'type': "TOPIC SHIFT",
-                'description': "Topic change to environmental law - tests QueryDetector topic analysis"
+                'description': "Topic change to customs law - tests QueryDetector topic analysis"
             },
-            # TOPIC 3: Perpajakan (Tax Law) - 1 Question
             {
-                'query': "Pertanyaan terakhir mengenai perpajakan. Bagaimana mekanisme pengajuan keberatan pajak dan apa saja syaratnya?",
+                'query': "Berdasarkan Undang-Undang Kepabeanan tersebut, jelaskan sanksi pidana bagi pihak yang dengan sengaja salah memberitahukan jenis dan jumlah barang impor sehingga merugikan negara.",
+                'type': "FOLLOW-UP",
+                'description': "Follow-up on customs law sanctions - tests context-aware query handling"
+            },
+            # TOPIC 3: Ketenagakerjaan (Labor Law) - 2 Questions
+            {
+                'query': "Sekarang beralih ke UU No. 13 Tahun 2003. Jelaskan secara umum ruang lingkup dan pokok bahasan undang-undang tersebut.",
                 'type': "NEW DOMAIN",
-                'description': "Different domain (tax law) - tests multi-domain capability"
+                'description': "Topic shift to labor law - tests multi-domain capability"
+            },
+            {
+                'query': "Apa yang diatur dalam Pasal 1 UU No. 13 Tahun 2003?",
+                'type': "SPECIFIC ARTICLE",
+                'description': "Specific article query - tests precise regulation retrieval"
+            },
+            # TOPIC 4: PP No. 8 Tahun 2007 - 1 Question
+            {
+                'query': "Terakhir, jelaskan secara ringkas PP No. 8 Tahun 2007, termasuk fokus pengaturannya.",
+                'type': "FINAL SUMMARY",
+                'description': "Final question on PP No. 8 Tahun 2007 - tests summary capability"
             }
         ]
 
