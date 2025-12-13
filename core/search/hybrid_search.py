@@ -527,6 +527,9 @@ class HybridSearchEngine:
                             'semantic': 0.0,
                             'keyword': 0.0,
                             'kg': 0.0,
+                            'authority': 0.0,
+                            'temporal': 0.0,
+                            'completeness': 0.0
                         },
                         'metadata': {
                             'global_id': global_id,
