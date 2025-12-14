@@ -305,7 +305,7 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
 
             # Add research process summary (what was done)
             if current_progress:
-                final_output += '<details><summary>📋 <b>Proses yang Sudah Dilakukan</b></summary>\n\n'
+                final_output += '<details><summary>📋 <strong>Proses yang Sudah Dilakukan</strong></summary>\n\n'
                 for msg in current_progress:
                     final_output += f"✅ {msg}\n"
                 final_output += '\n</details>\n\n---\n\n'
@@ -313,14 +313,14 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
             # Add thinking section if available
             if show_thinking and thinking_text:
                 final_output += (
-                    '<details><summary>🧠 <b>Proses Berpikir</b></summary>\n\n'
+                    '<details><summary>🧠 <strong>Proses Berpikir</strong></summary>\n\n'
                     + thinking_text +
                     '\n</details>\n\n'
-                    + '---\n\n✅ **Jawaban:**\n\n'
+                    + '---\n\n### ✅ Jawaban\n\n'
                     + response_text
                 )
             else:
-                final_output += f"✅ **Jawaban:**\n\n{response_text}"
+                final_output += f"### ✅ Jawaban\n\n{response_text}"
 
             # Add community clusters if available
             if result.get('communities') or result.get('clusters'):
@@ -356,7 +356,7 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                 if citations:
                     sources_info = format_sources_info(citations, config_dict)
                     collapsible_sections.append(
-                        f'<details><summary>📖 <b>Sumber Hukum Utama ({len(citations)})</b></summary>\n\n{sources_info}\n</details>'
+                        f'<details><summary>📖 <strong>Sumber Hukum Utama ({len(citations)})</strong></summary>\n\n{sources_info}\n</details>'
                     )
 
             # Add detailed step-by-step research process
@@ -368,7 +368,7 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                 )
                 if detailed_research.strip():
                     collapsible_sections.append(
-                        f'<details><summary>🔬 <b>Detail Proses Penelitian</b></summary>\n\n{detailed_research}\n</details>'
+                        f'<details><summary>🔬 <strong>Detail Proses Penelitian</strong></summary>\n\n{detailed_research}\n</details>'
                     )
 
             # Combine all sections
