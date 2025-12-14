@@ -81,15 +81,15 @@ def format_sources_info(results: List[Dict], config_dict: Dict) -> str:
 
                 location_parts = []
                 if chapter:
-                    location_parts.append(f"Bab {chapter}")
+                    location_parts.append(f"{chapter}")
                 if section:
-                    location_parts.append(f"Bagian {section}")
+                    location_parts.append(f"{section}")
                 if article:
-                    location_parts.append(f"Pasal {article}")
+                    location_parts.append(f"{article}")
                 elif article_number:
-                    location_parts.append(f"Pasal {article_number}")
+                    location_parts.append(f"{article_number}")
                 if paragraph:
-                    location_parts.append(f"Ayat {paragraph}")
+                    location_parts.append(f"{paragraph}")
 
                 if location_parts:
                     output.append(f"- **Lokasi:** {' > '.join(location_parts)}")
@@ -152,6 +152,7 @@ def format_sources_info(results: List[Dict], config_dict: Dict) -> str:
                     output.append(f"- **Isi (preview):** {content_preview}...")
 
                 output.append("")
+                output.append("-" * 80)
 
             except Exception as e:
                 output.append(f"Error formatting source {i}: {e}")
@@ -344,15 +345,15 @@ def format_all_documents(metadata: Dict, max_docs: int = 50) -> str:
             # Article-level location
             location_parts = []
             if chapter:
-                location_parts.append(f"Bab {chapter}")
+                location_parts.append(f"{chapter}")
             if section:
-                location_parts.append(f"Bagian {section}")
+                location_parts.append(f"{section}")
             if article:
-                location_parts.append(f"Pasal {article}")
+                location_parts.append(f"{article}")
             elif article_number:
-                location_parts.append(f"Pasal {article_number}")
+                location_parts.append(f"{article_number}")
             if paragraph:
-                location_parts.append(f"Ayat {paragraph}")
+                location_parts.append(f"{paragraph}")
 
             if location_parts:
                 output.append(f"- Location: {' > '.join(location_parts)}")
@@ -490,9 +491,9 @@ def format_retrieved_metadata(phase_metadata: Dict, config_dict: Dict) -> str:
                         # Add article location if available
                         location = ""
                         if article or article_number:
-                            location = f" | Pasal {article or article_number}"
+                            location = f" | {article or article_number}"
                         elif chapter:
-                            location = f" | Bab {chapter}"
+                            location = f" | {chapter}"
 
                         output.append(f"   {i}. {reg_name}{location} (Score: {score:.3f}, KG: {kg_score:.3f})")
                     except Exception:
@@ -537,3 +538,4 @@ def final_selection_with_kg(candidates: List[Dict], query_type: str, config_dict
     )
 
     return sorted_candidates[:top_k]
+
