@@ -355,7 +355,6 @@ def format_detailed_research_process(
         lines.append(f"   - {name}: {docs} documents ({percentage:.1f}%)")
 
     lines.append("")
-    lines.append("=" * 100)
 
     return '\n'.join(lines)
 
@@ -397,5 +396,6 @@ def format_researcher_summary(phase_metadata: Dict[str, Any]) -> str:
         lines.append(f"   - {name}: {count} docs ({percentage:.1f}%)")
 
     return '\n'.join(lines)
+
 
 
