@@ -207,7 +207,7 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                 progress_header += "\n".join([f"🔄 {m}" for m in current_progress])
                 progress_header += '\n</details>\n\n'
 
-                display_text = progress_header + f"**✍️ Generating answer...**\n\n{streamed_answer}"
+                display_text = progress_header + f"🧠 **Sedang berfikir...**\n\n{streamed_answer}"
 
                 yield history + [
                     {"role": "user", "content": message},
@@ -251,7 +251,7 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
             # Add thinking section if available
             if show_thinking and thinking_content:
                 final_output += (
-                    '<details><summary>🧠 <b>Proses Berpikir (klik untuk melihat)</b></summary>\n\n'
+                    '<details><summary>🧠 <b>Proses Berpikir</b></summary>\n\n'
                     + thinking_content +
                     '\n</details>\n\n'
                     + '---\n\n✅ **Jawaban:**\n\n'
@@ -297,32 +297,16 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                         f'<details><summary>📖 <b>Sumber Hukum Utama ({len(citations)})</b></summary>\n\n{sources_info}\n</details>'
                     )
 
-            # Add metadata
-            if show_metadata and all_phase_metadata:
-                metadata_info = format_retrieved_metadata(all_phase_metadata, config_dict)
-                if metadata_info.strip():
-                    collapsible_sections.append(
-                        f'<details><summary>🔬 <b>Detail Proses Penelitian</b></summary>\n\n{metadata_info}\n</details>'
-                    )
-
             # Add detailed step-by-step research process
             if show_metadata:
                 detailed_research = format_detailed_research_process(
                     result,
-                    top_n_per_researcher=20,
+                    top_n_per_researcher=50,
                     show_content=False
                 )
                 if detailed_research.strip():
                     collapsible_sections.append(
-                        f'<details><summary>🔬 <b>Detailed Research Process (Step-by-Step)</b></summary>\n\n{detailed_research}\n</details>'
-                    )
-
-            # Add all retrieved documents
-            if show_metadata:
-                all_docs_formatted = format_all_documents(result, max_docs=50)
-                if all_docs_formatted:
-                    collapsible_sections.append(
-                        f'<details><summary>📚 <b>Semua Dokumen yang Ditemukan</b></summary>\n\n{all_docs_formatted}\n</details>'
+                        f'<details><summary>🔬 <b>Detail Proses Penelitian</b></summary>\n\n{detailed_research}\n</details>'
                     )
 
             # Combine all sections
@@ -485,7 +469,7 @@ def run_stress_test_auto(history, config_state, show_thinking, show_sources, sho
     stress_config = {
         'final_top_k': 30,
         'research_team_size': 5,  # All 5 personas
-        'max_new_tokens': 6144,
+        'max_new_tokens': 8192,
         'temperature': 0.7,
         'top_p': 1.0,
         'top_k': 80,
@@ -958,16 +942,6 @@ def create_gradio_interface():
 
             with gr.TabItem("📥 Export Conversation", id="export"):
                 with gr.Column(elem_classes="main-chat-area"):
-                    gr.Markdown("""
-                    ## Export Your Conversation
-
-                    Download your complete consultation history including:
-                    - All questions and answers
-                    - Research team process details
-                    - Legal sources consulted
-                    - Metadata and analysis
-                    """)
-
                     with gr.Row():
                         export_format = gr.Radio(
                             choices=["Markdown", "JSON", "HTML"],
@@ -1002,14 +976,6 @@ def create_gradio_interface():
                         label="Download Export File",
                         visible=True
                     )
-
-                    gr.Markdown("""
-                    ### Export Format Guide
-
-                    - **Markdown**: Human-readable format, great for reading and sharing
-                    - **JSON**: Structured data, perfect for processing or archiving
-                    - **HTML**: Styled webpage, best for printing or presentation
-                    """)
 
             # Export function
             def export_conversation_handler(export_format, include_metadata, include_research, include_full):
@@ -1276,5 +1242,6 @@ def launch_app(share: bool = False, server_port: int = 7860):
 
 if __name__ == "__main__":
     launch_app()
+
 
 
