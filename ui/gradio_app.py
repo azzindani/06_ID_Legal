@@ -301,7 +301,7 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
             if show_metadata:
                 detailed_research = format_detailed_research_process(
                     result,
-                    top_n_per_researcher=50,
+                    top_n_per_researcher=20,
                     show_content=False
                 )
                 if detailed_research.strip():
@@ -1242,6 +1242,7 @@ def launch_app(share: bool = False, server_port: int = 7860):
 
 if __name__ == "__main__":
     launch_app()
+
 
 
 
