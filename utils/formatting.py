@@ -52,15 +52,21 @@ def format_sources_info(results: List[Dict], config_dict: Dict) -> str:
                 about = record.get('about', 'N/A')
                 enacting_body = record.get('enacting_body', 'N/A')
                 global_id = record.get('global_id', 'N/A')
+                effective_date = record.get('effective_date', record.get('tanggal_penetapan', 'N/A'))
 
-                output.append(f"### {i}. {reg_type} No. {reg_num}/{year}")
+                # Combine regulation type + enacting body + number + year
+                regulation_full_name = f"{reg_type} {enacting_body} No. {reg_num} Tahun {year}"
+
+                output.append(f"### {i}. {regulation_full_name}")
                 output.append(f"- **Global ID:** {global_id}")
                 output.append(f"- **Tentang:** {about}")
-                output.append(f"- **Ditetapkan oleh:** {enacting_body}")
+                if effective_date != 'N/A':
+                    output.append(f"- **Tanggal Penetapan:** {effective_date}")
 
-                # Article/Chapter location
+                # Article/Chapter location - MORE PROMINENT
                 chapter = record.get('chapter', record.get('bab', ''))
                 article = record.get('article', record.get('pasal', ''))
+                article_number = record.get('article_number', '')  # More specific article number
                 section = record.get('section', record.get('bagian', ''))
                 paragraph = record.get('paragraph', record.get('ayat', ''))
 
@@ -71,6 +77,8 @@ def format_sources_info(results: List[Dict], config_dict: Dict) -> str:
                     location_parts.append(f"Bagian {section}")
                 if article:
                     location_parts.append(f"Pasal {article}")
+                elif article_number:
+                    location_parts.append(f"Pasal {article_number}")
                 if paragraph:
                     location_parts.append(f"Ayat {paragraph}")
 
@@ -279,6 +287,7 @@ def format_all_documents(metadata: Dict, max_docs: int = 50) -> str:
             about = record.get('about', 'N/A')
             enacting_body = record.get('enacting_body', 'N/A')
             global_id = record.get('global_id', 'N/A')
+            effective_date = record.get('effective_date', record.get('tanggal_penetapan', 'N/A'))
 
             # Scores
             final_score = scores.get('final', doc.get('final_score', doc.get('composite_score', record.get('score', 0))))
@@ -292,6 +301,7 @@ def format_all_documents(metadata: Dict, max_docs: int = 50) -> str:
             # Article-level location
             chapter = record.get('chapter', record.get('bab', ''))
             article = record.get('article', record.get('pasal', ''))
+            article_number = record.get('article_number', '')
             section = record.get('section', record.get('bagian', ''))
             paragraph = record.get('paragraph', record.get('ayat', ''))
 
@@ -304,10 +314,14 @@ def format_all_documents(metadata: Dict, max_docs: int = 50) -> str:
             phase = doc.get('_phase', '')
             researcher = doc.get('_researcher', '')
 
-            output.append(f"**[{i}] {reg_type} No. {reg_num}/{year}**")
+            # Combined regulation full name
+            regulation_full_name = f"{reg_type} {enacting_body} No. {reg_num} Tahun {year}"
+
+            output.append(f"**[{i}] {regulation_full_name}**")
             output.append(f"- Global ID: {global_id}")
             output.append(f"- About: {about}")
-            output.append(f"- Enacting Body: {enacting_body}")
+            if effective_date != 'N/A':
+                output.append(f"- Effective Date: {effective_date}")
 
             # Article-level location
             location_parts = []
@@ -317,6 +331,8 @@ def format_all_documents(metadata: Dict, max_docs: int = 50) -> str:
                 location_parts.append(f"Bagian {section}")
             if article:
                 location_parts.append(f"Pasal {article}")
+            elif article_number:
+                location_parts.append(f"Pasal {article_number}")
             if paragraph:
                 location_parts.append(f"Ayat {paragraph}")
 
@@ -440,8 +456,27 @@ def format_retrieved_metadata(phase_metadata: Dict, config_dict: Dict) -> str:
                         reg_type = record.get('regulation_type', 'N/A')
                         reg_num = record.get('regulation_number', 'N/A')
                         year = record.get('year', 'N/A')
+                        enacting_body = record.get('enacting_body', '')
 
-                        output.append(f"   {i}. {reg_type} No. {reg_num}/{year} (Score: {score:.3f}, KG: {kg_score:.3f})")
+                        # Get article/chapter info
+                        chapter = record.get('chapter', record.get('bab', ''))
+                        article = record.get('article', record.get('pasal', ''))
+                        article_number = record.get('article_number', '')
+
+                        # Build regulation name
+                        if enacting_body:
+                            reg_name = f"{reg_type} {enacting_body} No. {reg_num} Tahun {year}"
+                        else:
+                            reg_name = f"{reg_type} No. {reg_num} Tahun {year}"
+
+                        # Add article location if available
+                        location = ""
+                        if article or article_number:
+                            location = f" | Pasal {article or article_number}"
+                        elif chapter:
+                            location = f" | Bab {chapter}"
+
+                        output.append(f"   {i}. {reg_name}{location} (Score: {score:.3f}, KG: {kg_score:.3f})")
                     except Exception:
                         continue
 

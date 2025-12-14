@@ -147,14 +147,39 @@ def format_detailed_research_process(
                 reg_num = record.get('regulation_number', 'N/A')
                 year = record.get('year', 'N/A')
                 about = record.get('about', 'N/A')
+                enacting_body = record.get('enacting_body', '')
+                effective_date = record.get('effective_date', record.get('tanggal_penetapan', ''))
+
+                # Get article/chapter info
+                chapter = record.get('chapter', record.get('bab', ''))
+                article = record.get('article', record.get('pasal', ''))
+                article_number = record.get('article_number', '')
 
                 final_score = scores.get('final', doc.get('composite_score', 0))
                 semantic = scores.get('semantic', 0)
                 keyword = scores.get('keyword', 0)
                 kg = scores.get('kg', 0)
 
-                lines.append(f"   {i}. {reg_type} No. {reg_num}/{year}")
+                # Build full regulation name
+                if enacting_body:
+                    reg_name = f"{reg_type} {enacting_body} No. {reg_num} Tahun {year}"
+                else:
+                    reg_name = f"{reg_type} No. {reg_num} Tahun {year}"
+
+                lines.append(f"   {i}. {reg_name}")
                 lines.append(f"      About: {about[:100]}...")
+
+                # Add article/chapter if available
+                location_parts = []
+                if chapter:
+                    location_parts.append(f"Bab {chapter}")
+                if article or article_number:
+                    location_parts.append(f"Pasal {article or article_number}")
+                if location_parts:
+                    lines.append(f"      Location: {' > '.join(location_parts)}")
+                if effective_date:
+                    lines.append(f"      Effective Date: {effective_date}")
+
                 lines.append(f"      Scores: Final={final_score:.3f} | Semantic={semantic:.3f} | Keyword={keyword:.3f} | KG={kg:.3f}")
 
                 # Team consensus marker
@@ -198,13 +223,38 @@ def format_detailed_research_process(
             reg_num = record.get('regulation_number', 'N/A')
             year = record.get('year', 'N/A')
             about = record.get('about', 'N/A')
+            enacting_body = record.get('enacting_body', '')
+            effective_date = record.get('effective_date', record.get('tanggal_penetapan', ''))
+
+            # Get article/chapter info
+            chapter = record.get('chapter', record.get('bab', ''))
+            article = record.get('article', record.get('pasal', ''))
+            article_number = record.get('article_number', '')
 
             consensus_score = doc.get('consensus_score', 0)
             agreement = doc.get('researcher_agreement', 0)
             found_by = doc.get('found_by_researchers', [])
 
-            lines.append(f"{i}. {reg_type} No. {reg_num}/{year}")
+            # Build full regulation name
+            if enacting_body:
+                reg_name = f"{reg_type} {enacting_body} No. {reg_num} Tahun {year}"
+            else:
+                reg_name = f"{reg_type} No. {reg_num} Tahun {year}"
+
+            lines.append(f"{i}. {reg_name}")
             lines.append(f"   About: {about[:100]}...")
+
+            # Add article/chapter if available
+            location_parts = []
+            if chapter:
+                location_parts.append(f"Bab {chapter}")
+            if article or article_number:
+                location_parts.append(f"Pasal {article or article_number}")
+            if location_parts:
+                lines.append(f"   Location: {' > '.join(location_parts)}")
+            if effective_date:
+                lines.append(f"   Effective Date: {effective_date}")
+
             lines.append(f"   Consensus Score: {consensus_score:.3f} | Agreement: {agreement:.2f}")
             lines.append(f"   Found by {len(found_by)} researchers: {', '.join(found_by[:3])}{'...' if len(found_by) > 3 else ''}")
             lines.append("")
@@ -231,10 +281,35 @@ def format_detailed_research_process(
             reg_num = doc.get('regulation_number', 'N/A')
             year = doc.get('year', 'N/A')
             about = doc.get('about', 'N/A')
+            enacting_body = doc.get('enacting_body', '')
+            effective_date = doc.get('effective_date', doc.get('tanggal_penetapan', ''))
             score = doc.get('score', doc.get('final_score', 0))
 
-            lines.append(f"{i}. {reg_type} No. {reg_num}/{year}")
+            # Get article/chapter info
+            chapter = doc.get('chapter', doc.get('bab', ''))
+            article = doc.get('article', doc.get('pasal', ''))
+            article_number = doc.get('article_number', '')
+
+            # Build full regulation name
+            if enacting_body:
+                reg_name = f"{reg_type} {enacting_body} No. {reg_num} Tahun {year}"
+            else:
+                reg_name = f"{reg_type} No. {reg_num} Tahun {year}"
+
+            lines.append(f"{i}. {reg_name}")
             lines.append(f"   About: {about}")
+
+            # Add article/chapter if available
+            location_parts = []
+            if chapter:
+                location_parts.append(f"Bab {chapter}")
+            if article or article_number:
+                location_parts.append(f"Pasal {article or article_number}")
+            if location_parts:
+                lines.append(f"   Location: {' > '.join(location_parts)}")
+            if effective_date:
+                lines.append(f"   Effective Date: {effective_date}")
+
             lines.append(f"   Final Score: {score:.4f}")
 
             if show_content:
