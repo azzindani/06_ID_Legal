@@ -442,7 +442,8 @@ class HybridSearchEngine:
     def metadata_first_search(
         self,
         regulation_references: List[Dict[str, Any]],
-        top_k: int = 20
+        top_k: int = 20,
+        query: str = ""
     ) -> List[Dict[str, Any]]:
         """
         Direct metadata search with PERFECT SCORE OVERRIDE for exact matches.
@@ -518,6 +519,9 @@ class HybridSearchEngine:
                 if match_score > 0:
                     seen_ids.add(global_id)
 
+                    # Calculate KG score for better ranking
+                    kg_score = self._calculate_kg_score(record, query) if query else 0.0
+
                     result = {
                         'index': idx,
                         'record': record,
@@ -526,7 +530,10 @@ class HybridSearchEngine:
                             'metadata_match': match_score,
                             'semantic': 0.0,
                             'keyword': 0.0,
-                            'kg': 0.0,
+                            'kg': kg_score,
+                            'authority': 0.0,
+                            'temporal': 0.0,
+                            'completeness': 0.0
                         },
                         'metadata': {
                             'global_id': global_id,

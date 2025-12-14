@@ -35,6 +35,7 @@ from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from logger_utils import get_logger, initialize_logging
+from utils.research_transparency import format_detailed_research_process, format_researcher_summary
 
 
 # Maximum stress test configuration
@@ -382,64 +383,19 @@ class StressTester:
             print("No documents in prompt (check retrieval)")
 
     def print_research_process(self):
-        """Print RESEARCH PROCESS DETAILS"""
+        """Print DETAILED RESEARCH PROCESS with per-researcher tracking"""
         print("\n" + "=" * 100)
-        print("## RESEARCH PROCESS DETAILS (ALL Retrieved Documents)")
+        print("## DETAILED RESEARCH PROCESS")
         print("=" * 100)
-        print("All documents retrieved during research process - for audit and verification.")
-        print()
 
-        research_log = self.results.get('research_log', {})
-        phase_metadata = self.results.get('phase_metadata', {})
-
-        # Team members
-        team_members = research_log.get('team_members', [])
-        if team_members:
-            print("### Research Team")
-            print(f"Team Size: {len(team_members)}")
-            for member in team_members:
-                if isinstance(member, dict):
-                    print(f"   - {member.get('name', member.get('persona', 'Unknown'))}")
-                else:
-                    print(f"   - {member}")
-        elif phase_metadata:
-            unique_researchers = set()
-            for phase_key, phase_data in phase_metadata.items():
-                if isinstance(phase_data, dict):
-                    researcher = phase_data.get('researcher_name', phase_data.get('researcher', ''))
-                    if researcher:
-                        unique_researchers.add(researcher)
-            if unique_researchers:
-                print("### Research Team")
-                print(f"Team Size: {len(unique_researchers)}")
-                for member in unique_researchers:
-                    print(f"   - {member}")
-
-        # Summary Statistics
-        total_docs = research_log.get('total_documents_retrieved', 0)
-        all_documents = self._extract_all_documents(max_docs=50)
-        if not total_docs:
-            total_docs = len(all_documents)
-
-        print(f"\n### Summary Statistics")
-        print(f"Total Documents Retrieved: {total_docs}")
-        print(f"Total Phases: {len(phase_metadata)}")
-
-        # Phase breakdown
-        if phase_metadata:
-            print(f"\n### Phase Breakdown")
-            print("-" * 80)
-            for phase_key, phase_data in phase_metadata.items():
-                if isinstance(phase_data, dict):
-                    phase_name = phase_data.get('phase', phase_key)
-                    researcher = phase_data.get('researcher_name', phase_data.get('researcher', 'Unknown'))
-                    candidates = phase_data.get('candidates', phase_data.get('results', []))
-                    confidence = phase_data.get('confidence', 1.0)
-
-                    print(f"\n   Phase: {phase_name}")
-                    print(f"   Researcher: {researcher}")
-                    print(f"   Documents: {len(candidates)}")
-                    print(f"   Confidence: {confidence:.2%}")
+        # Use new detailed research transparency formatter
+        detailed_research = format_detailed_research_process(
+            self.results,
+            top_n_per_researcher=15,  # Show top 15 per researcher for stress test
+            show_content=False  # Don't show content (too verbose)
+        )
+        print(detailed_research)
+        # All detailed stats now handled by format_detailed_research_process()
 
     def print_all_documents(self):
         """Print ALL Retrieved Documents (Article-Level Details) - Top 50"""

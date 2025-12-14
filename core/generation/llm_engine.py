@@ -488,39 +488,7 @@ class LLMEngine:
                 'done': True,
                 'success': False
             }
-    
-    def _top_k_top_p_filtering(
-        self,
-        logits: torch.Tensor,
-        top_k: int = 0,
-        top_p: float = 1.0,
-        filter_value: float = -float('Inf')
-    ) -> torch.Tensor:
-        """Apply top-k and top-p filtering to logits"""
-        
-        if top_k > 0:
-            # Remove tokens with rank < top_k
-            indices_to_remove = logits < torch.topk(logits, top_k)[0][..., -1, None]
-            logits[indices_to_remove] = filter_value
-        
-        if top_p < 1.0:
-            sorted_logits, sorted_indices = torch.sort(logits, descending=True)
-            cumulative_probs = torch.cumsum(torch.softmax(sorted_logits, dim=-1), dim=-1)
-            
-            # Remove tokens with cumulative probability > top_p
-            sorted_indices_to_remove = cumulative_probs > top_p
-            sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
-            sorted_indices_to_remove[..., 0] = 0
-            
-            indices_to_remove = sorted_indices_to_remove.scatter(
-                dim=1,
-                index=sorted_indices,
-                src=sorted_indices_to_remove
-            )
-            logits[indices_to_remove] = filter_value
-        
-        return logits
-    
+
     def unload_model(self):
         """Unload model to free memory"""
         self.logger.info("Unloading LLM model")

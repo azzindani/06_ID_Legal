@@ -188,7 +188,8 @@ class LangGraphRAGOrchestrator:
                 # Perform metadata-first search for exact matches
                 metadata_results = self.hybrid_search.metadata_first_search(
                     regulation_references=reg_refs,
-                    top_k=20
+                    top_k=20,
+                    query=query
                 )
 
                 self.logger.info("Metadata-first search completed", {
