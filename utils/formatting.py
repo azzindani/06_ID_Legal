@@ -39,8 +39,8 @@ def format_sources_info(results: List[Dict], config_dict: Dict) -> str:
         # No duplicate header - header is in collapsible summary
         output = [f"**Documents Used in Prompt: {len(results)}**"]
         output.append("")
-        output.append("These are the final selected documents sent to the LLM for answer generation.")
-        output.append("")
+        #output.append("These are the final selected documents sent to the LLM for answer generation.")
+        #output.append("")
 
         for i, result in enumerate(results, 1):
             try:
@@ -92,7 +92,7 @@ def format_sources_info(results: List[Dict], config_dict: Dict) -> str:
                     location_parts.append(f"{paragraph}")
 
                 if location_parts:
-                    output.append(f"- **Lokasi:** {' > '.join(location_parts)}")
+                    output.append(f"- **Lokasi:** {' | '.join(location_parts)}")
                 else:
                     output.append(f"- **Lokasi:** (Dokumen Lengkap)")
 
@@ -152,12 +152,14 @@ def format_sources_info(results: List[Dict], config_dict: Dict) -> str:
                     output.append(f"- **Isi (preview):** {content_preview}...")
 
                 output.append("")
-                output.append("-" * 80)
 
             except Exception as e:
                 output.append(f"Error formatting source {i}: {e}")
                 continue
 
+        output.append("-" * 80)
+        output.append("")
+        
         return "\n".join(output)
     except Exception as e:
         return f"Error formatting sources: {e}"
@@ -356,7 +358,7 @@ def format_all_documents(metadata: Dict, max_docs: int = 50) -> str:
                 location_parts.append(f"{paragraph}")
 
             if location_parts:
-                output.append(f"- Location: {' > '.join(location_parts)}")
+                output.append(f"- Location: {' | '.join(location_parts)}")
             else:
                 output.append(f"- Location: (Full Document)")
 
@@ -538,4 +540,5 @@ def final_selection_with_kg(candidates: List[Dict], query_type: str, config_dict
     )
 
     return sorted_candidates[:top_k]
+
 
