@@ -41,8 +41,7 @@ def format_detailed_research_process(
     """
     lines = []
 
-    lines.append("\n## 📊 DETAILED RESEARCH PROCESS")
-    lines.append("=" * 100)
+    lines.append("-" * 100)
     lines.append("Step-by-step tracking of document discovery, evaluation, and selection")
     lines.append("")
 
@@ -317,4 +316,5 @@ def format_researcher_summary(phase_metadata: Dict[str, Any]) -> str:
         lines.append(f"   - {name}: {count} docs ({percentage:.1f}%)")
 
     return '\n'.join(lines)
+
 
