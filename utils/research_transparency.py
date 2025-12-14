@@ -41,9 +41,9 @@ def format_detailed_research_process(
     """
     lines = []
 
-    lines.append("-" * 100)
-    lines.append("Step-by-step tracking of document discovery, evaluation, and selection")
-    lines.append("")
+    #lines.append("-" * 100)
+    #lines.append("Step-by-step tracking of document discovery, evaluation, and selection")
+    #lines.append("")
 
     # Extract data
     research_data = result.get('research_data', {})
@@ -58,8 +58,9 @@ def format_detailed_research_process(
     # ============================================================================
     # STEP 1: RESEARCH TEAM
     # ============================================================================
+    lines.append("")
     lines.append("### 👥 STEP 1: Research Team Assembly")
-    lines.append("-" * 80)
+    #lines.append("-" * 80)
 
     # Extract unique researchers
     researchers = set()
@@ -84,16 +85,18 @@ def format_detailed_research_process(
         lines.append(f"   - **{name}**")
         lines.append(f"     Expertise: {expertise}")
 
-    lines.append("")
+    #lines.append("")
+    lines.append("-" * 80)
 
     # ============================================================================
     # STEP 2: INDIVIDUAL RESEARCHER FINDINGS
     # ============================================================================
-    lines.append("### 🔍 STEP 2: Individual Researcher Findings")
-    lines.append("-" * 80)
-    lines.append(f"Each researcher independently searches from their unique perspective.")
-    lines.append(f"Showing top {top_n_per_researcher} documents per researcher.")
     lines.append("")
+    lines.append("### 🔍 STEP 2: Individual Researcher Findings")
+    #lines.append("-" * 80)
+    #lines.append(f"Each researcher independently searches from their unique perspective.")
+    #lines.append(f"Showing top {top_n_per_researcher} documents per researcher.")
+    #lines.append("")
 
     # Group by researcher
     researcher_findings = {}
@@ -197,15 +200,15 @@ def format_detailed_research_process(
             lines.append("")
 
         lines.append("-" * 80)
-        lines.append("")
 
     # ============================================================================
     # STEP 3: CONSENSUS BUILDING
     # ============================================================================
-    lines.append("### 🤝 STEP 3: Team Consensus & Cross-Validation")
-    lines.append("-" * 80)
-    lines.append("Documents validated through team agreement and cross-validation.")
     lines.append("")
+    lines.append("### 🤝 STEP 3: Team Consensus & Cross-Validation")
+    #lines.append("-" * 80)
+    #lines.append("Documents validated through team agreement and cross-validation.")
+    #lines.append("")
 
     if consensus_data:
         consensus_results = consensus_data.get('consensus_results', [])
@@ -265,15 +268,17 @@ def format_detailed_research_process(
     else:
         lines.append("⚠️  No consensus data available")
 
-    lines.append("")
+    #lines.append("")
+    lines.append("-" * 80)
 
     # ============================================================================
     # STEP 4: RERANKING & FINAL SELECTION
     # ============================================================================
-    lines.append("### 🎯 STEP 4: Reranking & Final Selection")
-    lines.append("-" * 80)
-    lines.append("Final reranking using cross-encoder to select most relevant documents.")
     lines.append("")
+    lines.append("### 🎯 STEP 4: Reranking & Final Selection")
+    #lines.append("-" * 80)
+    #lines.append("Final reranking using cross-encoder to select most relevant documents.")
+    #lines.append("")
 
     if final_results:
         lines.append(f"**Final Documents Selected:** {len(final_results)}")
@@ -326,13 +331,15 @@ def format_detailed_research_process(
     else:
         lines.append("⚠️  No final results available")
 
-    lines.append("")
+    lines.append("-" * 80)
+    #lines.append("")
 
     # ============================================================================
     # STEP 5: SUMMARY STATISTICS
     # ============================================================================
+    lines.append("")
     lines.append("### 📈 STEP 5: Summary Statistics")
-    lines.append("-" * 80)
+    #lines.append("-" * 80)
 
     # Calculate stats
     total_retrieved = sum(f['total_documents'] for f in researcher_findings.values())
@@ -396,6 +403,7 @@ def format_researcher_summary(phase_metadata: Dict[str, Any]) -> str:
         lines.append(f"   - {name}: {count} docs ({percentage:.1f}%)")
 
     return '\n'.join(lines)
+
 
 
 
