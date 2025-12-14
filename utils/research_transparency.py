@@ -179,13 +179,13 @@ def format_detailed_research_process(
                 if article or article_number:
                     location_parts.append(f"Pasal {article or article_number}")
                 if location_parts:
-                    lines.append(f"      Location: {' > '.join(location_parts)}")
+                    lines.append(f"      Location: {' | '.join(location_parts)}")
 
                 # Only show effective date if it exists and is not N/A
                 if effective_date and effective_date != 'N/A':
                     lines.append(f"      Effective Date: {effective_date}")
 
-                lines.append(f"      Scores: Final={final_score:.3f} | Semantic={semantic:.3f} | Keyword={keyword:.3f} | KG={kg:.3f}")
+                lines.append(f"      Scores: Final: {final_score:.3f} | Semantic: {semantic:.3f} | Keyword: {keyword:.3f} | KG: {kg:.3f}")
 
                 # Team consensus marker
                 if doc.get('team_consensus'):
@@ -315,7 +315,7 @@ def format_detailed_research_process(
             if article or article_number:
                 location_parts.append(f"Pasal {article or article_number}")
             if location_parts:
-                lines.append(f"   Location: {' > '.join(location_parts)}")
+                lines.append(f"   Location: {' | '.join(location_parts)}")
 
             # Only show effective date if it exists and is not N/A
             if effective_date and effective_date != 'N/A':
@@ -403,6 +403,7 @@ def format_researcher_summary(phase_metadata: Dict[str, Any]) -> str:
         lines.append(f"   - {name}: {count} docs ({percentage:.1f}%)")
 
     return '\n'.join(lines)
+
 
 
 
