@@ -171,6 +171,16 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
         streamed_answer = ""
         result = None
 
+        # Streaming state tracking for <think> tags
+        thinking_content = []
+        final_answer = []
+        live_output = []
+        in_thinking_block = False
+        saw_think_tag = False
+        thinking_header_shown = False
+        accumulated_text = ''
+        last_chunk_text = ''
+
         def add_progress(msg):
             """Helper to add progress updates in Gradio 6.x message format"""
             current_progress.append(msg)
@@ -198,17 +208,61 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                 yield add_progress("Query analysis complete"), ""
 
             elif event_type == 'streaming_chunk':
-                # Accumulate streamed text
+                # Get new text chunk
                 streamed_answer = data['accumulated']
                 chunk_count = data['chunk_count']
 
-                # Build streaming display
+                # Extract new text since last chunk
+                new_text = streamed_answer[len(accumulated_text):]
+                accumulated_text = streamed_answer
+
+                # Build progress header
                 progress_header = '<details open><summary>📋 <b>Proses Penelitian</b></summary>\n\n'
                 progress_header += "\n".join([f"🔄 {m}" for m in current_progress])
-                progress_header += '\n</details>\n\n'
+                progress_header += '\n</details>\n\n---\n\n'
 
-                display_text = progress_header + f"🧠 **Sedang berfikir...**\n\n{streamed_answer}"
+                # Process <think> tags in new text
+                if '<think>' in new_text:
+                    in_thinking_block = True
+                    saw_think_tag = True
+                    new_text = new_text.replace('<think>', '')
+                    if not thinking_header_shown and show_thinking:
+                        live_output = [progress_header, '🧠 **Sedang berfikir...**\n\n']
+                        thinking_header_shown = True
 
+                if '</think>' in new_text:
+                    in_thinking_block = False
+                    new_text = new_text.replace('</think>', '')
+                    if show_thinking:
+                        live_output.append('\n\n---\n\n✅ **Sedang menjawab...**\n\n')
+
+                # Accumulate content based on current state
+                if saw_think_tag:
+                    if in_thinking_block:
+                        thinking_content.append(new_text)
+                        if show_thinking:
+                            live_output.append(new_text)
+                    else:
+                        final_answer.append(new_text)
+                        live_output.append(new_text)
+                else:
+                    # No think tags detected yet
+                    if len(accumulated_text) > 20 and not saw_think_tag:
+                        # Likely direct answer without thinking
+                        if not thinking_header_shown:
+                            live_output = [progress_header, '⭐ **Jawaban langsung:**\n\n']
+                            thinking_header_shown = True
+                        final_answer.append(new_text)
+                        live_output.append(new_text)
+                    else:
+                        # Still waiting to see if think tag appears
+                        if not thinking_header_shown:
+                            live_output = [progress_header, f"🤖 Generating response...\n\n{new_text}"]
+                        else:
+                            live_output.append(new_text)
+
+                # Yield current state
+                display_text = ''.join(live_output)
                 yield history + [
                     {"role": "user", "content": message},
                     {"role": "assistant", "content": display_text}
@@ -234,25 +288,33 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
         # Format final output
         if result:
             final_output = ""
-            response_text = result.get('answer', streamed_answer)
 
-            # Get thinking content from result field first, then try parsing from answer
-            thinking_content = result.get('thinking', '')
-            if not thinking_content:
-                thinking_content, response_text = parse_think_tags(response_text)
+            # Use streamed content if available, otherwise parse from result
+            if final_answer:
+                response_text = ''.join(final_answer).strip()
+            else:
+                response_text = result.get('answer', streamed_answer)
+                # If no streaming occurred, parse think tags from answer
+                if not thinking_content:
+                    parsed_thinking, response_text = parse_think_tags(response_text)
+                    if parsed_thinking:
+                        thinking_content = [parsed_thinking]
+
+            # Get thinking text
+            thinking_text = ''.join(thinking_content).strip() if thinking_content else result.get('thinking', '')
 
             # Add research process summary (what was done)
             if current_progress:
-                final_output += '<details open><summary>📋 <b>Proses yang Sudah Dilakukan</b></summary>\n\n'
+                final_output += '<details><summary>📋 <b>Proses yang Sudah Dilakukan</b></summary>\n\n'
                 for msg in current_progress:
                     final_output += f"✅ {msg}\n"
                 final_output += '\n</details>\n\n---\n\n'
 
             # Add thinking section if available
-            if show_thinking and thinking_content:
+            if show_thinking and thinking_text:
                 final_output += (
                     '<details><summary>🧠 <b>Proses Berpikir</b></summary>\n\n'
-                    + thinking_content +
+                    + thinking_text +
                     '\n</details>\n\n'
                     + '---\n\n✅ **Jawaban:**\n\n'
                     + response_text
