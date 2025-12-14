@@ -160,8 +160,8 @@ def format_detailed_research_process(
                 keyword = scores.get('keyword', 0)
                 kg = scores.get('kg', 0)
 
-                # Build full regulation name
-                if enacting_body:
+                # Build full regulation name - skip N/A enacting_body
+                if enacting_body and enacting_body != 'N/A':
                     reg_name = f"{reg_type} {enacting_body} No. {reg_num} Tahun {year}"
                 else:
                     reg_name = f"{reg_type} No. {reg_num} Tahun {year}"
@@ -177,7 +177,9 @@ def format_detailed_research_process(
                     location_parts.append(f"Pasal {article or article_number}")
                 if location_parts:
                     lines.append(f"      Location: {' > '.join(location_parts)}")
-                if effective_date:
+
+                # Only show effective date if it exists and is not N/A
+                if effective_date and effective_date != 'N/A':
                     lines.append(f"      Effective Date: {effective_date}")
 
                 lines.append(f"      Scores: Final={final_score:.3f} | Semantic={semantic:.3f} | Keyword={keyword:.3f} | KG={kg:.3f}")
@@ -235,8 +237,8 @@ def format_detailed_research_process(
             agreement = doc.get('researcher_agreement', 0)
             found_by = doc.get('found_by_researchers', [])
 
-            # Build full regulation name
-            if enacting_body:
+            # Build full regulation name - skip N/A enacting_body
+            if enacting_body and enacting_body != 'N/A':
                 reg_name = f"{reg_type} {enacting_body} No. {reg_num} Tahun {year}"
             else:
                 reg_name = f"{reg_type} No. {reg_num} Tahun {year}"
@@ -252,7 +254,9 @@ def format_detailed_research_process(
                 location_parts.append(f"Pasal {article or article_number}")
             if location_parts:
                 lines.append(f"   Location: {' > '.join(location_parts)}")
-            if effective_date:
+
+            # Only show effective date if it exists and is not N/A
+            if effective_date and effective_date != 'N/A':
                 lines.append(f"   Effective Date: {effective_date}")
 
             lines.append(f"   Consensus Score: {consensus_score:.3f} | Agreement: {agreement:.2f}")
@@ -290,8 +294,8 @@ def format_detailed_research_process(
             article = doc.get('article', doc.get('pasal', ''))
             article_number = doc.get('article_number', '')
 
-            # Build full regulation name
-            if enacting_body:
+            # Build full regulation name - skip N/A enacting_body
+            if enacting_body and enacting_body != 'N/A':
                 reg_name = f"{reg_type} {enacting_body} No. {reg_num} Tahun {year}"
             else:
                 reg_name = f"{reg_type} No. {reg_num} Tahun {year}"
@@ -307,7 +311,9 @@ def format_detailed_research_process(
                 location_parts.append(f"Pasal {article or article_number}")
             if location_parts:
                 lines.append(f"   Location: {' > '.join(location_parts)}")
-            if effective_date:
+
+            # Only show effective date if it exists and is not N/A
+            if effective_date and effective_date != 'N/A':
                 lines.append(f"   Effective Date: {effective_date}")
 
             lines.append(f"   Final Score: {score:.4f}")

@@ -50,17 +50,26 @@ def format_sources_info(results: List[Dict], config_dict: Dict) -> str:
                 reg_num = record.get('regulation_number', 'N/A')
                 year = record.get('year', 'N/A')
                 about = record.get('about', 'N/A')
-                enacting_body = record.get('enacting_body', 'N/A')
-                global_id = record.get('global_id', 'N/A')
-                effective_date = record.get('effective_date', record.get('tanggal_penetapan', 'N/A'))
+                enacting_body = record.get('enacting_body', '')
+                global_id = record.get('global_id', '')
+                effective_date = record.get('effective_date', record.get('tanggal_penetapan', ''))
 
-                # Combine regulation type + enacting body + number + year
-                regulation_full_name = f"{reg_type} {enacting_body} No. {reg_num} Tahun {year}"
+                # Build regulation full name - skip N/A enacting_body
+                if enacting_body and enacting_body != 'N/A':
+                    regulation_full_name = f"{reg_type} {enacting_body} No. {reg_num} Tahun {year}"
+                else:
+                    regulation_full_name = f"{reg_type} No. {reg_num} Tahun {year}"
 
                 output.append(f"### {i}. {regulation_full_name}")
-                output.append(f"- **Global ID:** {global_id}")
+
+                # Only show Global ID if it exists and is not N/A
+                if global_id and global_id != 'N/A':
+                    output.append(f"- **Global ID:** {global_id}")
+
                 output.append(f"- **Tentang:** {about}")
-                if effective_date != 'N/A':
+
+                # Only show effective date if it exists and is not N/A
+                if effective_date and effective_date != 'N/A':
                     output.append(f"- **Tanggal Penetapan:** {effective_date}")
 
                 # Article/Chapter location - MORE PROMINENT
@@ -285,9 +294,9 @@ def format_all_documents(metadata: Dict, max_docs: int = 50) -> str:
             reg_num = record.get('regulation_number', 'N/A')
             year = record.get('year', 'N/A')
             about = record.get('about', 'N/A')
-            enacting_body = record.get('enacting_body', 'N/A')
-            global_id = record.get('global_id', 'N/A')
-            effective_date = record.get('effective_date', record.get('tanggal_penetapan', 'N/A'))
+            enacting_body = record.get('enacting_body', '')
+            global_id = record.get('global_id', '')
+            effective_date = record.get('effective_date', record.get('tanggal_penetapan', ''))
 
             # Scores
             final_score = scores.get('final', doc.get('final_score', doc.get('composite_score', record.get('score', 0))))
@@ -314,13 +323,22 @@ def format_all_documents(metadata: Dict, max_docs: int = 50) -> str:
             phase = doc.get('_phase', '')
             researcher = doc.get('_researcher', '')
 
-            # Combined regulation full name
-            regulation_full_name = f"{reg_type} {enacting_body} No. {reg_num} Tahun {year}"
+            # Build regulation full name - skip N/A enacting_body
+            if enacting_body and enacting_body != 'N/A':
+                regulation_full_name = f"{reg_type} {enacting_body} No. {reg_num} Tahun {year}"
+            else:
+                regulation_full_name = f"{reg_type} No. {reg_num} Tahun {year}"
 
             output.append(f"**[{i}] {regulation_full_name}**")
-            output.append(f"- Global ID: {global_id}")
+
+            # Only show Global ID if it exists and is not N/A
+            if global_id and global_id != 'N/A':
+                output.append(f"- Global ID: {global_id}")
+
             output.append(f"- About: {about}")
-            if effective_date != 'N/A':
+
+            # Only show effective date if it exists and is not N/A
+            if effective_date and effective_date != 'N/A':
                 output.append(f"- Effective Date: {effective_date}")
 
             # Article-level location
