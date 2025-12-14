@@ -175,9 +175,9 @@ def format_detailed_research_process(
                 # Add article/chapter if available
                 location_parts = []
                 if chapter:
-                    location_parts.append(f"Bab {chapter}")
+                    location_parts.append(f"{chapter}")
                 if article or article_number:
-                    location_parts.append(f"Pasal {article or article_number}")
+                    location_parts.append(f"{article or article_number}")
                 if location_parts:
                     lines.append(f"      Location: {' | '.join(location_parts)}")
 
@@ -252,9 +252,9 @@ def format_detailed_research_process(
             # Add article/chapter if available
             location_parts = []
             if chapter:
-                location_parts.append(f"Bab {chapter}")
+                location_parts.append(f"{chapter}")
             if article or article_number:
-                location_parts.append(f"Pasal {article or article_number}")
+                location_parts.append(f"{article or article_number}")
             if location_parts:
                 lines.append(f"   Location: {' > '.join(location_parts)}")
 
@@ -311,9 +311,9 @@ def format_detailed_research_process(
             # Add article/chapter if available
             location_parts = []
             if chapter:
-                location_parts.append(f"Bab {chapter}")
+                location_parts.append(f"{chapter}")
             if article or article_number:
-                location_parts.append(f"Pasal {article or article_number}")
+                location_parts.append(f"{article or article_number}")
             if location_parts:
                 lines.append(f"   Location: {' | '.join(location_parts)}")
 
@@ -403,6 +403,7 @@ def format_researcher_summary(phase_metadata: Dict[str, Any]) -> str:
         lines.append(f"   - {name}: {count} docs ({percentage:.1f}%)")
 
     return '\n'.join(lines)
+
 
 
 
