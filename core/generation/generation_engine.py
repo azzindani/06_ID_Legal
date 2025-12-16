@@ -106,9 +106,15 @@ class GenerationEngine:
                 "prompt_length": len(prompt)
             })
 
-            # For test transparency: store complete prompt in config if enabled
-            if self.config.get('store_complete_prompt', False):
-                self.logger.info("Storing complete prompt for transparency")
+            # Print complete prompt for test transparency
+            print("\n" + "=" * 100)
+            print("COMPLETE LLM INPUT PROMPT (FULL TRANSPARENCY)")
+            print("=" * 100)
+            print(f"Character Count: {len(prompt):,}")
+            print("-" * 100)
+            print(prompt)
+            print("-" * 100)
+            print()
 
             # Step 3: Generate response
             if stream:
