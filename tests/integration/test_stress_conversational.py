@@ -238,12 +238,13 @@ MODERATE_CONFIG_CONV = {
 class ConversationalStressTester:
     """Multi-turn conversation stress test with maximum settings"""
 
-    def __init__(self, quick_mode: bool = False, verbose: bool = False, memory_profile: bool = False):
+    def __init__(self, quick_mode: bool = False, verbose: bool = False, memory_profile: bool = False, thinking_mode: str = 'low'):
         initialize_logging()
         self.logger = get_logger("ConvStressTest")
         self.quick_mode = quick_mode
         self.verbose = verbose
         self.memory_profile = memory_profile
+        self.thinking_mode = thinking_mode
 
         # Select config based on mode
         self.config = MODERATE_CONFIG_CONV.copy() if quick_mode else STRESS_CONFIG_CONV.copy()
@@ -373,7 +374,7 @@ class ConversationalStressTester:
             chunk_count = 0
             result = None
 
-            for chunk in self.pipeline.query(query, conversation_history=context, stream=True):
+            for chunk in self.pipeline.query(query, conversation_history=context, stream=True, thinking_mode=self.thinking_mode):
                 # Handle different chunk types
                 if not isinstance(chunk, dict):
                     # Safety check: if chunk is not a dict, log and skip
@@ -1040,13 +1041,29 @@ def main():
     parser.add_argument('--memory', action='store_true', help='Enable memory profiling')
     parser.add_argument('--export', action='store_true', help='Export results to JSON')
     parser.add_argument('--output', type=str, help='Output file path for export')
+
+    # Add thinking mode arguments (mutually exclusive)
+    thinking_group = parser.add_mutually_exclusive_group()
+    thinking_group.add_argument('--low', action='store_const', const='low', dest='thinking_mode',
+                               help='Low thinking mode (2048-4096 tokens, basic analysis)')
+    thinking_group.add_argument('--medium', action='store_const', const='medium', dest='thinking_mode',
+                               help='Medium thinking mode (4096-8192 tokens, deep thinking)')
+    thinking_group.add_argument('--high', action='store_const', const='high', dest='thinking_mode',
+                               help='High thinking mode (8192-16384 tokens, iterative & recursive)')
+    parser.set_defaults(thinking_mode='low')
+
     args = parser.parse_args()
+
+    print(f"\n{'=' * 80}")
+    print(f"THINKING MODE: {args.thinking_mode.upper()}")
+    print(f"{'=' * 80}\n")
 
     # Create tester
     tester = ConversationalStressTester(
         quick_mode=args.quick,
         verbose=args.verbose,
-        memory_profile=args.memory
+        memory_profile=args.memory,
+        thinking_mode=args.thinking_mode
     )
 
     # Print header
