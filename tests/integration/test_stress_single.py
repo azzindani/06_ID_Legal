@@ -276,6 +276,8 @@ class StressTester:
                 self.results['research_log'] = result.get('research_log', {})
                 self.results['consensus_data'] = result.get('consensus_data', {})
                 self.results['research_data'] = result.get('research_data', {})
+                # Store complete prompt for transparency
+                self.results['complete_prompt'] = result.get('complete_prompt', '')
 
             return self.results
 
@@ -346,6 +348,21 @@ class StressTester:
                         return all_docs
 
         return all_docs
+
+    def print_complete_prompt(self):
+        """Print COMPLETE LLM INPUT PROMPT (FULL TRANSPARENCY)"""
+        complete_prompt = self.results.get('complete_prompt', '')
+
+        if not complete_prompt:
+            return
+
+        print("\n" + "=" * 100)
+        print("## COMPLETE LLM INPUT PROMPT (FULL TRANSPARENCY)")
+        print("=" * 100)
+        print(f"Character Count: {len(complete_prompt):,}")
+        print("-" * 100)
+        print(complete_prompt)
+        print("-" * 100)
 
     def print_legal_references(self):
         """Print LEGAL REFERENCES (Top K Documents Used in LLM Prompt)"""
@@ -509,6 +526,7 @@ class StressTester:
                 print(f"  Peak: {mem.get('peak_mb', 0):.2f} MB")
 
             # Print detailed sections
+            self.print_complete_prompt()
             self.print_legal_references()
             self.print_research_process()
             self.print_all_documents()

@@ -324,6 +324,39 @@ class ConversationalTester:
                 lines.append(f"│ Recent topics: {prev_topics:<79} │")
             lines.append(f"└{'─' * 98}┘")
 
+        # Complete Prompt - FULL TRANSPARENCY
+        complete_prompt = metadata.get('complete_prompt', '')
+        if complete_prompt:
+            lines.append(f"\n┌{'─' * 98}┐")
+            lines.append(f"│ COMPLETE LLM INPUT PROMPT (FULL TRANSPARENCY)                                                │")
+            lines.append(f"├{'─' * 98}┤")
+            lines.append(f"│ Character Count: {len(complete_prompt):,:<83} │")
+            lines.append(f"├{'─' * 98}┤")
+
+            # Get conversation history from metadata if available
+            conv_history = metadata.get('conversation_history', [])
+            if conv_history and turn_num > 1:
+                lines.append(f"│ CONVERSATION HISTORY ({len(conv_history)} turns):                                                         │")
+                for idx, turn in enumerate(conv_history[:3], 1):
+                    role = turn.get('role', 'unknown')
+                    content = turn.get('content', '')[:85]
+                    lines.append(f"│   Turn {idx} [{role}]: {content:<80}... │")
+                if len(conv_history) > 3:
+                    lines.append(f"│   ... and {len(conv_history)-3} more turns                                                              │")
+                lines.append(f"├{'─' * 98}┤")
+
+            lines.append(f"│ FULL PROMPT:                                                                                 │")
+            # Display first 10 lines of prompt
+            prompt_lines = complete_prompt.split('\n')[:10]
+            for pline in prompt_lines:
+                for i in range(0, len(pline), 94):
+                    chunk = pline[i:i+94]
+                    lines.append(f"│ {chunk:<96} │")
+            if len(complete_prompt.split('\n')) > 10:
+                remaining = len(complete_prompt.split('\n')) - 10
+                lines.append(f"│ ... [{remaining} more lines - full prompt stored in result]                                        │")
+            lines.append(f"└{'─' * 98}┘")
+
         # Timing
         lines.append(f"\n┌{'─' * 98}┐")
         lines.append(f"│ PERFORMANCE                                                                                  │")
@@ -419,6 +452,9 @@ class ConversationalTester:
                     # Final result with all metadata
                     final_metadata = data
                     full_answer = data.get('answer', full_answer)
+                    # Store complete prompt for transparency
+                    if 'complete_prompt' not in final_metadata and 'metadata' in data:
+                        final_metadata['complete_prompt'] = data['metadata'].get('complete_prompt', '')
                     break
 
                 elif event_type == 'error':

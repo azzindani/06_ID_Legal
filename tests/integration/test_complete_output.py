@@ -89,6 +89,16 @@ class CompleteOutputTester:
             lines.append("-" * 80)
             lines.append(thinking)
 
+        # Complete Prompt - FULL TRANSPARENCY
+        complete_prompt = metadata.get('complete_prompt', '')
+        if complete_prompt:
+            lines.append(f"\n## COMPLETE LLM INPUT PROMPT (FULL TRANSPARENCY)")
+            lines.append("=" * 100)
+            lines.append(f"Character Count: {len(complete_prompt):,}")
+            lines.append("-" * 80)
+            lines.append(complete_prompt)
+            lines.append("-" * 80)
+
         # Answer (already streamed, show final)
         lines.append(f"\n## ANSWER")
         lines.append("-" * 80)
@@ -389,9 +399,12 @@ class CompleteOutputTester:
                     research_log = chunk.get('research_log', {})
                     sources = chunk.get('sources', [])
                     citations = chunk.get('citations', [])
+                    # Store complete prompt for transparency
+                    complete_prompt = chunk.get('complete_prompt', '')
                     # Also include consensus and research data
                     final_metadata['consensus_data'] = chunk.get('consensus_data', {})
                     final_metadata['research_data'] = chunk.get('research_data', {})
+                    final_metadata['complete_prompt'] = complete_prompt
 
                 elif chunk_type == 'error':
                     error_msg = chunk.get('error', 'Unknown error')
