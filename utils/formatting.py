@@ -157,9 +157,9 @@ def format_sources_info(results: List[Dict], config_dict: Dict) -> str:
                 output.append(f"Error formatting source {i}: {e}")
                 continue
 
-        output.append("-" * 80)
+        output.append("---")
         output.append("")
-        
+
         return "\n".join(output)
     except Exception as e:
         return f"Error formatting sources: {e}"

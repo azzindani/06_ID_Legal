@@ -86,7 +86,7 @@ def format_detailed_research_process(
         lines.append(f"     Expertise: {expertise}")
 
     #lines.append("")
-    lines.append("-" * 80)
+    lines.append("---")
 
     # ============================================================================
     # STEP 2: INDIVIDUAL RESEARCHER FINDINGS
@@ -199,7 +199,7 @@ def format_detailed_research_process(
 
             lines.append("")
 
-        lines.append("-" * 80)
+        lines.append("---")
 
     # ============================================================================
     # STEP 3: CONSENSUS BUILDING
@@ -269,7 +269,7 @@ def format_detailed_research_process(
         lines.append("⚠️  No consensus data available")
 
     #lines.append("")
-    lines.append("-" * 80)
+    lines.append("---")
 
     # ============================================================================
     # STEP 4: RERANKING & FINAL SELECTION
@@ -331,7 +331,7 @@ def format_detailed_research_process(
     else:
         lines.append("⚠️  No final results available")
 
-    lines.append("-" * 80)
+    lines.append("---")
     #lines.append("")
 
     # ============================================================================
