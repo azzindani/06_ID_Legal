@@ -8,6 +8,7 @@ File: core/generation/prompt_builder.py
 from typing import Dict, Any, List, Optional
 from logger_utils import get_logger
 from config import SYSTEM_PROMPT
+from core.generation.thinking_pipeline import ThinkingPipeline
 
 
 class PromptBuilder:
@@ -19,10 +20,14 @@ class PromptBuilder:
     def __init__(self, config: Dict[str, Any]):
         self.logger = get_logger("PromptBuilder")
         self.config = config
-        
+
         # System prompt from config
         self.system_prompt = config.get('system_prompt', SYSTEM_PROMPT)
-        
+
+        # Initialize thinking pipeline
+        self.thinking_pipeline = ThinkingPipeline()
+        self.enable_thinking_pipeline = config.get('enable_thinking_pipeline', True)
+
         # Prompt templates
         self.templates = {
             'rag_qa': self._get_rag_qa_template(),
@@ -31,9 +36,10 @@ class PromptBuilder:
             'procedural': self._get_procedural_template(),
             'comparison': self._get_comparison_template()
         }
-        
+
         self.logger.info("PromptBuilder initialized", {
-            "templates": len(self.templates)
+            "templates": len(self.templates),
+            "thinking_pipeline": self.enable_thinking_pipeline
         })
     
     def build_prompt(
@@ -42,51 +48,72 @@ class PromptBuilder:
         retrieved_results: List[Dict[str, Any]],
         query_analysis: Optional[Dict[str, Any]] = None,
         conversation_history: Optional[List[Dict[str, str]]] = None,
-        template_type: str = 'rag_qa'
+        template_type: str = 'rag_qa',
+        thinking_mode: str = 'low'
     ) -> str:
         """
         Build complete prompt with system instructions, context, and query
-        
+
         Args:
             query: User query
             retrieved_results: Retrieved and ranked documents
             query_analysis: Optional query analysis from QueryDetector
             conversation_history: Optional conversation context
             template_type: Type of prompt template to use
-            
+            thinking_mode: Thinking mode ('low', 'medium', 'high')
+
         Returns:
             Complete formatted prompt
         """
         self.logger.info("Building prompt", {
             "query_length": len(query),
             "num_results": len(retrieved_results),
-            "template": template_type
+            "template": template_type,
+            "thinking_mode": thinking_mode
         })
-        
+
+        # Get thinking instructions if enabled
+        thinking_instructions = ""
+        if self.enable_thinking_pipeline:
+            thinking_config = self.thinking_pipeline.get_thinking_instructions(
+                mode=thinking_mode,
+                query_complexity=query_analysis.get('complexity', 0.5) if query_analysis else None
+            )
+            thinking_instructions = f"\n\n{thinking_config['instructions']}\n"
+
+            self.logger.info("Thinking mode applied", {
+                "mode": thinking_config['mode'],
+                "token_range": f"{thinking_config['min_tokens']}-{thinking_config['max_tokens']}"
+            })
+
         # Format context from retrieved results
         context = self._format_context(retrieved_results)
-        
+
         # Build conversation context if provided
         conv_context = ""
         if conversation_history:
             conv_context = self._format_conversation_history(conversation_history)
-        
+
         # Get appropriate template
         template = self.templates.get(template_type, self.templates['rag_qa'])
-        
+
+        # Combine system prompt with thinking instructions
+        enhanced_system_prompt = self.system_prompt + thinking_instructions
+
         # Format prompt
         prompt = template.format(
-            system_prompt=self.system_prompt,
+            system_prompt=enhanced_system_prompt,
             conversation_context=conv_context,
             context=context,
             query=query
         )
-        
+
         self.logger.debug("Prompt built", {
             "prompt_length": len(prompt),
-            "context_docs": len(retrieved_results)
+            "context_docs": len(retrieved_results),
+            "thinking_enhanced": bool(thinking_instructions)
         })
-        
+
         return prompt
     
     def _format_context(self, results: List[Dict[str, Any]]) -> str:

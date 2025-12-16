@@ -70,7 +70,8 @@ class ConversationalRAGService:
         session_id: str,
         config_dict: Dict[str, Any],
         progress_callback: Optional[Callable[[str], None]] = None,
-        stream_callback: Optional[Callable[[str], None]] = None
+        stream_callback: Optional[Callable[[str], None]] = None,
+        thinking_mode: str = 'low'
     ) -> Generator[Dict[str, Any], None, None]:
         """
         Process a conversational query with streaming support
@@ -81,6 +82,7 @@ class ConversationalRAGService:
             config_dict: Configuration dictionary
             progress_callback: Optional callback for progress updates (progress_callback(message))
             stream_callback: Optional callback for streaming tokens (stream_callback(token))
+            thinking_mode: Thinking mode ('low', 'medium', 'high')
 
         Yields:
             Dictionary with progress updates and results:
@@ -120,11 +122,11 @@ class ConversationalRAGService:
 
             if use_streaming:
                 # Stream results
-                for chunk in self._execute_with_streaming(message, context, config_dict, stream_callback):
+                for chunk in self._execute_with_streaming(message, context, config_dict, stream_callback, thinking_mode):
                     yield chunk
             else:
                 # Non-streaming execution
-                result = self._execute_without_streaming(message, context, config_dict)
+                result = self._execute_without_streaming(message, context, config_dict, thinking_mode)
                 yield {'type': 'final_result', 'data': result}
 
         except Exception as e:
@@ -220,7 +222,8 @@ class ConversationalRAGService:
         message: str,
         context: Optional[List[Dict]],
         config_dict: Dict[str, Any],
-        stream_callback: Optional[Callable[[str], None]] = None
+        stream_callback: Optional[Callable[[str], None]] = None,
+        thinking_mode: str = 'low'
     ) -> Generator[Dict[str, Any], None, None]:
         """
         Execute RAG pipeline with streaming
@@ -230,6 +233,7 @@ class ConversationalRAGService:
             context: Conversation context
             config_dict: Configuration
             stream_callback: Optional callback for streaming tokens
+            thinking_mode: Thinking mode ('low', 'medium', 'high')
 
         Yields:
             Progress and result dictionaries
@@ -247,7 +251,8 @@ class ConversationalRAGService:
             for chunk in self.pipeline.query(
                 question=message,
                 conversation_history=context,
-                stream=True
+                stream=True,
+                thinking_mode=thinking_mode
             ):
                 if not isinstance(chunk, dict):
                     continue
@@ -323,7 +328,8 @@ class ConversationalRAGService:
         self,
         message: str,
         context: Optional[List[Dict]],
-        config_dict: Dict[str, Any]
+        config_dict: Dict[str, Any],
+        thinking_mode: str = 'low'
     ) -> Dict[str, Any]:
         """
         Execute RAG pipeline without streaming (for non-local providers)
@@ -332,6 +338,7 @@ class ConversationalRAGService:
             message: User query
             context: Conversation context
             config_dict: Configuration
+            thinking_mode: Thinking mode ('low', 'medium', 'high')
 
         Returns:
             Result dictionary
@@ -340,7 +347,8 @@ class ConversationalRAGService:
             result = self.pipeline.query(
                 question=message,
                 conversation_history=context,
-                stream=False
+                stream=False,
+                thinking_mode=thinking_mode
             )
             return result
 

@@ -182,7 +182,8 @@ class RAGPipeline:
         self,
         question: str,
         conversation_history: Optional[List[Dict[str, str]]] = None,
-        stream: bool = False
+        stream: bool = False,
+        thinking_mode: str = 'low'
     ) -> Dict[str, Any]:
         """
         Execute complete RAG query
@@ -191,6 +192,7 @@ class RAGPipeline:
             question: User question
             conversation_history: Optional conversation context
             stream: Whether to stream the response
+            thinking_mode: Thinking mode ('low', 'medium', 'high')
 
         Returns:
             Dictionary with:
@@ -272,7 +274,8 @@ class RAGPipeline:
                     conversation_history=conversation_history,
                     retrieval_time=retrieval_time,
                     start_time=start_time,
-                    rag_result=rag_result  # Pass full rag_result for metadata
+                    rag_result=rag_result,  # Pass full rag_result for metadata
+                    thinking_mode=thinking_mode
                 )
             else:
                 generation_result = self.generation_engine.generate_answer(
@@ -280,7 +283,8 @@ class RAGPipeline:
                     retrieved_results=final_results,
                     query_analysis=query_analysis,
                     conversation_history=conversation_history,
-                    stream=False
+                    stream=False,
+                    thinking_mode=thinking_mode
                 )
 
                 total_time = time.time() - start_time
@@ -423,11 +427,14 @@ class RAGPipeline:
         conversation_history: Optional[List],
         retrieval_time: float,
         start_time: float,
-        rag_result: Optional[Dict] = None
+        rag_result: Optional[Dict] = None,
+        thinking_mode: str = 'low'
     ) -> Generator[Dict[str, Any], None, None]:
         """Generate streaming response with full metadata"""
 
-        self.logger.info("Starting streaming generation")
+        self.logger.info("Starting streaming generation", {
+            "thinking_mode": thinking_mode
+        })
 
         # Pre-build phase_metadata from rag_result for inclusion in complete chunk
         phase_metadata = {}
@@ -491,7 +498,8 @@ class RAGPipeline:
                 retrieved_results=retrieved_results,
                 query_analysis=query_analysis,
                 conversation_history=conversation_history,
-                stream=True
+                stream=True,
+                thinking_mode=thinking_mode
             ):
                 if chunk.get('type') == 'token':
                     yield {

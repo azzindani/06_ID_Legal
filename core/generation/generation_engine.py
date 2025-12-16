@@ -62,44 +62,48 @@ class GenerationEngine:
         retrieved_results: List[Dict[str, Any]],
         query_analysis: Optional[Dict[str, Any]] = None,
         conversation_history: Optional[List[Dict[str, str]]] = None,
-        stream: bool = False
+        stream: bool = False,
+        thinking_mode: str = 'low'
     ) -> Dict[str, Any]:
         """
         Generate complete answer with all enhancements
-        
+
         Args:
             query: User query
             retrieved_results: Retrieved and ranked documents
             query_analysis: Optional query analysis
             conversation_history: Optional conversation context
             stream: Whether to stream response
-            
+            thinking_mode: Thinking mode ('low', 'medium', 'high')
+
         Returns:
             Complete generation result dictionary
         """
         self.logger.info("Starting answer generation", {
             "query": query[:50] + "..." if len(query) > 50 else query,
             "num_results": len(retrieved_results),
-            "stream": stream
+            "stream": stream,
+            "thinking_mode": thinking_mode
         })
-        
+
         start_time = time.time()
-        
+
         try:
             # Step 1: Determine template type
             template_type = self._determine_template_type(query, query_analysis)
-            
+
             self.logger.debug("Template type determined", {
                 "template": template_type
             })
-            
-            # Step 2: Build prompt
+
+            # Step 2: Build prompt with thinking mode
             prompt = self.prompt_builder.build_prompt(
                 query=query,
                 retrieved_results=retrieved_results,
                 query_analysis=query_analysis,
                 conversation_history=conversation_history,
-                template_type=template_type
+                template_type=template_type,
+                thinking_mode=thinking_mode
             )
             
             self.logger.debug("Prompt built", {
