@@ -406,6 +406,137 @@ python tests/integration/test_stress_single.py
 python tests/integration/test_stress_conversational.py
 ```
 
+## 🧠 Thinking Modes for Legal Analysis
+
+The system supports **3-level thinking modes** that control the depth of legal analysis. Higher thinking modes allow the LLM to perform more thorough analysis by using longer thinking processes, which helps prevent context loss when analyzing multiple complex legal documents.
+
+### Available Thinking Modes
+
+| Mode | Token Budget | Use Case | Description |
+|------|-------------|----------|-------------|
+| **Low** (default) | 2048-4096 | Simple queries | Basic analysis with straightforward document evaluation |
+| **Medium** | 4096-8192 | Moderate complexity | Deep thinking with comprehensive cross-referencing and validation |
+| **High** | 8192-16384 | Complex multi-document | Iterative & recursive thinking with multi-phase validation loops |
+
+### How Thinking Modes Work
+
+Thinking modes inject detailed instructions into the system prompt that guide the LLM through structured analysis phases:
+
+- **Low Mode**: Basic document analysis → synthesis → conclusion
+- **Medium Mode**: Deep analysis → cross-referencing → validation → synthesis
+- **High Mode**: Multi-phase analysis → recursive checking → meta-analysis → quality assessment
+
+The thinking happens **inside `<think>` tags** and is separated from the final answer, so users only see the polished response while benefiting from thorough internal analysis.
+
+### Using Thinking Modes in Tests
+
+All four main integration tests now support thinking mode CLI arguments:
+
+```bash
+# test_complete_output.py - Test with different thinking modes
+python tests/integration/test_complete_output.py --low      # Default, basic analysis
+python tests/integration/test_complete_output.py --medium   # Deep thinking (recommended)
+python tests/integration/test_complete_output.py --high     # Maximum thoroughness
+
+# test_conversational.py - Multi-turn conversation with thinking modes
+python tests/integration/test_conversational.py --low
+python tests/integration/test_conversational.py --medium
+python tests/integration/test_conversational.py --high
+
+# test_stress_single.py - Stress test with thinking modes
+python tests/integration/test_stress_single.py --low
+python tests/integration/test_stress_single.py --medium    # Recommended for stress tests
+python tests/integration/test_stress_single.py --high      # Maximum load + deep thinking
+
+# test_stress_conversational.py - Conversational stress with thinking modes
+python tests/integration/test_stress_conversational.py --low
+python tests/integration/test_stress_conversational.py --medium
+python tests/integration/test_stress_conversational.py --high
+```
+
+### Combined with Other Arguments
+
+Thinking modes can be combined with other test arguments:
+
+```bash
+# Complete output test with medium thinking and JSON export
+python tests/integration/test_complete_output.py --medium --export
+
+# Conversational test with high thinking and verbose output
+python tests/integration/test_conversational.py --high --verbose --export
+
+# Stress test with medium thinking and memory profiling
+python tests/integration/test_stress_single.py --medium --memory --export
+
+# Quick stress test with high thinking
+python tests/integration/test_stress_conversational.py --quick --high
+```
+
+### When to Use Each Mode
+
+**Use Low Mode (--low) when:**
+- Testing simple, straightforward queries
+- Quick validation or debugging
+- Performance benchmarking (fastest)
+- Testing basic functionality
+
+**Use Medium Mode (--medium) when:**
+- Testing multi-document analysis
+- Queries requiring cross-referencing
+- Standard production testing
+- Moderate complexity legal questions
+
+**Use High Mode (--high) when:**
+- Testing complex legal scenarios
+- Maximum quality requirements
+- Multiple conflicting regulations
+- Edge cases and corner cases
+- Full system stress testing
+
+### Configuration
+
+Thinking modes can also be configured via environment variables:
+
+```bash
+# Set default thinking mode
+export DEFAULT_THINKING_MODE=medium
+
+# Disable thinking pipeline entirely (not recommended)
+export ENABLE_THINKING_PIPELINE=false
+
+# Run tests with configured default
+python tests/integration/test_complete_output.py
+```
+
+### Performance Considerations
+
+| Mode | Thinking Tokens | Impact on Latency | Memory Impact |
+|------|----------------|-------------------|---------------|
+| Low | 2-4K | Minimal (+0-2s) | ~100-200MB |
+| Medium | 4-8K | Moderate (+2-5s) | ~200-400MB |
+| High | 8-16K | Significant (+5-10s) | ~400-800MB |
+
+**Note**: These are approximate values. Actual impact depends on query complexity, document count, and hardware.
+
+### Viewing Thinking Process
+
+The complete LLM input prompt (including thinking instructions) is printed to console during test execution for full transparency:
+
+```
+====================================================================================================
+COMPLETE LLM INPUT PROMPT (FULL TRANSPARENCY)
+====================================================================================================
+Character Count: 12,453
+----------------------------------------------------------------------------------------------------
+Anda adalah asisten AI yang ahli di bidang hukum Indonesia...
+
+Dalam tag <think>, lakukan DEEP THINKING dengan struktur berikut:
+...
+----------------------------------------------------------------------------------------------------
+```
+
+This allows you to verify exactly what instructions are being sent to the LLM.
+
 ### Run All Integration Tests at Once
 
 ```bash
