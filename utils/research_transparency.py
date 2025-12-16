@@ -195,11 +195,7 @@ def format_detailed_research_process(
                     content = record.get('content', '')[:200]
                     lines.append(f"      Content: {content}...")
 
-                # Only add blank line after last item to keep list continuous
-                if i < len(sorted_candidates):
-                    lines.append("  ")  # Use minimal spacing to keep list together
-                else:
-                    lines.append("")  # Blank line only after the last item
+                # Don't add separator between list items - they should be adjacent
 
             lines.append("")
 
@@ -268,11 +264,7 @@ def format_detailed_research_process(
 
             lines.append(f"   Consensus Score: {consensus_score:.3f} | Agreement: {agreement:.2f}")
             lines.append(f"   Found by {len(found_by)} researchers: {', '.join(found_by[:3])}{'...' if len(found_by) > 3 else ''}")
-            # Only add blank line after last item to keep list continuous
-            if i < len(consensus_results[:20]):
-                lines.append("  ")  # Use minimal spacing to keep list together
-            else:
-                lines.append("")  # Blank line only after the last item
+            # Don't add separator between list items - they should be adjacent
     else:
         lines.append("⚠️  No consensus data available")
 
@@ -335,11 +327,7 @@ def format_detailed_research_process(
                 content = doc.get('content', '')[:300]
                 lines.append(f"   Content: {content}...")
 
-            # Only add blank line after last item to keep list continuous
-            if i < len(final_results):
-                lines.append("  ")  # Use minimal spacing to keep list together
-            else:
-                lines.append("")  # Blank line only after the last item
+            # Don't add separator between list items - they should be adjacent
     else:
         lines.append("⚠️  No final results available")
 
