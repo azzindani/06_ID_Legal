@@ -147,12 +147,15 @@ def clear_conversation():
 
     current_session, history, text = clear_conversation_session(manager)
     return history, text
-def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_sources=True, show_metadata=True):
+def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_sources=True, show_metadata=True, show_prompt=False):
     """
     Main chat function with conversational RAG - Now uses ConversationalRAGService
 
     This is a thin wrapper around ConversationalRAGService that handles Gradio-specific
     display formatting and progress updates.
+
+    Args:
+        show_prompt: If True, display the complete prompt sent to LLM (for test transparency)
     """
     if not message.strip():
         return history, ""
@@ -371,6 +374,30 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                         f'<details><summary>🔬 <strong>Detail Proses Penelitian</strong></summary>\n\n{detailed_research}\n</details>'
                     )
 
+            # Add complete prompt for test transparency
+            if show_prompt:
+                complete_prompt = result.get('metadata', {}).get('complete_prompt') or result.get('complete_prompt')
+                if complete_prompt:
+                    # Get conversation history if this is a conversational query
+                    conv_history = result.get('metadata', {}).get('conversation_history', [])
+
+                    prompt_display = f"**📊 Complete LLM Input Prompt ({len(complete_prompt):,} characters)**\n\n"
+
+                    # Show conversation history if available
+                    if conv_history:
+                        prompt_display += "**📝 Conversation History:**\n```\n"
+                        for i, turn in enumerate(conv_history, 1):
+                            role = turn.get('role', 'unknown')
+                            content = turn.get('content', '')
+                            prompt_display += f"Turn {i} [{role}]: {content[:200]}{'...' if len(content) > 200 else ''}\n\n"
+                        prompt_display += "```\n\n"
+
+                    prompt_display += "**📄 Full Prompt:**\n```\n" + complete_prompt + "\n```"
+
+                    collapsible_sections.append(
+                        f'<details><summary>🔍 <strong>Complete LLM Input Prompt (Test Transparency)</strong></summary>\n\n{prompt_display}\n</details>'
+                    )
+
             # Combine all sections
             if collapsible_sections:
                 final_output += "\n\n---\n\n" + "\n\n".join(collapsible_sections)
@@ -487,14 +514,15 @@ def run_conversational_test_auto(history, config_state, show_thinking, show_sour
         # Remove progress indicator and process question through chat
         history = history[:-1]
 
-        # Call the regular chat function
+        # Call the regular chat function with prompt transparency enabled
         for updated_history, cleared_input in chat_with_legal_rag(
             question,
             history,
             config_state,
             show_thinking,
             show_sources,
-            show_metadata
+            show_metadata,
+            show_prompt=True  # Enable complete prompt display for test transparency
         ):
             yield updated_history, cleared_input
 
@@ -595,14 +623,15 @@ def run_stress_test_auto(history, config_state, show_thinking, show_sources, sho
         # Remove progress indicator
         history = history[:-1]
 
-        # Call chat with STRESS CONFIG
+        # Call chat with STRESS CONFIG and prompt transparency
         for updated_history, cleared_input in chat_with_legal_rag(
             question,
             history,
             stress_config,  # Use stress config instead of current config
             show_thinking,
             show_sources,
-            show_metadata
+            show_metadata,
+            show_prompt=True  # Enable complete prompt display for test transparency
         ):
             yield updated_history, cleared_input
 
