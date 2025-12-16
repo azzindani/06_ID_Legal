@@ -396,27 +396,45 @@ class HTMLExporter(BaseExporter):
 
         import re
 
-        # Pre-process: Convert newlines inside HTML tags (like <details>) to <br>
+        # Pre-process: Convert markdown inside HTML tags (like <details>) to HTML
         # The markdown processor won't process content inside HTML tags
-        def convert_newlines_in_html_tags(match):
+        def convert_markdown_in_html_tags(match):
             opening_tag = match.group(1)
             content = match.group(2)
             closing_tag = match.group(3)
 
-            # Convert single newlines to <br> but preserve double newlines for paragraphs
-            # First protect double newlines
-            content = content.replace('\n\n', '<!--DOUBLE_NL-->')
-            # Convert single newlines to <br>
-            content = content.replace('\n', '<br>\n')
-            # Restore double newlines
-            content = content.replace('<!--DOUBLE_NL-->', '\n\n')
+            # Process the content inside <details> as markdown
+            if MARKDOWN_AVAILABLE:
+                # Convert markdown to HTML for content inside details
+                content_html = markdown.markdown(
+                    content,
+                    extensions=['tables', 'fenced_code', 'nl2br', 'extra']
+                )
+            else:
+                # Fallback: basic formatting
+                # Convert double newlines to paragraphs
+                paragraphs = content.split('\n\n')
+                content_parts = []
+                for para in paragraphs:
+                    if para.strip():
+                        # Convert single newlines to <br>
+                        formatted = para.replace('\n', '<br>')
+                        # Basic bold conversion
+                        formatted = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', formatted)
+                        # Basic header conversion
+                        formatted = re.sub(r'^### (.*?)$', r'<h3>\1</h3>', formatted, flags=re.MULTILINE)
+                        formatted = re.sub(r'^## (.*?)$', r'<h2>\1</h2>', formatted, flags=re.MULTILINE)
+                        # Basic list conversion
+                        formatted = re.sub(r'^- (.*?)$', r'<li>\1</li>', formatted, flags=re.MULTILINE)
+                        content_parts.append(formatted)
+                content_html = '<br>'.join(content_parts)
 
-            return opening_tag + content + closing_tag
+            return opening_tag + content_html + closing_tag
 
         # Process <details> tags before markdown conversion
         text = re.sub(
             r'(<details[^>]*>)(.*?)(</details>)',
-            convert_newlines_in_html_tags,
+            convert_markdown_in_html_tags,
             text,
             flags=re.DOTALL
         )
