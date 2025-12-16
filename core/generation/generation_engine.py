@@ -105,7 +105,11 @@ class GenerationEngine:
             self.logger.debug("Prompt built", {
                 "prompt_length": len(prompt)
             })
-            
+
+            # For test transparency: store complete prompt in config if enabled
+            if self.config.get('store_complete_prompt', False):
+                self.logger.info("Storing complete prompt for transparency")
+
             # Step 3: Generate response
             if stream:
                 return self._generate_streaming_answer(
@@ -182,7 +186,8 @@ class GenerationEngine:
                         'tokens_generated': generation_result['tokens_generated'],
                         'tokens_per_second': generation_result['tokens_per_second'],
                         'validation': validation_result if validation_result else {},
-                        'prompt_length': len(prompt)
+                        'prompt_length': len(prompt),
+                        'complete_prompt': prompt  # Store complete prompt for transparency
                     },
                     'citations': self._extract_citations(retrieved_results),
                     'sources': self._format_sources(retrieved_results)
@@ -276,6 +281,7 @@ class GenerationEngine:
                             'tokens_per_second': chunk.get('tokens_per_second', 0),
                             'validation': validation_result,
                             'citations': self._extract_citations(retrieved_results),
+                            'complete_prompt': prompt,  # Store complete prompt for transparency
                             'done': True
                         }
                 else:
