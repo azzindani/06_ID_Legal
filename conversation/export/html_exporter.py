@@ -262,12 +262,26 @@ class HTMLExporter(BaseExporter):
         details {{
             font-size: 0.9em;
             color: #7f8c8d;
+            margin: 10px 0;
         }}
 
-        summary {{
+        details summary {{
             cursor: pointer;
             font-weight: bold;
             padding: 5px 0;
+            user-select: none;
+        }}
+
+        details[open] {{
+            padding: 10px;
+            background: var(--background-color);
+            border-radius: 5px;
+        }}
+
+        details[open] summary {{
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border-color);
         }}
 
         table {{
@@ -375,9 +389,37 @@ class HTMLExporter(BaseExporter):
         - Code blocks
         - Tables
         - Details/summary tags
+        - Line breaks
         """
         if not text:
             return ''
+
+        import re
+
+        # Pre-process: Convert newlines inside HTML tags (like <details>) to <br>
+        # The markdown processor won't process content inside HTML tags
+        def convert_newlines_in_html_tags(match):
+            opening_tag = match.group(1)
+            content = match.group(2)
+            closing_tag = match.group(3)
+
+            # Convert single newlines to <br> but preserve double newlines for paragraphs
+            # First protect double newlines
+            content = content.replace('\n\n', '<!--DOUBLE_NL-->')
+            # Convert single newlines to <br>
+            content = content.replace('\n', '<br>\n')
+            # Restore double newlines
+            content = content.replace('<!--DOUBLE_NL-->', '\n\n')
+
+            return opening_tag + content + closing_tag
+
+        # Process <details> tags before markdown conversion
+        text = re.sub(
+            r'(<details[^>]*>)(.*?)(</details>)',
+            convert_newlines_in_html_tags,
+            text,
+            flags=re.DOTALL
+        )
 
         # Convert markdown to HTML if library is available
         if MARKDOWN_AVAILABLE:
@@ -389,7 +431,6 @@ class HTMLExporter(BaseExporter):
             return html_content
         else:
             # Fallback: basic formatting with paragraph breaks and line breaks
-            # Replace common markdown patterns manually
             html_parts = []
             for paragraph in text.split('\n\n'):
                 if paragraph.strip():
