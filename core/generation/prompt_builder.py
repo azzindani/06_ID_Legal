@@ -218,209 +218,514 @@ class PromptBuilder:
 
     def _get_medium_thinking_template(self) -> str:
         """Medium thinking mode: Deep thinking"""
-        return """Dalam tag <think>, lakukan DEEP THINKING dengan menulis proses berpikir yang PANJANG dan DETAIL. Gunakan 4000-8000 tokens untuk fase thinking ini:
+        return """Dalam tag <think>, lakukan DEEP THINKING yang SANGAT PANJANG DAN VERBOSE. Target MINIMUM 4000 tokens, IDEAL 6000-8000 tokens untuk fase thinking.
 
-1. **ANALISIS PERTANYAAN MENDALAM** (3-5 paragraf)
-   - Tuliskan pemahaman mendalam tentang inti pertanyaan
-   - Analisis dari berbagai sudut pandang: legal researcher, praktisi hukum, akademisi
-   - Identifikasi konteks hukum yang relevan (pidana, perdata, administrasi, dll)
-   - Dekonstruksi pertanyaan menjadi sub-pertanyaan yang lebih spesifik
-   - Catat semua kata kunci dan istilah hukum yang perlu dianalisis
+⚠️ ATURAN PENTING: Thinking harus PANJANG dan DETAIL. Jangan singkat! Tulis SEMUA proses berpikir secara eksplisit.
 
-2. **EVALUASI DOKUMEN KOMPREHENSIF** (4-6 paragraf)
-   - Untuk SETIAP dokumen yang disediakan, tulis analisis terpisah:
-     * Tingkat relevansi terhadap pertanyaan (sangat relevan, relevan, kurang relevan)
-     * Pasal dan ayat spesifik yang berkaitan
-     * Hierarki peraturan (UU > PP > Perpres > Permen)
-     * Status peraturan (masih berlaku, dicabut, diubah)
-   - Ranking dokumen berdasarkan relevansi dan kekuatan hukum
-   - Identifikasi gap atau informasi yang kurang dari dokumen-dokumen ini
+═══════════════════════════════════════════════════════════════════
+BAGIAN 1: ANALISIS PERTANYAAN MENDALAM (Target: 800-1200 tokens)
+═══════════════════════════════════════════════════════════════════
 
-3. **CROSS-REFERENCE DAN VALIDASI** (3-5 paragraf)
-   - Lakukan cross-reference antar dokumen yang disediakan
-   - Identifikasi konsistensi atau inkonsistensi antar peraturan
-   - Analisis prinsip hukum: lex superior (hierarki), lex specialis (khusus vs umum), lex posterior (baru vs lama)
-   - Cek apakah ada konflik norma dan bagaimana menyelesaikannya
-   - Validasi interpretasi dengan melihat konteks pasal lain dalam peraturan yang sama
+Tuliskan proses berpikir yang SANGAT DETAIL untuk memahami pertanyaan:
 
-4. **SINTESIS KOMPREHENSIF** (4-6 paragraf)
-   - Integrasikan semua informasi dari berbagai sumber
-   -Bangun narasi hukum yang koheren dan komprehensif
-   - Analisis hubungan antar konsep hukum yang relevan
-   - Identifikasi pola atau tema yang muncul
-   - Evaluasi kekuatan dan kelemahan argumen yang mungkin muncul
+**Langkah 1A - Pemahaman Literal (tulis minimal 150 kata)**
+- Baca pertanyaan kata per kata. Tulis pemahaman awal tentang apa yang ditanyakan.
+- Identifikasi subjek pertanyaan, predikat, objek, dan konteks.
+- Catat kata-kata kunci: tulis setiap kata penting dan mengapa penting.
+- Tulis asumsi-asumsi yang muncul dari membaca pertanyaan ini.
 
-5. **VALIDASI DAN VERIFIKASI** (2-3 paragraf)
-   - Cross-check semua pasal dan ayat yang dikutip
-   - Verifikasi hierarki dan status peraturan
-   - Pastikan interpretasi konsisten dengan prinsip hukum
-   - Identifikasi asumsi yang dibuat dan validitasnya
+**Langkah 1B - Dekonstruksi (tulis minimal 200 kata)**
+- Pecah pertanyaan menjadi 3-5 sub-pertanyaan yang lebih spesifik.
+- Untuk SETIAP sub-pertanyaan, jelaskan mengapa sub-pertanyaan ini penting.
+- Identifikasi hubungan antar sub-pertanyaan: mana yang primer, mana yang sekunder.
+- Tulis pertanyaan-pertanyaan tambahan yang mungkin relevan tapi tidak ditanyakan eksplisit.
 
-6. **KESIMPULAN ANALISIS** (2-3 paragraf)
-   - Ringkas temuan utama dari analisis
-   - Tentukan tingkat kepastian jawaban (pasti, probable, memerlukan klarifikasi)
-   - Identifikasi informasi tambahan yang mungkin diperlukan
-   - Tentukan struktur jawaban optimal yang akan diberikan
+**Langkah 1C - Analisis Multi-Perspektif (tulis minimal 250 kata)**
+- Perspektif Legal Researcher: Bagaimana akademisi hukum akan memahami pertanyaan ini?
+- Perspektif Praktisi: Bagaimana advokat atau konsultan hukum akan membacanya?
+- Perspektif Penegak Hukum: Bagaimana hakim atau jaksa akan menginterpretasinya?
+- Identifikasi: Apakah ini pertanyaan definitional, procedural, sanctions, compliance, atau comparative?
 
-PENTING: Setelah thinking yang PANJANG ini, berikan jawaban AKHIR yang RINGKAS dan JELAS."""
+**Langkah 1D - Konteks Hukum (tulis minimal 200 kata)**
+- Identifikasi bidang hukum yang relevan: pidana, perdata, administrasi, prosedural, atau campuran.
+- Catat prinsip-prinsip hukum umum yang mungkin berlaku.
+- Identifikasi stakeholder yang terlibat: siapa pihak-pihak yang terpengaruh?
+- Tulis implikasi hukum yang mungkin timbul dari pertanyaan ini.
+
+═══════════════════════════════════════════════════════════════════
+BAGIAN 2: EVALUASI DOKUMEN KOMPREHENSIF (Target: 1200-1800 tokens)
+═══════════════════════════════════════════════════════════════════
+
+⚠️ WAJIB: Analisis SETIAP dokumen secara terpisah dan mendetail!
+
+Untuk SETIAP dokumen yang disediakan, tulis analisis LENGKAP dengan struktur berikut (minimal 200-300 kata per dokumen):
+
+**Per Dokumen - Analisis Terstruktur:**
+
+A. IDENTIFIKASI DOKUMEN
+   - Tulis judul lengkap peraturan
+   - Catat jenis peraturan (UU/PP/Perpres/Permen/dll) dan posisi dalam hierarki
+   - Catat nomor, tahun, dan lembaga yang mengeluarkan
+   - Evaluasi: Apakah ini peraturan primer atau sekunder?
+
+B. RELEVANSI DAN KEKUATAN HUKUM
+   - Nilai relevansi terhadap pertanyaan: Sangat Relevan (8-10), Relevan (5-7), atau Kurang Relevan (1-4)
+   - Jelaskan MENGAPA diberi nilai tersebut dengan detail
+   - Evaluasi kekuatan hukum: binding atau persuasive?
+   - Cek status: Masih berlaku penuh? Ada perubahan? Dicabut sebagian?
+
+C. PASAL DAN AYAT SPESIFIK
+   - Identifikasi pasal-pasal yang relevan (sebutkan nomor pasal)
+   - Untuk setiap pasal relevan, tulis ringkasan isi pasal
+   - Identifikasi ayat spesifik yang paling relevan
+   - Catat: Apakah ada pengecualian atau syarat khusus dalam pasal ini?
+
+D. DEFINISI DAN ISTILAH HUKUM
+   - Cari bagian "Ketentuan Umum" atau definisi dalam dokumen ini
+   - Tulis setiap definisi istilah hukum yang relevan dengan pertanyaan
+   - Evaluasi: Apakah definisi ini berbeda dengan definisi dalam peraturan lain?
+
+E. KONTEN SUBSTANTIF
+   - Tulis poin-poin kunci dari pasal yang relevan
+   - Identifikasi: Apa yang DIATUR (prescriptive) vs apa yang DILARANG (proscriptive)
+   - Catat konsekuensi hukum: sanksi, denda, atau remedies yang disebutkan
+
+F. HUBUNGAN INTERNAL
+   - Identifikasi referensi internal: pasal lain dalam dokumen yang sama yang dirujuk
+   - Evaluasi konteks: Bab apa? Bagian apa? Apakah ada pasal terkait yang perlu diperhatikan?
+
+**Setelah menganalisis semua dokumen individual:**
+
+G. RANKING DAN PRIORITAS (tulis minimal 200 kata)
+   - Ranking dokumen dari yang paling relevan ke kurang relevan
+   - Untuk setiap dokumen, jelaskan mengapa diberikan ranking tersebut
+   - Identifikasi dokumen mana yang paling authoritative (hierarki tertinggi)
+   - Identifikasi dokumen mana yang paling spesifik terhadap pertanyaan
+
+H. GAP ANALYSIS (tulis minimal 150 kata)
+   - Informasi apa yang TIDAK ada dalam dokumen-dokumen ini?
+   - Peraturan pelaksana atau turunan apa yang mungkin diperlukan tapi tidak tersedia?
+   - Aspek pertanyaan mana yang tidak ter-cover oleh dokumen yang ada?
+
+═══════════════════════════════════════════════════════════════════
+BAGIAN 3: CROSS-REFERENCE DAN VALIDASI (Target: 800-1200 tokens)
+═══════════════════════════════════════════════════════════════════
+
+**Langkah 3A - Referensi Silang Antar Dokumen (tulis minimal 300 kata)**
+- Identifikasi: Dokumen mana yang merujuk ke dokumen lain?
+- Untuk setiap referensi silang, tulis apa hubungannya dan mengapa penting.
+- Evaluasi konsistensi: Apakah dokumen-dokumen ini saling mendukung atau ada inkonsistensi?
+- Cari pattern: Apakah ada tema atau prinsip hukum yang konsisten muncul di berbagai dokumen?
+
+**Langkah 3B - Analisis Prinsip Hukum (tulis minimal 250 kata)**
+- LEX SUPERIOR (hierarki): Jika ada konflik, peraturan mana yang lebih tinggi hierarkinya?
+  * Urutkan semua dokumen berdasarkan hierarki: UU > PP > Perpres > Permen
+  * Jika ada konflik, tentukan mana yang harus diutamakan berdasarkan hierarki
+- LEX SPECIALIS (khusus vs umum): Apakah ada peraturan khusus yang mengalahkan peraturan umum?
+  * Identifikasi peraturan mana yang bersifat umum vs khusus
+  * Jika ada konflik, tentukan mana yang lebih spesifik
+- LEX POSTERIOR (baru vs lama): Apakah ada peraturan baru yang menggantikan yang lama?
+  * Bandingkan tahun penerbitan semua peraturan
+  * Identifikasi: Apakah ada pencabutan eksplisit atau implisit?
+
+**Langkah 3C - Conflict Check (tulis minimal 250 kata)**
+- Baca ulang semua pasal yang sudah diidentifikasi sebelumnya
+- Untuk setiap pasangan dokumen, cek: Apakah ada konflik norma?
+- Jika ada konflik, tulis secara detail:
+  * Apa konfliknya?
+  * Pasal berapa dengan pasal berapa?
+  * Bagaimana menyelesaikannya (gunakan lex superior/specialis/posterior)?
+- Jika tidak ada konflik, jelaskan mengapa dokumen-dokumen ini harmonis
+
+**Langkah 3D - Validasi Kontekstual (tulis minimal 200 kata)**
+- Baca konteks sekitar pasal-pasal yang relevan
+- Evaluasi: Apakah interpretasi kita konsisten dengan konteks pasal lain?
+- Cek bagian penjelasan atau lampiran jika ada
+- Validasi: Apakah ada interpretasi alternatif yang mungkin lebih tepat?
+
+═══════════════════════════════════════════════════════════════════
+BAGIAN 4: SINTESIS KOMPREHENSIF (Target: 800-1200 tokens)
+═══════════════════════════════════════════════════════════════════
+
+**Langkah 4A - Integrasi Informasi (tulis minimal 300 kata)**
+- Gabungkan semua informasi dari semua dokumen yang sudah dianalisis
+- Bangun narasi koheren: Bagaimana semua peraturan ini bekerja bersama?
+- Identifikasi: Apa gambaran besar (big picture) dari regulasi ini?
+- Tulis timeline jika relevan: urutan kronologis peraturan atau proses
+
+**Langkah 4B - Hubungan Konsep Hukum (tulis minimal 250 kata)**
+- Identifikasi konsep-konsep hukum kunci yang muncul
+- Untuk setiap konsep, tulis bagaimana konsep ini dide finisikan dan digunakan
+- Map hubungan antar konsep: Konsep A mempengaruhi konsep B bagaimana?
+- Identifikasi pola atau tema overarching
+
+**Langkah 4C - Analisis Kekuatan dan Kelemahan (tulis minimal 250 kata)**
+- Evaluasi KEKUATAN argumen yang bisa dibangun berdasarkan dokumen ini:
+  * Pasal mana yang memberikan dukungan kuat?
+  * Evidence mana yang paling solid?
+- Evaluasi KELEMAHAN atau gap:
+  * Aspek mana yang ambigu atau unclear?
+  * Informasi apa yang masih kurang?
+  * Argumen alternatif apa yang mungkin melemahkan posisi ini?
+
+**Langkah 4D - Implikasi Praktis (tulis minimal 200 kata)**
+- Berdasarkan sintesis ini, apa implikasi praktisnya?
+- Jika ini skenario compliance, apa yang harus dilakukan?
+- Jika ini skenario dispute, apa posisi legal yang kuat?
+- Jika ini skenario procedural, apa langkah-langkahnya?
+
+═══════════════════════════════════════════════════════════════════
+BAGIAN 5: VALIDASI AKHIR DAN KESIMPULAN (Target: 600-800 tokens)
+═══════════════════════════════════════════════════════════════════
+
+**Langkah 5A - Cross-Check Komprehensif (tulis minimal 250 kata)**
+- Review ulang SEMUA kutipan pasal yang disebutkan: Apakah akurat?
+- Verifikasi ulang hierarki peraturan: Apakah sudah benar?
+- Check ulang interpretasi: Apakah konsisten dengan prinsip hukum?
+- Identifikasi asumsi yang dibuat: Apakah valid dan reasonable?
+
+**Langkah 5B - Self-Questioning (tulis minimal 200 kata)**
+- Tanya diri sendiri: Apakah analisis ini sudah menjawab SEMUA aspek pertanyaan?
+- Apakah ada sub-pertanyaan yang terlewat?
+- Apakah ada dokumen yang kurang dianalisis?
+- Apakah ada interpretasi alternatif yang lebih baik?
+- Apakah perlu informasi tambahan untuk menjawab dengan pasti?
+
+**Langkah 5C - Tingkat Kepastian (tulis minimal 150 kata)**
+- Evaluasi tingkat kepastian jawaban:
+  * VERY HIGH (95-100%): Jika pasal sangat jelas dan tidak ada ambiguitas
+  * HIGH (80-95%): Jika pasal jelas tapi ada minor ambiguity
+  * MEDIUM (60-80%): Jika ada beberapa interpretasi yang mungkin
+  * LOW (<60%): Jika banyak ambiguitas atau informasi kurang
+- Jelaskan mengapa memberikan rating ini
+- Identifikasi: Apa yang membuat kepastian tinggi atau rendah?
+
+**Langkah 5D - Struktur Jawaban Optimal (tulis minimal 150 kata)**
+- Tentukan: Bagaimana cara terbaik menyampaikan jawaban?
+- Urutan apa yang paling logis?
+- Informasi apa yang harus di-highlight?
+- Disclaimer atau caveat apa yang perlu disertakan?
+- Apakah perlu rekomendasi untuk konsultasi ahli?
+
+═══════════════════════════════════════════════════════════════════
+⚠️ INGAT: Setelah thinking yang SANGAT PANJANG (minimum 4000 tokens) ini,
+berikan jawaban AKHIR yang RINGKAS, JELAS, dan PROFESIONAL.
+Jawaban akhir maksimal 1500-2000 tokens, fokus pada substansi.
+═══════════════════════════════════════════════════════════════════"""
 
     def _get_high_thinking_template(self) -> str:
         """High thinking mode: Iterative & recursive thinking"""
-        return """Dalam tag <think>, lakukan ITERATIVE & RECURSIVE THINKING yang SANGAT PANJANG dan KOMPREHENSIF. Gunakan 8000-16000 tokens untuk fase thinking ini dengan proses multi-layer:
+        return """Dalam tag <think>, lakukan ITERATIVE & RECURSIVE THINKING yang SANGAT PANJANG, VERBOSE, dan MULTI-PASS. Target MINIMUM 8000 tokens, IDEAL 12000-16000 tokens.
 
-═══════════════════════════════════════════════════════════════════
-FASE 1: ANALISIS AWAL (FIRST PASS) - 5-8 paragraf
-═══════════════════════════════════════════════════════════════════
+⚠️ CRITICAL: Ini adalah HIGH thinking mode - harus ada MULTIPLE COMPLETE PASSES melalui dokumen. Baca ulang dokumen beberapa kali dengan fokus berbeda. Thinking harus SANGAT PANJANG untuk mencegah "lost in the middle"!
 
-1. **DEKONSTRUKSI PERTANYAAN** (2-3 paragraf)
-   - Tuliskan pertanyaan utama dengan kata-kata sendiri
-   - Pecah menjadi 3-5 sub-pertanyaan yang spesifik dan terukur
-   - Identifikasi scope: aspek hukum apa yang dicakup (pidana, perdata, administrasi, prosedural)
-   - Tentukan konteks: siapa stakeholder, apa situasi faktual, apa implikasi hukumnya
-   - Catat setiap asumsi yang dibuat dalam memahami pertanyaan
+╔═══════════════════════════════════════════════════════════════════╗
+║  PASS 1: INITIAL UNDERSTANDING (Target: 2500-3500 tokens)        ║
+╚═══════════════════════════════════════════════════════════════════╝
 
-2. **READING COMPREHENSIF** (3-5 paragraf)
-   - Baca SEMUA dokumen yang disediakan dengan teliti
-   - Untuk SETIAP dokumen, catat:
-     * Judul lengkap dan hierarki peraturan
-     * Section/bab/pasal yang paling relevan
-     * Poin-poin kunci dari setiap pasal yang relevan
-     * Definisi istilah hukum yang muncul
-   - Identifikasi dokumen mana yang paling authoritative
-   - Buat mind map hubungan antar dokumen
+**[PASS 1 - STEP 1] DEKONSTRUKSI PERTANYAAN TOTAL (tulis minimal 400 kata)**
 
-3. **DETAILED ANALYSIS** (Per Dokumen - tulis minimal 2 paragraf per dokumen)
-   - Untuk SETIAP dokumen yang disediakan:
-     * Ekstrak pasal dan ayat dengan kutipan langsung
-     * Analisis definisi istilah hukum yang digunakan
-     * Identifikasi struktur argumen dalam pasal tersebut
-     * Catat pengecualian, syarat, atau kondisi khusus
-     * Evaluasi apakah ada pasal yang saling terkait dalam dokumen yang sama
+Tulis stream of consciousness analysis of the question:
+- Baca pertanyaan SANGAT HATI-HATI, kata per kata. Tulis pemahaman initial.
+- Pecah menjadi 3-5 sub-pertanyaan. Untuk SETIAP sub-pertanyaan, tulis 2-3 kalimat explaining why it matters.
+- Identifikasi scope hukum: pidana? perdata? administrasi? prosedural? atau mix?
+- Identify ALL stakeholders: siapa yang terpengaruh, siapa yang berkepentingan?
+- Tulis SEMUA asumsi yang kamu buat dalam memahami pertanyaan - be explicit!
+- Brainstorm: Apa saja kemungkinan interpretasi berbeda dari pertanyaan ini?
 
-4. **RELATIONSHIP MAPPING** (3-4 paragraf)
-   - Gambarkan (secara tekstual) hierarki peraturan: UU → PP → Perpres → Permen
-   - Identifikasi referensi silang: peraturan mana yang mengacu ke peraturan lain
-   - Cari peraturan terkait yang mungkin relevan tapi tidak disediakan
-   - Analisis timeline: peraturan mana yang lebih baru, mana yang mungkin sudah dicabut/diubah
-   - Buat connection map antara konsep hukum yang berbeda
+**[PASS 1 - STEP 2] FIRST READ - DOKUMEN INVENTORY (tulis minimal 300 kata)**
 
-═══════════════════════════════════════════════════════════════════
-FASE 2: EVALUASI MULTI-PERSPEKTIF (SECOND PASS) - 6-10 paragraf
-═══════════════════════════════════════════════════════════════════
+Baca SETIAP dokumen yang disediakan dengan fokus pada UNDERSTANDING STRUCTURE:
+- List SEMUA dokumen dengan format: "[Doc #] Judul Lengkap - Hierarki - Tahun"
+- Untuk setiap dokumen, tulis: Berapa jumlah pasal yang ada? Berapa bab?
+- Identifikasi: Dokumen mana yang terlihat paling relevan di first glance?
+- Catat: Ada berapa total pasal/ayat yang harus dianalisis across all documents?
+- Preliminary ranking: Urutkan dokumen dari yang sepertinya paling relevan ke kurang relevan
 
-5. **PERSPEKTIF 1: LEGAL RESEARCHER** (2-3 paragraf)
-   - Analisis dari sudut pandang peneliti hukum akademis
-   - Fokus pada interpretasi literal dan historis peraturan
-   - Identifikasi ratio legis (alasan pembentukan hukum)
-   - Cari preseden atau jurisprudensi yang relevan
-   - Evaluasi kesesuaian dengan prinsip-prinsip hukum umum
+**[PASS 1 - STEP 3] SECOND READ - DETAILED EXTRACTION (tulis minimal 200-300 kata PER DOKUMEN)**
 
-6. **PERSPEKTIF 2: KNOWLEDGE GRAPH SPECIALIST** (2-3 paragraf)
-   - Lihat dari sudut pandang semantic relationships
-   - Identifikasi entitas hukum: subjek hukum, objek hukum, perbuatan hukum
-   - Map hubungan semantik: is-a, part-of, regulates, requires, prohibits
-   - Cari implicit connections yang mungkin terlewat
-   - Analisis kompleksitas hubungan antar konsep
+⚠️ WAJIB: Analisis SETIAP dokumen secara individual dan verbose!
 
-7. **PERSPEKTIF 3: PROCEDURAL EXPERT** (2-3 paragraf)
-   - Fokus pada aspek prosedural dan implementasi praktis
-   - Identifikasi step-by-step process jika ada
-   - Catat persyaratan administratif atau dokumentasi
-   - Evaluasi timeline dan deadline yang relevan
-   - Analisis konsekuensi jika prosedur tidak diikuti
+Untuk SETIAP DOKUMEN, tulis analisis LENGKAP:
 
-8. **PERSPEKTIF 4: DEVIL'S ADVOCATE** (2-3 paragraf)
-   - Challenge setiap asumsi dan interpretasi yang dibuat
-   - Cari interpretasi alternatif yang mungkin valid
-   - Identifikasi kelemahan dalam argumen
-   - Pertanyakan: "Bagaimana jika konteksnya berbeda?"
-   - Evaluasi edge cases dan situasi khusus
+A. METADATA DAN HIERARKI (minimal 50 kata)
+   - Judul lengkap, nomor, tahun, lembaga penerbit
+   - Posisi dalam hierarki: UU / PP / Perpres / Permen / dll
+   - Check: Apakah ini peraturan organik atau turunan?
 
-9. **CONFLICT CHECK DAN RESOLUSI** (3-4 paragraf)
-   - Identifikasi SETIAP inkonsistensi antar peraturan (jika ada)
-   - Untuk setiap konflik, analisis menggunakan:
-     * Lex Superior: peraturan lebih tinggi menang
-     * Lex Specialis: peraturan khusus mengalahkan umum
-     * Lex Posterior: peraturan lebih baru mengalahkan lama
-   - Evaluasi apakah ada konflik yang tidak bisa diselesaikan
-   - Tentukan peraturan mana yang harus diutamakan dan mengapa
+B. PASAL-PASAL RELEVAN - EKSTRAKSI DETAIL (minimal 100 kata)
+   - List SEMUA pasal yang potentially relevant (sebutkan nomor pasal)
+   - Untuk 3-5 pasal PALING relevan, tulis ringkasan substantif isi pasal
+   - Quote key phrases dari pasal-pasal penting
+   - Identifikasi ayat spesifik yang paling on-point
 
-10. **VALIDATION LOOP - CHECKLIST LENGKAP** (2-3 paragraf)
-    - ✓ Apakah SEMUA sub-pertanyaan sudah terjawab?
-    - ✓ Apakah SEMUA kutipan pasal akurat dan lengkap?
-    - ✓ Apakah interpretasi konsisten dengan prinsip hukum?
-    - ✓ Apakah ada gap informasi yang belum teridentifikasi?
-    - ✓ Apakah ada asumsi yang perlu divalidasi lebih lanjut?
+C. DEFINISI DAN TERMINOLOGY (minimal 50 kata)
+   - Cek bagian "Ketentuan Umum" - ada definisi penting?
+   - List SEMUA istilah hukum yang didefinisikan dalam dokumen ini
+   - Note: Apakah ada istilah yang crucial untuk pertanyaan?
 
-═══════════════════════════════════════════════════════════════════
-FASE 3: REFINEMENT DAN ITERASI (THIRD PASS) - 5-8 paragraf
-═══════════════════════════════════════════════════════════════════
+D. SUBSTANTIVE CONTENT ANALYSIS (minimal 100 kata)
+   - Apa yang DIATUR dalam dokumen ini (prescriptive rules)?
+   - Apa yang DILARANG (proscriptive rules)?
+   - Apa KONSEKUENSI hukum yang disebutkan (sanksi, denda, remedies)?
+   - Apakah ada PENGECUALIAN atau SYARAT khusus?
+   - Apakah ada PROSEDUR yang dijelaskan step-by-step?
 
-11. **RE-CHECK UNTUK INFORMASI TERLEWAT** (2-3 paragraf)
-    - Baca ulang SETIAP dokumen dengan fokus berbeda
-    - Cari footnotes, catatan kaki, atau referensi yang terlewat
-    - Identifikasi pasal yang awalnya dianggap tidak relevan tapi sebenarnya penting
-    - Check definisi di bagian "Ketentuan Umum" yang mungkin crucial
-    - Evaluasi apakah ada implikasi tidak langsung yang terlewat
+**[PASS 1 - STEP 4] RELATIONSHIP MAPPING INITIAL (tulis minimal 400 kata)**
 
-12. **BOTTOM-UP VERIFICATION** (2-3 paragraf)
-    - Mulai dari detail terkecil (ayat spesifik)
-    - Verifikasi setiap detail akurat dan relevan
-    - Build up ke pasal, lalu bab, lalu keseluruhan peraturan
-    - Pastikan setiap detail mendukung kesimpulan yang lebih besar
-    - Identifikasi jika ada detail yang kontradiktif dengan kesimpulan
+- Buat textual hierarchy map: UU di top → PP → Perpres → Permen
+- Identifikasi: Dokumen mana yang mereferensikan dokumen lain?
+- Analisis timeline: Urutkan semua dokumen by year - mana yang paling baru?
+- Check: Ada indikasi bahwa peraturan lama dicabut/diubah oleh yang baru?
+- Conceptual mapping: Konsep hukum apa yang muncul di multiple documents?
+- Preliminary synthesis: Bagaimana semua dokumen ini berhubungan satu sama lain?
 
-13. **TOP-DOWN VALIDATION** (2-3 paragraf)
-    - Mulai dari kesimpulan besar yang sudah dibuat
-    - Trace back ke evidence spesifik yang mendukung
-    - Pastikan SETIAP klaim didukung oleh pasal konkret
-    - Identifikasi klaim mana yang strong vs weak vs speculative
-    - Evaluasi apakah kesimpulan masih valid jika salah satu evidence dihilangkan
+**[PASS 1 - CHECKPOINT] Sebelum lanjut ke Pass 2, verify:**
+- ✓ Sudah baca SEMUA dokumen? (tulis "YES - read X documents")
+- ✓ Sudah catat semua pasal relevan? (tulis "YES - identified Y articles")
+- ✓ Sudah understand big picture? (tulis 1-2 kalimat summary)
 
-14. **CROSS-VALIDATION MATRIX** (2-3 paragraf)
-    - Buat matrix: setiap klaim × supporting evidence
-    - Untuk setiap klaim kunci, list semua evidence pendukung
-    - Identifikasi klaim yang hanya didukung satu sumber (risky)
-    - Identifikasi klaim yang didukung multiple sources (strong)
-    - Evaluasi tingkat kepastian untuk setiap klaim
+╔═══════════════════════════════════════════════════════════════════╗
+║  PASS 2: DEEP ANALYSIS (Target: 2500-3500 tokens)                ║
+╚═══════════════════════════════════════════════════════════════════╝
 
-═══════════════════════════════════════════════════════════════════
-FASE 4: FINAL SYNTHESIS DAN QUALITY CHECK - 4-6 paragraf
-═══════════════════════════════════════════════════════════════════
+**[PASS 2 - STEP 5] THIRD READ - MULTI-PERSPECTIVE ANALYSIS**
 
-15. **QUALITY ASSESSMENT** (2-3 paragraf)
-    - Evaluasi kualitas analisis yang sudah dilakukan
-    - Rate tingkat kepastian jawaban: Very High / High / Medium / Low
-    - Identifikasi area yang masih ambigu atau unclear
-    - Tentukan apakah informasi cukup untuk jawaban definitif
-    - Evaluasi apakah perlu disclaimer atau caveat tertentu
+Baca ulang SEMUA dokumen dengan 4 lensa berbeda:
 
-16. **GAP ANALYSIS** (1-2 paragraf)
-    - List informasi apa yang TIDAK tersedia dalam dokumen
-    - Identifikasi peraturan turunan atau pelaksana yang mungkin diperlukan
-    - Catat aspek hukum yang memerlukan konsultasi ahli
-    - Tentukan batasan jawaban yang bisa diberikan
+🔍 LENS 1: LEGAL RESEARCHER ACADEMIC (tulis minimal 300 kata)
+- Baca dengan mindset peneliti hukum akademis
+- Fokus: Interpretasi literal pasal (what does the text actually say?)
+- Fokus: Interpretasi historical (ratio legis - why was this law made?)
+- Analisis: Apakah ada preseden atau jurisprudensi yang relevan?
+- Evaluasi: Apakah ini konsisten dengan prinsip-prinsip hukum umum?
+- Critical thinking: Apakah ada ambiguitas atau ketidakjelasan dalam teks?
 
-17. **FINAL SYNTHESIS** (2-3 paragraf)
-    - Integrasikan SEMUA temuan dari 16 langkah sebelumnya
-    - Buat narasi koheren yang menghubungkan semua aspek
-    - Prioritaskan informasi: mana yang paling penting untuk dijawab
-    - Struktur jawaban: urutan logis penyampaian informasi
-    - Tentukan tone dan style jawaban (formal, accessible, technical)
+🔍 LENS 2: KNOWLEDGE GRAPH SPECIALIST (tulis minimal 300 kata)
+- Baca dengan fokus pada RELATIONSHIPS dan CONNECTIONS
+- Identifikasi ENTITIES: Siapa subjek hukum? Apa objek hukum? Apa perbuatan hukum?
+- Map SEMANTIC RELATIONSHIPS:
+  * is-a relations (X adalah jenis dari Y)
+  * part-of relations (X adalah bagian dari Y)
+  * regulates relations (X mengatur Y)
+  * requires relations (X memerlukan Y)
+  * prohibits relations (X melarang Y)
+- Cari IMPLICIT CONNECTIONS yang tidak dinyatakan eksplisit
+- Analisis GRAPH COMPLEXITY: Berapa banyak nodes dan edges dalam conceptual graph ini?
 
-18. **FINAL CHECKLIST - ULTIMATE VALIDATION** (1-2 paragraf)
-    - ✓ Setiap kutipan pasal: AKURAT, LENGKAP, PROPERLY CITED
-    - ✓ Hierarki peraturan: BENAR dan DIVERIFIKASI
-    - ✓ Referensi silang: KONSISTEN dan VALID
-    - ✓ Interpretasi hukum: SOUND dan DEFENSIBLE
-    - ✓ Disclaimer: INCLUDED jika ada ketidakpastian
-    - ✓ Rekomendasi konsultasi ahli: INCLUDED untuk keputusan penting
+🔍 LENS 3: PROCEDURAL & PRACTICAL EXPERT (tulis minimal 300 kata)
+- Baca dengan fokus pada IMPLEMENTASI PRAKTIS
+- Jika ada prosedur: Extract step-by-step process secara detail
+- Identifikasi PERSYARATAN ADMINISTRATIF: dokumen apa yang dibutuhkan?
+- Check TIMELINE DAN DEADLINE: berapa hari/bulan untuk setiap step?
+- Analisis KONSEKUENSI NON-COMPLIANCE: Apa yang terjadi jika tidak ikuti prosedur?
+- Practical implications: Bagaimana ini diterapkan in real life?
 
-═══════════════════════════════════════════════════════════════════
-SANGAT PENTING: Setelah proses thinking SANGAT PANJANG (8000-16000 tokens) ini,
-berikan jawaban AKHIR yang RINGKAS, JELAS, dan TO THE POINT (maksimal 1000-2000 tokens).
-Jawaban akhir harus concise tapi complete, bukan verbose.
-═══════════════════════════════════════════════════════════════════"""
+🔍 LENS 4: DEVIL'S ADVOCATE (tulis minimal 300 kata)
+- Baca dengan skepticism - CHALLENGE setiap interpretasi!
+- Untuk setiap klaim yang dibuat di Pass 1, tanyakan: "Apakah ini benar-benar valid?"
+- Cari INTERPRETASI ALTERNATIF yang juga bisa valid
+- Identifikasi KELEMAHAN dalam argumen: Apa yang bisa dipertanyakan?
+- Think: "Bagaimana jika konteksnya sedikit berbeda?" - apakah kesimpulan berubah?
+- Explore EDGE CASES: Situasi apa yang mungkin not covered by peraturan ini?
+
+**[PASS 2 - STEP 6] CONFLICT DETECTION & RESOLUTION (tulis minimal 500 kata)**
+
+Sekarang baca ulang dengan fokus khusus pada IDENTIFYING CONFLICTS:
+
+- Go through SETIAP PASANGAN dokumen: Apakah ada konflik norma?
+- Untuk SETIAP konflik yang ditemukan (jika ada), tulis:
+  * Dokumen A (pasal X) says: [quote]
+  * Dokumen B (pasal Y) says: [quote]
+  * Konflik: Explain contradiction secara detail
+  * Resolusi: Gunakan lex superior / lex specialis / lex posterior untuk resolve
+  * Conclusion: Peraturan mana yang harus diutamakan dan MENGAPA?
+
+- Jika TIDAK ada konflik, jelaskan secara detail MENGAPA dokumen-dokumen ini harmonis:
+  * Apakah they regulate different aspects (complementary)?
+  * Apakah they're hierarchically aligned (consistent)?
+  * Apakah they reinforce each other (mutually supportive)?
+
+**[PASS 2 - STEP 7] VALIDATION LOOP 1 (tulis minimal 300 kata)**
+
+Self-check dengan checklist lengkap:
+
+- ✓ Sudah analisis SEMUA dokumen from 4 perspectives? Review count: Legal researcher [✓/✗], KG specialist [✓/✗], Procedural [✓/✗], Devil's advocate [✓/✗]
+- ✓ Sudah identify semua potential conflicts? List: [write "none" or list conflicts]
+- ✓ Sudah extract semua pasal relevan? Count: [write number] pasal identified
+- ✓ Sudah catat semua definisi penting? List: [write key defined terms]
+- ✓ Ada interpretasi alternatif yang terlewat? Think: [write if any alternative interpretation needs consideration]
+
+**[PASS 2 - CHECKPOINT] Tulis reflection (minimal 200 kata):**
+- Apa insights baru yang didapat di Pass 2 yang TIDAK terlihat di Pass 1?
+- Apakah ada dokumen yang initially di-underestimate tapi ternyata penting?
+- Apakah ada aspek pertanyaan yang masih unclear atau needs more analysis?
+
+╔═══════════════════════════════════════════════════════════════════╗
+║  PASS 3: VERIFICATION & CROSS-VALIDATION (Target: 2000-3000 tokens) ║
+╚═══════════════════════════════════════════════════════════════════╝
+
+**[PASS 3 - STEP 8] FOURTH READ - HUNTING FOR MISSED INFO (tulis minimal 500 kata)**
+
+Baca ulang SETIAP dokumen SEKALI LAGI, tapi kali ini dengan mission: FIND WHAT WAS MISSED!
+
+- Go through Dokumen #1 lagi: Ada pasal yang awalnya tidak diperhatikan tapi actually relevant?
+- Go through Dokumen #2 lagi: Ada footnotes, catatan penjelasan, atau lampiran yang terlewat?
+- Go through Dokumen #3 lagi: [continue for EACH document...]
+- Check "Ketentuan Umum" lagi di setiap dokumen: Ada definisi yang initially missed?
+- Check "Ketentuan Peralihan" atau "Ketentuan Penutup": Ada info penting tentang implementation atau transitional rules?
+- Review "Lampiran" jika ada: Ada technical details atau lists yang important?
+
+For EACH piece of newly discovered information, tulis:
+- Apa yang ditemukan: [write finding]
+- Kenapa ini penting: [explain relevance]
+- Implikasi untuk analisis: [explain impact]
+
+**[PASS 3 - STEP 9] BOTTOM-UP VERIFICATION (tulis minimal 400 kata)**
+
+Start dari detail terkecil dan build up:
+
+- Level 1 - AYAT SPESIFIK: Pick 5-7 ayat yang PALING critical. Untuk each ayat:
+  * Quote ayat verbatim
+  * Verify: Apakah quote ini akurat?
+  * Analyze: Apa makna precisenya?
+  * Check: Apakah interpretasi kita sound?
+
+- Level 2 - PASAL: Lihat pasal yang mengandung ayat-ayat tersebut:
+  * Apakah ayat-ayat ini konsisten satu sama lain dalam pasal?
+  * Apakah interpretasi ayat konsisten dengan keseluruhan pasal?
+
+- Level 3 - BAB: Lihat bab yang mengandung pasal-pasal tersebut:
+  * Apakah interpretasi pasal konsisten dengan theme of the bab?
+  * Apakah ada pasal lain dalam bab yang modify atau qualify interpretasi?
+
+- Level 4 - KESELURUHAN PERATURAN: Apakah interpretasi kita consistent dengan spirit of the whole regulation?
+
+**[PASS 3 - STEP 10] TOP-DOWN VALIDATION (tulis minimal 400 kata)**
+
+Start dari kesimpulan dan trace back to evidence:
+
+List SEMUA KLAIM KUNCI yang akan dibuat dalam jawaban akhir. Untuk SETIAP klaim:
+
+- Klaim #1: [write claim]
+  * Evidence: [list specific pasal/ayat yang mendukung]
+  * Strength: [rate as STRONG / MODERATE / WEAK]
+  * Counter-evidence: [any evidence that contradicts or weakens this?]
+
+- Klaim #2: [write claim]
+  * [same structure...]
+
+- [Continue for ALL major claims...]
+
+Evaluasi:
+- Klaim mana yang STRONG (didukung multiple sources, clear text)?
+- Klaim mana yang MODERATE (didukung but ada sedikit ambiguity)?
+- Klaim mana yang WEAK (speculative atau hanya didukung indirect evidence)?
+
+**[PASS 3 - STEP 11] CROSS-VALIDATION MATRIX (tulis minimal 400 kata)**
+
+Buat comprehensive validation matrix:
+
+Format untuk SETIAP klaim penting:
+```
+KLAIM: [write the claim]
+EVIDENCE #1: [Dokumen X, Pasal Y, Ayat Z] - [brief explanation]
+EVIDENCE #2: [Dokumen A, Pasal B, Ayat C] - [brief explanation]
+EVIDENCE #3: [...if applicable]
+TOTAL EVIDENCE COUNT: [number]
+VALIDATION STATUS: ✓ STRONG / ⚠ MODERATE / ✗ WEAK
+CONFIDENCE LEVEL: [percentage]
+```
+
+Analisis:
+- Claims with SINGLE evidence source: [list dan explain risk]
+- Claims with MULTIPLE evidence sources: [list dan explain strength]
+- Claims with CONFLICTING evidence: [list dan explain how to resolve]
+
+**[PASS 3 - STEP 12] VALIDATION LOOP 2 - ULTIMATE CHECK (tulis minimal 300 kata)**
+
+Final comprehensive check:
+
+✓ ACCURACY CHECK:
+  - Review EVERY single pasal/ayat yang dikutip: Is it accurate?
+  - Double-check nomor pasal: [verify X pasal citations]
+  - Double-check tahun peraturan: [verify Y regulation years]
+  - Double-check hierarki: [verify hierarchy claims]
+
+✓ COMPLETENESS CHECK:
+  - Apakah SEMUA sub-pertanyaan already addressed? [list each sub-question dan confirm]
+  - Apakah ada aspek pertanyaan yang not covered? [identify if any]
+  - Apakah semua dokumen relevan already analyzed? [confirm document count]
+
+✓ CONSISTENCY CHECK:
+  - Apakah interpretasi consistent across all documents analyzed?
+  - Apakah ada internal contradictions dalam analisis?
+  - Apakah legal principles applied consistently?
+
+✓ LOGIC CHECK:
+  - Apakah reasoning logically sound?
+  - Apakah ada logical fallacies?
+  - Apakah conclusions follow from premises?
+
+╔═══════════════════════════════════════════════════════════════════╗
+║  PASS 4: FINAL SYNTHESIS (Target: 1000-1500 tokens)              ║
+╚═══════════════════════════════════════════════════════════════════╝
+
+**[PASS 4 - STEP 13] INTEGRATION & SYNTHESIS (tulis minimal 500 kata)**
+
+Integrate EVERYTHING dari 3 passes sebelumnya:
+
+- COMPREHENSIVE SYNTHESIS: Tulis narasi koheren yang menghubungkan SEMUA findings dari Pass 1, 2, dan 3
+- BIG PICTURE: Apa the overarching legal framework yang emerges dari all these documents?
+- KEY THEMES: Apa 3-5 key themes atau principles yang paling penting?
+- CRITICAL INSIGHTS: Apa insights yang HANYA bisa didapat dari multiple-pass analysis?
+- NUANCES: Apa nuances atau subtleties yang would be missed in single-pass analysis?
+
+**[PASS 4 - STEP 14] QUALITY & CONFIDENCE ASSESSMENT (tulis minimal 300 kata)**
+
+Evaluate kualitas overall analysis:
+
+- CONFIDENCE LEVEL untuk answer: VERY HIGH / HIGH / MEDIUM / LOW
+  * Explain MENGAPA confidence level ini
+  * What factors increase confidence?
+  * What factors decrease confidence?
+
+- AREAS OF CERTAINTY: List aspects yang very clear dan well-supported
+- AREAS OF UNCERTAINTY: List aspects yang masih ambigu atau unclear
+- ASSUMPTIONS MADE: List ALL assumptions dan assess validity of each
+
+**[PASS 4 - STEP 15] GAP ANALYSIS (tulis minimal 200 kata)**
+
+Identify what's MISSING:
+- Informasi yang NOT available dalam dokumen yang disediakan
+- Peraturan turunan atau pelaksanaan yang might be needed
+- Aspek praktis yang requires domain expertise beyond text
+- Faktual details yang needs clarification from user
+
+**[PASS 4 - STEP 16] ANSWER STRUCTURE PLANNING (tulis minimal 200 kata)**
+
+Plan optimal answer structure:
+- PRIORITIZATION: Ranking informasi by importance (1=most important)
+- LOGICAL FLOW: Sequence of presentation
+- EMPHASIS: What to highlight vs what to mention briefly
+- DISCLAIMERS: What caveats atau warnings to include
+- RECOMMENDATIONS: When to suggest consulting legal expert
+
+╔═══════════════════════════════════════════════════════════════════╗
+║  ⚠️⚠️⚠️ CRITICAL INSTRUCTION ⚠️⚠️⚠️                                  ║
+║                                                                    ║
+║  Setelah ITERATIVE THINKING yang SANGAT PANJANG ini               ║
+║  (minimum 8000 tokens, target 12000-16000 tokens),                ║
+║  berikan JAWABAN AKHIR yang:                                      ║
+║                                                                    ║
+║  ✓ RINGKAS (maksimal 1500-2000 tokens)                            ║
+║  ✓ JELAS dan TERSTRUKTUR                                          ║
+║  ✓ PROFESSIONAL dan ACCESSIBLE                                    ║
+║  ✓ TO THE POINT - no verbose explanations                         ║
+║  ✓ ACTIONABLE - concrete and useful                               ║
+║                                                                    ║
+║  Jawaban = CONCISE summary of all the EXTENSIVE thinking above!   ║
+╚═══════════════════════════════════════════════════════════════════╝"""
 
     def estimate_thinking_tokens(
         self,
