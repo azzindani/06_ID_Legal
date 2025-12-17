@@ -120,15 +120,24 @@ class GenerationEngine:
             print("-" * 100)
             print()
 
+            # Step 2.5: Determine max_new_tokens based on thinking mode
+            max_new_tokens = self._get_max_tokens_for_thinking_mode(thinking_mode)
+
+            self.logger.info("Max tokens determined", {
+                "thinking_mode": thinking_mode,
+                "max_new_tokens": max_new_tokens
+            })
+
             # Step 3: Generate response
             if stream:
                 return self._generate_streaming_answer(
                     query=query,
                     prompt=prompt,
-                    retrieved_results=retrieved_results
+                    retrieved_results=retrieved_results,
+                    max_new_tokens=max_new_tokens
                 )
             else:
-                generation_result = self.llm_engine.generate(prompt)
+                generation_result = self.llm_engine.generate(prompt, max_new_tokens=max_new_tokens)
                 
                 if not generation_result['success']:
                     self.logger.error("Generation failed", {
@@ -233,17 +242,20 @@ class GenerationEngine:
         self,
         query: str,
         prompt: str,
-        retrieved_results: List[Dict[str, Any]]
+        retrieved_results: List[Dict[str, Any]],
+        max_new_tokens: Optional[int] = None
     ) -> Generator[Dict[str, Any], None, None]:
         """Generate answer with streaming"""
-        
-        self.logger.info("Starting streaming generation")
-        
+
+        self.logger.info("Starting streaming generation", {
+            "max_new_tokens": max_new_tokens
+        })
+
         full_response = ""
         tokens_generated = 0
-        
+
         try:
-            for chunk in self.llm_engine.generate_stream(prompt):
+            for chunk in self.llm_engine.generate_stream(prompt, max_new_tokens=max_new_tokens):
                 if chunk['success']:
                     if not chunk['done']:
                         token = chunk['token']
@@ -310,7 +322,35 @@ class GenerationEngine:
                 'error': str(e),
                 'done': True
             }
-    
+
+    def _get_max_tokens_for_thinking_mode(self, thinking_mode: str) -> int:
+        """
+        Menentukan max_new_tokens berdasarkan thinking mode.
+
+        Args:
+            thinking_mode: Mode berpikir ('low', 'medium', 'high')
+
+        Returns:
+            Max tokens untuk generation
+        """
+        thinking_mode_lower = thinking_mode.lower()
+
+        # Mapping thinking mode ke max_new_tokens
+        mode_to_tokens = {
+            'low': self.config.get('max_new_tokens', 2048),  # Gunakan default dari config
+            'medium': 8192,   # Medium mode: 8K tokens
+            'high': 16384     # High mode: 16K tokens
+        }
+
+        max_tokens = mode_to_tokens.get(thinking_mode_lower, 2048)
+
+        self.logger.debug("Thinking mode max tokens mapping", {
+            "thinking_mode": thinking_mode,
+            "max_new_tokens": max_tokens
+        })
+
+        return max_tokens
+
     def _determine_template_type(
         self,
         query: str,
