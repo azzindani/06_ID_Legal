@@ -72,19 +72,26 @@ class PromptBuilder:
             "thinking_mode": thinking_mode
         })
 
-        # Get thinking instructions if enabled
-        thinking_instructions = ""
+        # Get thinking instructions if enabled and replace placeholder
         if self.enable_thinking_pipeline:
             thinking_config = self.thinking_pipeline.get_thinking_instructions(
                 mode=thinking_mode,
                 query_complexity=query_analysis.get('complexity', 0.5) if query_analysis else None
             )
-            thinking_instructions = f"\n\n{thinking_config['instructions']}\n"
 
             self.logger.info("Thinking mode applied", {
                 "mode": thinking_config['mode'],
                 "token_range": f"{thinking_config['min_tokens']}-{thinking_config['max_tokens']}"
             })
+
+            # Replace placeholder in <think> tag with actual thinking instructions
+            enhanced_system_prompt = self.system_prompt.replace(
+                "[Mode-specific thinking instructions are provided based on thinking mode]",
+                thinking_config['instructions']
+            )
+        else:
+            # Use system prompt as-is if thinking pipeline disabled
+            enhanced_system_prompt = self.system_prompt
 
         # Format context from retrieved results
         context = self._format_context(retrieved_results)
@@ -96,9 +103,6 @@ class PromptBuilder:
 
         # Get appropriate template
         template = self.templates.get(template_type, self.templates['rag_qa'])
-
-        # Combine system prompt with thinking instructions
-        enhanced_system_prompt = self.system_prompt + thinking_instructions
 
         # Format prompt
         prompt = template.format(
