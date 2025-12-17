@@ -207,6 +207,36 @@ Path(LOG_DIR).mkdir(parents=True, exist_ok=True)
 Path(CACHE_DIR).mkdir(parents=True, exist_ok=True)
 
 # =============================================================================
+# THINKING MODE CONFIGURATION
+# =============================================================================
+
+# Default thinking mode for legal analysis
+# Options: 'low', 'medium', 'high'
+DEFAULT_THINKING_MODE = os.getenv("DEFAULT_THINKING_MODE", "low")
+
+# Thinking mode token budgets
+THINKING_MODE_CONFIG = {
+    'low': {
+        'min_tokens': 2048,
+        'max_tokens': 4096,
+        'description': 'Basic analysis for straightforward queries'
+    },
+    'medium': {
+        'min_tokens': 4096,
+        'max_tokens': 8192,
+        'description': 'Deep thinking for moderate complexity'
+    },
+    'high': {
+        'min_tokens': 8192,
+        'max_tokens': 16384,
+        'description': 'Iterative & recursive thinking for complex analysis'
+    }
+}
+
+# Enable thinking mode in pipeline
+ENABLE_THINKING_PIPELINE = os.getenv("ENABLE_THINKING_PIPELINE", "true").lower() == "true"
+
+# =============================================================================
 # DEFAULT SYSTEM CONFIGURATION
 # =============================================================================
 
@@ -556,36 +586,6 @@ Pedoman untuk jawaban akhir:
 - Berikan penjelasan yang terstruktur dan sistematis
 - Selalu rekomendasikan konsultasi dengan ahli hukum untuk keputusan final
 - Manfaatkan hubungan semantik antar konsep hukum untuk memberikan konteks yang lebih kaya'''
-
-# =============================================================================
-# THINKING MODE CONFIGURATION
-# =============================================================================
-
-# Default thinking mode for legal analysis
-# Options: 'low', 'medium', 'high'
-DEFAULT_THINKING_MODE = os.getenv("DEFAULT_THINKING_MODE", "low")
-
-# Thinking mode token budgets
-THINKING_MODE_CONFIG = {
-    'low': {
-        'min_tokens': 2048,
-        'max_tokens': 4096,
-        'description': 'Basic analysis for straightforward queries'
-    },
-    'medium': {
-        'min_tokens': 4096,
-        'max_tokens': 8192,
-        'description': 'Deep thinking for moderate complexity'
-    },
-    'high': {
-        'min_tokens': 8192,
-        'max_tokens': 16384,
-        'description': 'Iterative & recursive thinking for complex analysis'
-    }
-}
-
-# Enable thinking mode in pipeline
-ENABLE_THINKING_PIPELINE = os.getenv("ENABLE_THINKING_PIPELINE", "true").lower() == "true"
 
 # =============================================================================
 # VALIDATION FUNCTIONS
