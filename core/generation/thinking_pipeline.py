@@ -335,39 +335,6 @@ class ThinkingPipeline:
             for mode, config in self.thinking_configs.items()
         ]
 
-    def get_recommended_max_new_tokens(self, mode: str, default_max_tokens: int = 2048) -> int:
-        """
-        Get recommended max_new_tokens for a thinking mode to prevent OOM.
-
-        Higher thinking modes use more prompt tokens, leaving less room for generation.
-        This helps balance memory usage.
-
-        Args:
-            mode: Thinking mode ('low', 'medium', 'high')
-            default_max_tokens: Default max_new_tokens from config
-
-        Returns:
-            Recommended max_new_tokens for this mode
-        """
-        try:
-            thinking_mode = ThinkingMode(mode.lower())
-        except ValueError:
-            return default_max_tokens
-
-        config = self.thinking_configs[thinking_mode]
-
-        # For higher thinking modes, slightly reduce max_new_tokens
-        # to compensate for longer prompts
-        if thinking_mode == ThinkingMode.LOW:
-            # No reduction needed
-            return default_max_tokens
-        elif thinking_mode == ThinkingMode.MEDIUM:
-            # Slight reduction (10%)
-            return max(1024, int(default_max_tokens * 0.9))
-        else:  # HIGH
-            # More significant reduction (25%)
-            return max(1024, int(default_max_tokens * 0.75))
-
 
 def create_thinking_pipeline() -> ThinkingPipeline:
     """Factory function to create ThinkingPipeline instance"""

@@ -28,54 +28,44 @@ EOF
 echo "   Available GPU Memory: ${GPU_MEM} GB"
 echo
 
-# Determine optimal settings based on available memory
+# Suggest thinking mode based on available memory
+# NOTE: We don't limit MAX_NEW_TOKENS anymore - user's GPU can handle it
 if (( $(echo "$GPU_MEM < 3.0" | bc -l) )); then
-    # Very limited memory
     THINKING_MODE="--low"
-    MAX_NEW_TOKENS=512
-    ADVICE="⚠️  Very limited GPU memory. Using minimal settings."
+    ADVICE="⚠️  Very limited GPU memory detected."
     echo "$ADVICE"
-    echo "   Recommended: Use CPU inference or cloud GPU"
+    echo "   Suggestion: Use --low thinking mode"
+    echo "   If OOM occurs: export MAX_NEW_TOKENS=512"
 elif (( $(echo "$GPU_MEM < 4.0" | bc -l) )); then
-    # Limited memory
     THINKING_MODE="--low"
-    MAX_NEW_TOKENS=768
-    ADVICE="⚠️  Limited GPU memory. Using low thinking mode."
+    ADVICE="⚠️  Limited GPU memory detected."
     echo "$ADVICE"
+    echo "   Suggestion: Use --low thinking mode"
 elif (( $(echo "$GPU_MEM < 5.0" | bc -l) )); then
-    # Moderate memory
     THINKING_MODE="--low"
-    MAX_NEW_TOKENS=1024
-    ADVICE="✅ Moderate GPU memory. Low thinking mode recommended."
+    ADVICE="✅ Moderate GPU memory. --low or --medium should work."
     echo "$ADVICE"
 elif (( $(echo "$GPU_MEM < 6.0" | bc -l) )); then
-    # Good memory
     THINKING_MODE="--medium"
-    MAX_NEW_TOKENS=1024
-    ADVICE="✅ Good GPU memory. Medium thinking mode available."
+    ADVICE="✅ Good GPU memory. --medium thinking mode recommended."
     echo "$ADVICE"
 elif (( $(echo "$GPU_MEM < 8.0" | bc -l) )); then
-    # Very good memory
     THINKING_MODE="--medium"
-    MAX_NEW_TOKENS=1536
-    ADVICE="✅ Very good GPU memory. Medium thinking mode recommended."
+    ADVICE="✅ Very good GPU memory. --medium or --high should work."
     echo "$ADVICE"
 else
-    # Excellent memory
     THINKING_MODE="--high"
-    MAX_NEW_TOKENS=2048
     ADVICE="🚀 Excellent GPU memory. All thinking modes available."
     echo "$ADVICE"
 fi
 
 echo
-echo "📋 Auto-configured settings:"
+echo "📋 Suggested settings:"
 echo "   Thinking Mode: $THINKING_MODE"
-echo "   MAX_NEW_TOKENS: $MAX_NEW_TOKENS"
+echo "   MAX_NEW_TOKENS: Using configured value from config.py"
 echo
 
-# Export environment variable
-export MAX_NEW_TOKENS
+# Export environment variable for memory optimization only
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 # Parse command line arguments

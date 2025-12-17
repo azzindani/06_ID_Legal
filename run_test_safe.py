@@ -31,46 +31,43 @@ def get_available_gpu_memory():
 
 def determine_safe_settings(gpu_mem_gb):
     """
-    Determine safe settings based on available GPU memory
+    Suggest thinking mode based on available GPU memory.
+    Does NOT limit max_new_tokens - uses configured value.
 
     Returns:
-        tuple: (thinking_mode_flag, max_new_tokens, advice)
+        tuple: (thinking_mode_flag, advice)
     """
     if gpu_mem_gb < 3.0:
         return (
             "--low",
-            512,
-            "⚠️  Very limited GPU memory. Using minimal settings.\n"
-            "   Recommended: Use CPU inference or cloud GPU"
+            "⚠️  Very limited GPU memory detected.\n"
+            "   Suggestion: Use --low thinking mode\n"
+            "   If OOM occurs: export MAX_NEW_TOKENS=512"
         )
     elif gpu_mem_gb < 4.0:
         return (
             "--low",
-            768,
-            "⚠️  Limited GPU memory. Using low thinking mode."
+            "⚠️  Limited GPU memory detected.\n"
+            "   Suggestion: Use --low thinking mode"
         )
     elif gpu_mem_gb < 5.0:
         return (
             "--low",
-            1024,
-            "✅ Moderate GPU memory. Low thinking mode recommended."
+            "✅ Moderate GPU memory. --low or --medium should work."
         )
     elif gpu_mem_gb < 6.0:
         return (
             "--medium",
-            1024,
-            "✅ Good GPU memory. Medium thinking mode available."
+            "✅ Good GPU memory. --medium thinking mode recommended."
         )
     elif gpu_mem_gb < 8.0:
         return (
             "--medium",
-            1536,
-            "✅ Very good GPU memory. Medium thinking mode recommended."
+            "✅ Very good GPU memory. --medium or --high should work."
         )
     else:
         return (
             "--high",
-            2048,
             "🚀 Excellent GPU memory. All thinking modes available."
         )
 
@@ -106,17 +103,17 @@ def main():
     print()
 
     # Determine settings
-    thinking_mode, max_new_tokens, advice = determine_safe_settings(gpu_mem)
+    thinking_mode, advice = determine_safe_settings(gpu_mem)
 
     print(advice)
     print()
-    print("📋 Auto-configured settings:")
+    print("📋 Suggested settings:")
     print(f"   Thinking Mode: {thinking_mode}")
-    print(f"   MAX_NEW_TOKENS: {max_new_tokens}")
+    print(f"   MAX_NEW_TOKENS: Using configured value from config.py")
     print()
 
     # Set environment variables
-    os.environ["MAX_NEW_TOKENS"] = str(max_new_tokens)
+    # Note: We don't override MAX_NEW_TOKENS - user's GPU can handle it
     os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
     # Build command

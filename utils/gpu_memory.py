@@ -32,17 +32,17 @@ def get_recommended_max_new_tokens_for_memory(
     default_max_tokens: int = 2048
 ) -> int:
     """
-    Get recommended max_new_tokens based on available GPU memory.
+    DEPRECATED: This function no longer limits max_new_tokens.
 
-    This prevents OOM errors by automatically reducing generation length
-    when GPU memory is constrained.
+    Modern GPUs can handle long contexts. If you experience OOM,
+    manually adjust MAX_NEW_TOKENS environment variable.
 
     Args:
         thinking_mode: Thinking mode ('low', 'medium', 'high')
         default_max_tokens: Default max_new_tokens from config
 
     Returns:
-        Recommended max_new_tokens that should fit in available memory
+        The default_max_tokens unchanged
     """
     logger = get_logger("GPUMemory")
 
@@ -50,66 +50,9 @@ def get_recommended_max_new_tokens_for_memory(
         logger.debug("No GPU available, using default max_new_tokens")
         return default_max_tokens
 
-    try:
-        available_gb = get_available_gpu_memory()
-
-        logger.debug(f"Available GPU memory: {available_gb:.2f} GB")
-
-        # Estimate max_new_tokens based on available memory
-        # These are conservative estimates based on empirical testing
-        # with Qwen/Deepseek models
-
-        if thinking_mode == 'low':
-            # Low thinking mode: shorter prompts
-            if available_gb < 3.0:
-                recommended = 512
-            elif available_gb < 4.0:
-                recommended = 768
-            elif available_gb < 5.0:
-                recommended = 1024
-            elif available_gb < 6.0:
-                recommended = 1536
-            else:
-                recommended = default_max_tokens
-
-        elif thinking_mode == 'medium':
-            # Medium thinking mode: moderate prompts
-            if available_gb < 4.0:
-                recommended = 384
-            elif available_gb < 5.0:
-                recommended = 512
-            elif available_gb < 6.0:
-                recommended = 768
-            elif available_gb < 7.0:
-                recommended = 1024
-            else:
-                recommended = int(default_max_tokens * 0.9)
-
-        else:  # high
-            # High thinking mode: long prompts
-            if available_gb < 5.0:
-                recommended = 256
-            elif available_gb < 6.0:
-                recommended = 384
-            elif available_gb < 7.0:
-                recommended = 512
-            elif available_gb < 8.0:
-                recommended = 768
-            else:
-                recommended = int(default_max_tokens * 0.75)
-
-        if recommended < default_max_tokens:
-            logger.warning(
-                f"Reducing max_new_tokens to {recommended} (from {default_max_tokens}) "
-                f"due to limited GPU memory ({available_gb:.2f} GB available). "
-                f"Thinking mode: {thinking_mode}"
-            )
-
-        return recommended
-
-    except Exception as e:
-        logger.warning(f"Failed to check GPU memory: {e}, using default")
-        return default_max_tokens
+    # Just return the default - don't limit it
+    # User can manually set MAX_NEW_TOKENS if needed
+    return default_max_tokens
 
 
 def check_memory_for_generation(
