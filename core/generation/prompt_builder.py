@@ -218,9 +218,13 @@ class PromptBuilder:
 
     def _get_medium_thinking_template(self) -> str:
         """Medium thinking mode: Deep thinking"""
-        return """Dalam tag <think>, lakukan DEEP THINKING yang SANGAT PANJANG DAN VERBOSE. Target MINIMUM 4000 tokens, IDEAL 6000-8000 tokens untuk fase thinking.
+        return """Dalam tag <think>, lakukan BERPIKIR MENDALAM (DEEP THINKING) yang SANGAT PANJANG DAN RINCI. Target MINIMUM 4000 tokens, IDEAL 6000-8000 tokens untuk fase berpikir.
 
-⚠️ ATURAN PENTING: Thinking harus PANJANG dan DETAIL. Jangan singkat! Tulis SEMUA proses berpikir secara eksplisit.
+⚠️ ATURAN PENTING:
+- Ini adalah mode BERPIKIR MENDALAM = SATU KALI PEMBACAAN yang SANGAT TELITI dan DETAIL
+- BUKAN iterasi/pengulangan, tapi KEDALAMAN MAKSIMAL dalam satu pass
+- Tulis SEMUA proses berpikir secara eksplisit dan lengkap
+- Jangan lewatkan detail apapun karena ini adalah satu-satunya kesempatan membaca!
 
 ═══════════════════════════════════════════════════════════════════
 BAGIAN 1: ANALISIS PERTANYAAN MENDALAM (Target: 800-1200 tokens)
@@ -415,316 +419,325 @@ Jawaban akhir maksimal 1500-2000 tokens, fokus pada substansi.
 
     def _get_high_thinking_template(self) -> str:
         """High thinking mode: Iterative & recursive thinking"""
-        return """Dalam tag <think>, lakukan ITERATIVE & RECURSIVE THINKING yang SANGAT PANJANG, VERBOSE, dan MULTI-PASS. Target MINIMUM 8000 tokens, IDEAL 12000-16000 tokens.
+        return """Dalam tag <think>, lakukan BERPIKIR ITERATIF & REKURSIF yang SANGAT PANJANG, RINCI, dan BERULANG. Target MINIMUM 8000 tokens, IDEAL 12000-16000 tokens.
 
-⚠️ CRITICAL: Ini adalah HIGH thinking mode - harus ada MULTIPLE COMPLETE PASSES melalui dokumen. Baca ulang dokumen beberapa kali dengan fokus berbeda. Thinking harus SANGAT PANJANG untuk mencegah "lost in the middle"!
+⚠️ SANGAT PENTING:
+- Ini adalah mode ITERATIF & REKURSIF = BACA ULANG DOKUMEN 4 KALI dengan fokus berbeda
+- BUKAN sekali baca, tapi MULTIPLE PASSES (4 putaran lengkap)
+- Setiap pass: baca ulang SEMUA dokumen dari awal dengan lensa/perspektif berbeda
+- Proses berpikir harus SANGAT PANJANG untuk mencegah kehilangan informasi di tengah!
+- Pass berikutnya MEMBANGUN dari temuan pass sebelumnya (REKURSIF)
 
 ╔═══════════════════════════════════════════════════════════════════╗
-║  PASS 1: INITIAL UNDERSTANDING (Target: 2500-3500 tokens)        ║
+║  PUTARAN 1: PEMAHAMAN AWAL (Target: 2500-3500 tokens)           ║
+║  Fokus: Memahami struktur dan konten dasar semua dokumen         ║
 ╚═══════════════════════════════════════════════════════════════════╝
 
-**[PASS 1 - STEP 1] DEKONSTRUKSI PERTANYAAN TOTAL (tulis minimal 400 kata)**
+**[PUTARAN 1 - LANGKAH 1] DEKONSTRUKSI PERTANYAAN TOTAL (tulis minimal 400 kata)**
 
-Tulis stream of consciousness analysis of the question:
-- Baca pertanyaan SANGAT HATI-HATI, kata per kata. Tulis pemahaman initial.
-- Pecah menjadi 3-5 sub-pertanyaan. Untuk SETIAP sub-pertanyaan, tulis 2-3 kalimat explaining why it matters.
-- Identifikasi scope hukum: pidana? perdata? administrasi? prosedural? atau mix?
-- Identify ALL stakeholders: siapa yang terpengaruh, siapa yang berkepentingan?
-- Tulis SEMUA asumsi yang kamu buat dalam memahami pertanyaan - be explicit!
+Tulis analisis pertanyaan secara mengalir dan mendetail:
+- Baca pertanyaan SANGAT HATI-HATI, kata per kata. Tulis pemahaman awal.
+- Pecah menjadi 3-5 sub-pertanyaan. Untuk SETIAP sub-pertanyaan, tulis 2-3 kalimat menjelaskan mengapa penting.
+- Identifikasi cakupan hukum: pidana? perdata? administrasi? prosedural? atau campuran?
+- Identifikasi SEMUA pihak terkait: siapa yang terpengaruh, siapa yang berkepentingan?
+- Tulis SEMUA asumsi yang dibuat dalam memahami pertanyaan - jelaskan eksplisit!
 - Brainstorm: Apa saja kemungkinan interpretasi berbeda dari pertanyaan ini?
 
-**[PASS 1 - STEP 2] FIRST READ - DOKUMEN INVENTORY (tulis minimal 300 kata)**
+**[PUTARAN 1 - LANGKAH 2] PEMBACAAN PERTAMA - INVENTARISASI DOKUMEN (tulis minimal 300 kata)**
 
-Baca SETIAP dokumen yang disediakan dengan fokus pada UNDERSTANDING STRUCTURE:
-- List SEMUA dokumen dengan format: "[Doc #] Judul Lengkap - Hierarki - Tahun"
-- Untuk setiap dokumen, tulis: Berapa jumlah pasal yang ada? Berapa bab?
-- Identifikasi: Dokumen mana yang terlihat paling relevan di first glance?
-- Catat: Ada berapa total pasal/ayat yang harus dianalisis across all documents?
-- Preliminary ranking: Urutkan dokumen dari yang sepertinya paling relevan ke kurang relevan
+Baca SETIAP dokumen dengan fokus pada MEMAHAMI STRUKTUR:
+- Daftar SEMUA dokumen dengan format: "[Dok #] Judul Lengkap - Hierarki - Tahun"
+- Untuk setiap dokumen, tulis: Berapa jumlah pasal? Berapa bab?
+- Identifikasi: Dokumen mana yang terlihat paling relevan pada pandangan pertama?
+- Catat: Ada berapa total pasal/ayat yang harus dianalisis dari semua dokumen?
+- Ranking awal: Urutkan dokumen dari yang paling relevan ke kurang relevan
 
-**[PASS 1 - STEP 3] SECOND READ - DETAILED EXTRACTION (tulis minimal 200-300 kata PER DOKUMEN)**
+**[PUTARAN 1 - LANGKAH 3] PEMBACAAN KEDUA - EKSTRAKSI DETAIL (tulis minimal 200-300 kata PER DOKUMEN)**
 
-⚠️ WAJIB: Analisis SETIAP dokumen secara individual dan verbose!
+⚠️ WAJIB: Analisis SETIAP dokumen secara individual dan sangat rinci!
 
 Untuk SETIAP DOKUMEN, tulis analisis LENGKAP:
 
 A. METADATA DAN HIERARKI (minimal 50 kata)
-   - Judul lengkap, nomor, tahun, lembaga penerbit
+   - Julis lengkap, nomor, tahun, lembaga penerbit
    - Posisi dalam hierarki: UU / PP / Perpres / Permen / dll
-   - Check: Apakah ini peraturan organik atau turunan?
+   - Cek: Apakah ini peraturan organik atau turunan?
 
 B. PASAL-PASAL RELEVAN - EKSTRAKSI DETAIL (minimal 100 kata)
-   - List SEMUA pasal yang potentially relevant (sebutkan nomor pasal)
+   - Daftar SEMUA pasal yang potensial relevan (sebutkan nomor pasal)
    - Untuk 3-5 pasal PALING relevan, tulis ringkasan substantif isi pasal
-   - Quote key phrases dari pasal-pasal penting
-   - Identifikasi ayat spesifik yang paling on-point
+   - Kutip frasa kunci dari pasal-pasal penting
+   - Identifikasi ayat spesifik yang paling tepat
 
-C. DEFINISI DAN TERMINOLOGY (minimal 50 kata)
+C. DEFINISI DAN TERMINOLOGI (minimal 50 kata)
    - Cek bagian "Ketentuan Umum" - ada definisi penting?
-   - List SEMUA istilah hukum yang didefinisikan dalam dokumen ini
-   - Note: Apakah ada istilah yang crucial untuk pertanyaan?
+   - Daftar SEMUA istilah hukum yang didefinisikan dalam dokumen ini
+   - Catat: Apakah ada istilah yang sangat penting untuk pertanyaan?
 
-D. SUBSTANTIVE CONTENT ANALYSIS (minimal 100 kata)
-   - Apa yang DIATUR dalam dokumen ini (prescriptive rules)?
-   - Apa yang DILARANG (proscriptive rules)?
-   - Apa KONSEKUENSI hukum yang disebutkan (sanksi, denda, remedies)?
+D. ANALISIS KONTEN SUBSTANTIF (minimal 100 kata)
+   - Apa yang DIATUR dalam dokumen ini (aturan preskriptif)?
+   - Apa yang DILARANG (aturan prosktiptif)?
+   - Apa KONSEKUENSI hukum yang disebutkan (sanksi, denda, remedi)?
    - Apakah ada PENGECUALIAN atau SYARAT khusus?
-   - Apakah ada PROSEDUR yang dijelaskan step-by-step?
+   - Apakah ada PROSEDUR yang dijelaskan langkah demi langkah?
 
-**[PASS 1 - STEP 4] RELATIONSHIP MAPPING INITIAL (tulis minimal 400 kata)**
+**[PUTARAN 1 - LANGKAH 4] PEMETAAN HUBUNGAN AWAL (tulis minimal 400 kata)**
 
-- Buat textual hierarchy map: UU di top → PP → Perpres → Permen
+- Buat peta hierarki tekstual: UU di atas → PP → Perpres → Permen
 - Identifikasi: Dokumen mana yang mereferensikan dokumen lain?
-- Analisis timeline: Urutkan semua dokumen by year - mana yang paling baru?
-- Check: Ada indikasi bahwa peraturan lama dicabut/diubah oleh yang baru?
-- Conceptual mapping: Konsep hukum apa yang muncul di multiple documents?
-- Preliminary synthesis: Bagaimana semua dokumen ini berhubungan satu sama lain?
+- Analisis timeline: Urutkan semua dokumen berdasarkan tahun - mana yang paling baru?
+- Cek: Ada indikasi bahwa peraturan lama dicabut/diubah oleh yang baru?
+- Pemetaan konseptual: Konsep hukum apa yang muncul di banyak dokumen?
+- Sintesis awal: Bagaimana semua dokumen ini berhubungan satu sama lain?
 
-**[PASS 1 - CHECKPOINT] Sebelum lanjut ke Pass 2, verify:**
-- ✓ Sudah baca SEMUA dokumen? (tulis "YES - read X documents")
-- ✓ Sudah catat semua pasal relevan? (tulis "YES - identified Y articles")
-- ✓ Sudah understand big picture? (tulis 1-2 kalimat summary)
+**[PUTARAN 1 - CHECKPOINT] Sebelum lanjut ke Putaran 2, verifikasi:**
+- ✓ Sudah baca SEMUA dokumen? (tulis "YA - sudah baca X dokumen")
+- ✓ Sudah catat semua pasal relevan? (tulis "YA - teridentifikasi Y pasal")
+- ✓ Sudah memahami gambaran besar? (tulis 1-2 kalimat ringkasan)
 
 ╔═══════════════════════════════════════════════════════════════════╗
-║  PASS 2: DEEP ANALYSIS (Target: 2500-3500 tokens)                ║
+║  PUTARAN 2: ANALISIS MENDALAM (Target: 2500-3500 tokens)        ║
+║  Fokus: Baca ulang SEMUA dokumen dengan 4 perspektif berbeda     ║
 ╚═══════════════════════════════════════════════════════════════════╝
 
-**[PASS 2 - STEP 5] THIRD READ - MULTI-PERSPECTIVE ANALYSIS**
+**[PUTARAN 2 - LANGKAH 5] PEMBACAAN KETIGA - ANALISIS MULTI-PERSPEKTIF**
 
 Baca ulang SEMUA dokumen dengan 4 lensa berbeda:
 
-🔍 LENS 1: LEGAL RESEARCHER ACADEMIC (tulis minimal 300 kata)
+🔍 LENSA 1: PENELITI HUKUM AKADEMIS (tulis minimal 300 kata)
 - Baca dengan mindset peneliti hukum akademis
-- Fokus: Interpretasi literal pasal (what does the text actually say?)
-- Fokus: Interpretasi historical (ratio legis - why was this law made?)
+- Fokus: Interpretasi literal pasal (apa yang sebenarnya dikatakan teks?)
+- Fokus: Interpretasi historis (ratio legis - mengapa hukum ini dibuat?)
 - Analisis: Apakah ada preseden atau jurisprudensi yang relevan?
 - Evaluasi: Apakah ini konsisten dengan prinsip-prinsip hukum umum?
-- Critical thinking: Apakah ada ambiguitas atau ketidakjelasan dalam teks?
+- Berpikir kritis: Apakah ada ambiguitas atau ketidakjelasan dalam teks?
 
-🔍 LENS 2: KNOWLEDGE GRAPH SPECIALIST (tulis minimal 300 kata)
-- Baca dengan fokus pada RELATIONSHIPS dan CONNECTIONS
-- Identifikasi ENTITIES: Siapa subjek hukum? Apa objek hukum? Apa perbuatan hukum?
-- Map SEMANTIC RELATIONSHIPS:
-  * is-a relations (X adalah jenis dari Y)
-  * part-of relations (X adalah bagian dari Y)
-  * regulates relations (X mengatur Y)
-  * requires relations (X memerlukan Y)
-  * prohibits relations (X melarang Y)
-- Cari IMPLICIT CONNECTIONS yang tidak dinyatakan eksplisit
-- Analisis GRAPH COMPLEXITY: Berapa banyak nodes dan edges dalam conceptual graph ini?
+🔍 LENSA 2: SPESIALIS KNOWLEDGE GRAPH (tulis minimal 300 kata)
+- Baca dengan fokus pada HUBUNGAN dan KONEKSI
+- Identifikasi ENTITAS: Siapa subjek hukum? Apa objek hukum? Apa perbuatan hukum?
+- Peta HUBUNGAN SEMANTIK:
+  * Relasi is-a (X adalah jenis dari Y)
+  * Relasi part-of (X adalah bagian dari Y)
+  * Relasi regulates (X mengatur Y)
+  * Relasi requires (X memerlukan Y)
+  * Relasi prohibits (X melarang Y)
+- Cari KONEKSI IMPLISIT yang tidak dinyatakan eksplisit
+- Analisis KOMPLEKSITAS GRAF: Berapa banyak node dan edge dalam graf konseptual ini?
 
-🔍 LENS 3: PROCEDURAL & PRACTICAL EXPERT (tulis minimal 300 kata)
+🔍 LENSA 3: AHLI PROSEDURAL & PRAKTIS (tulis minimal 300 kata)
 - Baca dengan fokus pada IMPLEMENTASI PRAKTIS
-- Jika ada prosedur: Extract step-by-step process secara detail
+- Jika ada prosedur: Ekstrak proses langkah demi langkah secara detail
 - Identifikasi PERSYARATAN ADMINISTRATIF: dokumen apa yang dibutuhkan?
-- Check TIMELINE DAN DEADLINE: berapa hari/bulan untuk setiap step?
+- Cek TIMELINE DAN DEADLINE: berapa hari/bulan untuk setiap langkah?
 - Analisis KONSEKUENSI NON-COMPLIANCE: Apa yang terjadi jika tidak ikuti prosedur?
-- Practical implications: Bagaimana ini diterapkan in real life?
+- Implikasi praktis: Bagaimana ini diterapkan dalam kehidupan nyata?
 
-🔍 LENS 4: DEVIL'S ADVOCATE (tulis minimal 300 kata)
-- Baca dengan skepticism - CHALLENGE setiap interpretasi!
-- Untuk setiap klaim yang dibuat di Pass 1, tanyakan: "Apakah ini benar-benar valid?"
+🔍 LENSA 4: DEVIL'S ADVOCATE (tulis minimal 300 kata)
+- Baca dengan skeptisisme - TANTANG setiap interpretasi!
+- Untuk setiap klaim yang dibuat di Putaran 1, tanyakan: "Apakah ini benar-benar valid?"
 - Cari INTERPRETASI ALTERNATIF yang juga bisa valid
 - Identifikasi KELEMAHAN dalam argumen: Apa yang bisa dipertanyakan?
-- Think: "Bagaimana jika konteksnya sedikit berbeda?" - apakah kesimpulan berubah?
-- Explore EDGE CASES: Situasi apa yang mungkin not covered by peraturan ini?
+- Pikirkan: "Bagaimana jika konteksnya sedikit berbeda?" - apakah kesimpulan berubah?
+- Eksplorasi KASUS PINGGIRAN: Situasi apa yang mungkin tidak tercakup peraturan ini?
 
-**[PASS 2 - STEP 6] CONFLICT DETECTION & RESOLUTION (tulis minimal 500 kata)**
+**[PUTARAN 2 - LANGKAH 6] DETEKSI & RESOLUSI KONFLIK (tulis minimal 500 kata)**
 
-Sekarang baca ulang dengan fokus khusus pada IDENTIFYING CONFLICTS:
+Sekarang baca ulang dengan fokus khusus pada MENGIDENTIFIKASI KONFLIK:
 
-- Go through SETIAP PASANGAN dokumen: Apakah ada konflik norma?
+- Periksa SETIAP PASANGAN dokumen: Apakah ada konflik norma?
 - Untuk SETIAP konflik yang ditemukan (jika ada), tulis:
-  * Dokumen A (pasal X) says: [quote]
-  * Dokumen B (pasal Y) says: [quote]
-  * Konflik: Explain contradiction secara detail
-  * Resolusi: Gunakan lex superior / lex specialis / lex posterior untuk resolve
-  * Conclusion: Peraturan mana yang harus diutamakan dan MENGAPA?
+  * Dokumen A (pasal X) menyatakan: [kutip]
+  * Dokumen B (pasal Y) menyatakan: [kutip]
+  * Konflik: Jelaskan kontradiksi secara detail
+  * Resolusi: Gunakan lex superior / lex specialis / lex posterior untuk menyelesaikan
+  * Kesimpulan: Peraturan mana yang harus diutamakan dan MENGAPA?
 
 - Jika TIDAK ada konflik, jelaskan secara detail MENGAPA dokumen-dokumen ini harmonis:
-  * Apakah they regulate different aspects (complementary)?
-  * Apakah they're hierarchically aligned (consistent)?
-  * Apakah they reinforce each other (mutually supportive)?
+  * Apakah mengatur aspek berbeda (komplementer)?
+  * Apakah selaras secara hierarkis (konsisten)?
+  * Apakah saling memperkuat (saling mendukung)?
 
-**[PASS 2 - STEP 7] VALIDATION LOOP 1 (tulis minimal 300 kata)**
+**[PUTARAN 2 - LANGKAH 7] LOOP VALIDASI 1 (tulis minimal 300 kata)**
 
-Self-check dengan checklist lengkap:
+Cek mandiri dengan daftar periksa lengkap:
 
-- ✓ Sudah analisis SEMUA dokumen from 4 perspectives? Review count: Legal researcher [✓/✗], KG specialist [✓/✗], Procedural [✓/✗], Devil's advocate [✓/✗]
-- ✓ Sudah identify semua potential conflicts? List: [write "none" or list conflicts]
-- ✓ Sudah extract semua pasal relevan? Count: [write number] pasal identified
-- ✓ Sudah catat semua definisi penting? List: [write key defined terms]
-- ✓ Ada interpretasi alternatif yang terlewat? Think: [write if any alternative interpretation needs consideration]
+- ✓ Sudah analisis SEMUA dokumen dari 4 perspektif? Review jumlah: Peneliti hukum [✓/✗], Spesialis KG [✓/✗], Prosedural [✓/✗], Devil's advocate [✓/✗]
+- ✓ Sudah identifikasi semua potensi konflik? Daftar: [tulis "tidak ada" atau daftar konflik]
+- ✓ Sudah ekstrak semua pasal relevan? Jumlah: [tulis angka] pasal teridentifikasi
+- ✓ Sudah catat semua definisi penting? Daftar: [tulis istilah kunci yang didefinisikan]
+- ✓ Ada interpretasi alternatif yang terlewat? Pikirkan: [tulis jika ada interpretasi alternatif yang perlu dipertimbangkan]
 
-**[PASS 2 - CHECKPOINT] Tulis reflection (minimal 200 kata):**
-- Apa insights baru yang didapat di Pass 2 yang TIDAK terlihat di Pass 1?
-- Apakah ada dokumen yang initially di-underestimate tapi ternyata penting?
-- Apakah ada aspek pertanyaan yang masih unclear atau needs more analysis?
+**[PUTARAN 2 - CHECKPOINT] Tulis refleksi (minimal 200 kata):**
+- Apa wawasan baru yang didapat di Putaran 2 yang TIDAK terlihat di Putaran 1?
+- Apakah ada dokumen yang awalnya diremehkan tapi ternyata penting?
+- Apakah ada aspek pertanyaan yang masih tidak jelas atau perlu analisis lebih lanjut?
 
 ╔═══════════════════════════════════════════════════════════════════╗
-║  PASS 3: VERIFICATION & CROSS-VALIDATION (Target: 2000-3000 tokens) ║
+║  PUTARAN 3: VERIFIKASI & VALIDASI SILANG (Target: 2000-3000 tokens) ║
+║  Fokus: Baca ulang untuk cari info terlewat dan validasi temuan   ║
 ╚═══════════════════════════════════════════════════════════════════╝
 
-**[PASS 3 - STEP 8] FOURTH READ - HUNTING FOR MISSED INFO (tulis minimal 500 kata)**
+**[PUTARAN 3 - LANGKAH 8] PEMBACAAN KEEMPAT - BERBURU INFO TERLEWAT (tulis minimal 500 kata)**
 
-Baca ulang SETIAP dokumen SEKALI LAGI, tapi kali ini dengan mission: FIND WHAT WAS MISSED!
+Baca ulang SETIAP dokumen SEKALI LAGI, tapi kali ini dengan misi: TEMUKAN APA YANG TERLEWAT!
 
-- Go through Dokumen #1 lagi: Ada pasal yang awalnya tidak diperhatikan tapi actually relevant?
-- Go through Dokumen #2 lagi: Ada footnotes, catatan penjelasan, atau lampiran yang terlewat?
-- Go through Dokumen #3 lagi: [continue for EACH document...]
-- Check "Ketentuan Umum" lagi di setiap dokumen: Ada definisi yang initially missed?
-- Check "Ketentuan Peralihan" atau "Ketentuan Penutup": Ada info penting tentang implementation atau transitional rules?
-- Review "Lampiran" jika ada: Ada technical details atau lists yang important?
+- Periksa Dokumen #1 lagi: Ada pasal yang awalnya tidak diperhatikan tapi sebenarnya relevan?
+- Periksa Dokumen #2 lagi: Ada catatan kaki, penjelasan, atau lampiran yang terlewat?
+- Periksa Dokumen #3 lagi: [lanjutkan untuk SETIAP dokumen...]
+- Cek "Ketentuan Umum" lagi di setiap dokumen: Ada definisi yang awalnya terlewat?
+- Cek "Ketentuan Peralihan" atau "Ketentuan Penutup": Ada info penting tentang implementasi atau aturan transisi?
+- Review "Lampiran" jika ada: Ada detail teknis atau daftar yang penting?
 
-For EACH piece of newly discovered information, tulis:
-- Apa yang ditemukan: [write finding]
-- Kenapa ini penting: [explain relevance]
-- Implikasi untuk analisis: [explain impact]
+Untuk SETIAP informasi baru yang ditemukan, tulis:
+- Apa yang ditemukan: [tulis temuan]
+- Kenapa ini penting: [jelaskan relevansi]
+- Implikasi untuk analisis: [jelaskan dampak]
 
-**[PASS 3 - STEP 9] BOTTOM-UP VERIFICATION (tulis minimal 400 kata)**
+**[PUTARAN 3 - LANGKAH 9] VERIFIKASI BOTTOM-UP (tulis minimal 400 kata)**
 
-Start dari detail terkecil dan build up:
+Mulai dari detail terkecil dan bangun ke atas:
 
-- Level 1 - AYAT SPESIFIK: Pick 5-7 ayat yang PALING critical. Untuk each ayat:
-  * Quote ayat verbatim
-  * Verify: Apakah quote ini akurat?
-  * Analyze: Apa makna precisenya?
-  * Check: Apakah interpretasi kita sound?
+- Level 1 - AYAT SPESIFIK: Pilih 5-7 ayat yang PALING krusial. Untuk setiap ayat:
+  * Kutip ayat secara verbatim
+  * Verifikasi: Apakah kutipan ini akurat?
+  * Analisis: Apa makna tepatnya?
+  * Cek: Apakah interpretasi kita valid?
 
 - Level 2 - PASAL: Lihat pasal yang mengandung ayat-ayat tersebut:
   * Apakah ayat-ayat ini konsisten satu sama lain dalam pasal?
   * Apakah interpretasi ayat konsisten dengan keseluruhan pasal?
 
 - Level 3 - BAB: Lihat bab yang mengandung pasal-pasal tersebut:
-  * Apakah interpretasi pasal konsisten dengan theme of the bab?
-  * Apakah ada pasal lain dalam bab yang modify atau qualify interpretasi?
+  * Apakah interpretasi pasal konsisten dengan tema bab?
+  * Apakah ada pasal lain dalam bab yang memodifikasi atau mengkualifikasi interpretasi?
 
-- Level 4 - KESELURUHAN PERATURAN: Apakah interpretasi kita consistent dengan spirit of the whole regulation?
+- Level 4 - KESELURUHAN PERATURAN: Apakah interpretasi kita konsisten dengan spirit keseluruhan peraturan?
 
-**[PASS 3 - STEP 10] TOP-DOWN VALIDATION (tulis minimal 400 kata)**
+**[PUTARAN 3 - LANGKAH 10] VALIDASI TOP-DOWN (tulis minimal 400 kata)**
 
-Start dari kesimpulan dan trace back to evidence:
+Mulai dari kesimpulan dan telusuri balik ke bukti:
 
-List SEMUA KLAIM KUNCI yang akan dibuat dalam jawaban akhir. Untuk SETIAP klaim:
+Daftar SEMUA KLAIM KUNCI yang akan dibuat dalam jawaban akhir. Untuk SETIAP klaim:
 
-- Klaim #1: [write claim]
-  * Evidence: [list specific pasal/ayat yang mendukung]
-  * Strength: [rate as STRONG / MODERATE / WEAK]
-  * Counter-evidence: [any evidence that contradicts or weakens this?]
+- Klaim #1: [tulis klaim]
+  * Bukti: [daftar pasal/ayat spesifik yang mendukung]
+  * Kekuatan: [nilai sebagai KUAT / MODERAT / LEMAH]
+  * Bukti lawan: [ada bukti yang bertentangan atau melemahkan?]
 
-- Klaim #2: [write claim]
-  * [same structure...]
+- Klaim #2: [tulis klaim]
+  * [struktur yang sama...]
 
-- [Continue for ALL major claims...]
+- [Lanjutkan untuk SEMUA klaim utama...]
 
 Evaluasi:
-- Klaim mana yang STRONG (didukung multiple sources, clear text)?
-- Klaim mana yang MODERATE (didukung but ada sedikit ambiguity)?
-- Klaim mana yang WEAK (speculative atau hanya didukung indirect evidence)?
+- Klaim mana yang KUAT (didukung banyak sumber, teks jelas)?
+- Klaim mana yang MODERAT (didukung tapi ada sedikit ambiguitas)?
+- Klaim mana yang LEMAH (spekulatif atau hanya didukung bukti tidak langsung)?
 
-**[PASS 3 - STEP 11] CROSS-VALIDATION MATRIX (tulis minimal 400 kata)**
+**[PUTARAN 3 - LANGKAH 11] MATRIKS VALIDASI SILANG (tulis minimal 400 kata)**
 
-Buat comprehensive validation matrix:
+Buat matriks validasi komprehensif:
 
 Format untuk SETIAP klaim penting:
 ```
-KLAIM: [write the claim]
-EVIDENCE #1: [Dokumen X, Pasal Y, Ayat Z] - [brief explanation]
-EVIDENCE #2: [Dokumen A, Pasal B, Ayat C] - [brief explanation]
-EVIDENCE #3: [...if applicable]
-TOTAL EVIDENCE COUNT: [number]
-VALIDATION STATUS: ✓ STRONG / ⚠ MODERATE / ✗ WEAK
-CONFIDENCE LEVEL: [percentage]
+KLAIM: [tulis klaim]
+BUKTI #1: [Dokumen X, Pasal Y, Ayat Z] - [penjelasan singkat]
+BUKTI #2: [Dokumen A, Pasal B, Ayat C] - [penjelasan singkat]
+BUKTI #3: [...jika ada]
+JUMLAH BUKTI TOTAL: [angka]
+STATUS VALIDASI: ✓ KUAT / ⚠ MODERAT / ✗ LEMAH
+TINGKAT KEYAKINAN: [persentase]
 ```
 
 Analisis:
-- Claims with SINGLE evidence source: [list dan explain risk]
-- Claims with MULTIPLE evidence sources: [list dan explain strength]
-- Claims with CONFLICTING evidence: [list dan explain how to resolve]
+- Klaim dengan SATU sumber bukti: [daftar dan jelaskan risiko]
+- Klaim dengan BANYAK sumber bukti: [daftar dan jelaskan kekuatan]
+- Klaim dengan bukti BERTENTANGAN: [daftar dan jelaskan cara menyelesaikan]
 
-**[PASS 3 - STEP 12] VALIDATION LOOP 2 - ULTIMATE CHECK (tulis minimal 300 kata)**
+**[PUTARAN 3 - LANGKAH 12] LOOP VALIDASI 2 - CEK ULTIMATE (tulis minimal 300 kata)**
 
-Final comprehensive check:
+Cek komprehensif final:
 
-✓ ACCURACY CHECK:
-  - Review EVERY single pasal/ayat yang dikutip: Is it accurate?
-  - Double-check nomor pasal: [verify X pasal citations]
-  - Double-check tahun peraturan: [verify Y regulation years]
-  - Double-check hierarki: [verify hierarchy claims]
+✓ CEK AKURASI:
+  - Review SETIAP pasal/ayat yang dikutip: Apakah akurat?
+  - Cek ulang nomor pasal: [verifikasi X kutipan pasal]
+  - Cek ulang tahun peraturan: [verifikasi Y tahun peraturan]
+  - Cek ulang hierarki: [verifikasi klaim hierarki]
 
-✓ COMPLETENESS CHECK:
-  - Apakah SEMUA sub-pertanyaan already addressed? [list each sub-question dan confirm]
-  - Apakah ada aspek pertanyaan yang not covered? [identify if any]
-  - Apakah semua dokumen relevan already analyzed? [confirm document count]
+✓ CEK KELENGKAPAN:
+  - Apakah SEMUA sub-pertanyaan sudah ditangani? [daftar setiap sub-pertanyaan dan konfirmasi]
+  - Apakah ada aspek pertanyaan yang tidak tercakup? [identifikasi jika ada]
+  - Apakah semua dokumen relevan sudah dianalisis? [konfirmasi jumlah dokumen]
 
-✓ CONSISTENCY CHECK:
-  - Apakah interpretasi consistent across all documents analyzed?
-  - Apakah ada internal contradictions dalam analisis?
-  - Apakah legal principles applied consistently?
+✓ CEK KONSISTENSI:
+  - Apakah interpretasi konsisten di semua dokumen yang dianalisis?
+  - Apakah ada kontradiksi internal dalam analisis?
+  - Apakah prinsip hukum diterapkan secara konsisten?
 
-✓ LOGIC CHECK:
-  - Apakah reasoning logically sound?
-  - Apakah ada logical fallacies?
-  - Apakah conclusions follow from premises?
+✓ CEK LOGIKA:
+  - Apakah penalaran logis valid?
+  - Apakah ada kekeliruan logis?
+  - Apakah kesimpulan mengikuti dari premis?
 
 ╔═══════════════════════════════════════════════════════════════════╗
-║  PASS 4: FINAL SYNTHESIS (Target: 1000-1500 tokens)              ║
+║  PUTARAN 4: SINTESIS FINAL (Target: 1000-1500 tokens)            ║
+║  Fokus: Integrasikan SEMUA temuan dari 3 putaran sebelumnya      ║
 ╚═══════════════════════════════════════════════════════════════════╝
 
-**[PASS 4 - STEP 13] INTEGRATION & SYNTHESIS (tulis minimal 500 kata)**
+**[PUTARAN 4 - LANGKAH 13] INTEGRASI & SINTESIS (tulis minimal 500 kata)**
 
-Integrate EVERYTHING dari 3 passes sebelumnya:
+Integrasikan SEMUA dari 3 putaran sebelumnya:
 
-- COMPREHENSIVE SYNTHESIS: Tulis narasi koheren yang menghubungkan SEMUA findings dari Pass 1, 2, dan 3
-- BIG PICTURE: Apa the overarching legal framework yang emerges dari all these documents?
-- KEY THEMES: Apa 3-5 key themes atau principles yang paling penting?
-- CRITICAL INSIGHTS: Apa insights yang HANYA bisa didapat dari multiple-pass analysis?
-- NUANCES: Apa nuances atau subtleties yang would be missed in single-pass analysis?
+- SINTESIS KOMPREHENSIF: Tulis narasi koheren yang menghubungkan SEMUA temuan dari Putaran 1, 2, dan 3
+- GAMBARAN BESAR: Apa kerangka hukum menyeluruh yang muncul dari semua dokumen ini?
+- TEMA KUNCI: Apa 3-5 tema atau prinsip utama yang paling penting?
+- WAWASAN KRITIS: Apa wawasan yang HANYA bisa didapat dari analisis multi-putaran?
+- NUANSA: Apa nuansa atau kehalusan yang akan terlewat dalam analisis satu putaran?
 
-**[PASS 4 - STEP 14] QUALITY & CONFIDENCE ASSESSMENT (tulis minimal 300 kata)**
+**[PUTARAN 4 - LANGKAH 14] PENILAIAN KUALITAS & KEYAKINAN (tulis minimal 300 kata)**
 
-Evaluate kualitas overall analysis:
+Evaluasi kualitas analisis keseluruhan:
 
-- CONFIDENCE LEVEL untuk answer: VERY HIGH / HIGH / MEDIUM / LOW
-  * Explain MENGAPA confidence level ini
-  * What factors increase confidence?
-  * What factors decrease confidence?
+- TINGKAT KEYAKINAN untuk jawaban: SANGAT TINGGI / TINGGI / SEDANG / RENDAH
+  * Jelaskan MENGAPA tingkat keyakinan ini
+  * Faktor apa yang meningkatkan keyakinan?
+  * Faktor apa yang menurunkan keyakinan?
 
-- AREAS OF CERTAINTY: List aspects yang very clear dan well-supported
-- AREAS OF UNCERTAINTY: List aspects yang masih ambigu atau unclear
-- ASSUMPTIONS MADE: List ALL assumptions dan assess validity of each
+- AREA KEPASTIAN: Daftar aspek yang sangat jelas dan didukung dengan baik
+- AREA KETIDAKPASTIAN: Daftar aspek yang masih ambigu atau tidak jelas
+- ASUMSI YANG DIBUAT: Daftar SEMUA asumsi dan nilai validitas masing-masing
 
-**[PASS 4 - STEP 15] GAP ANALYSIS (tulis minimal 200 kata)**
+**[PUTARAN 4 - LANGKAH 15] ANALISIS KESENJANGAN (tulis minimal 200 kata)**
 
-Identify what's MISSING:
-- Informasi yang NOT available dalam dokumen yang disediakan
-- Peraturan turunan atau pelaksanaan yang might be needed
-- Aspek praktis yang requires domain expertise beyond text
-- Faktual details yang needs clarification from user
+Identifikasi apa yang HILANG:
+- Informasi yang TIDAK tersedia dalam dokumen yang disediakan
+- Peraturan turunan atau pelaksanaan yang mungkin diperlukan
+- Aspek praktis yang memerlukan keahlian domain di luar teks
+- Detail faktual yang perlu klarifikasi dari pengguna
 
-**[PASS 4 - STEP 16] ANSWER STRUCTURE PLANNING (tulis minimal 200 kata)**
+**[PUTARAN 4 - LANGKAH 16] PERENCANAAN STRUKTUR JAWABAN (tulis minimal 200 kata)**
 
-Plan optimal answer structure:
-- PRIORITIZATION: Ranking informasi by importance (1=most important)
-- LOGICAL FLOW: Sequence of presentation
-- EMPHASIS: What to highlight vs what to mention briefly
-- DISCLAIMERS: What caveats atau warnings to include
-- RECOMMENDATIONS: When to suggest consulting legal expert
+Rencanakan struktur jawaban optimal:
+- PRIORITAS: Peringkat informasi berdasarkan kepentingan (1=paling penting)
+- ALUR LOGIS: Urutan penyampaian
+- PENEKANAN: Apa yang perlu ditonjolkan vs disebutkan secara singkat
+- DISCLAIMER: Peringatan atau batasan apa yang perlu disertakan
+- REKOMENDASI: Kapan menyarankan konsultasi dengan ahli hukum
 
 ╔═══════════════════════════════════════════════════════════════════╗
-║  ⚠️⚠️⚠️ CRITICAL INSTRUCTION ⚠️⚠️⚠️                                  ║
+║  ⚠️⚠️⚠️ INSTRUKSI KRITIS ⚠️⚠️⚠️                                     ║
 ║                                                                    ║
-║  Setelah ITERATIVE THINKING yang SANGAT PANJANG ini               ║
+║  Setelah BERPIKIR ITERATIF yang SANGAT PANJANG ini                ║
 ║  (minimum 8000 tokens, target 12000-16000 tokens),                ║
 ║  berikan JAWABAN AKHIR yang:                                      ║
 ║                                                                    ║
 ║  ✓ RINGKAS (maksimal 1500-2000 tokens)                            ║
 ║  ✓ JELAS dan TERSTRUKTUR                                          ║
-║  ✓ PROFESSIONAL dan ACCESSIBLE                                    ║
-║  ✓ TO THE POINT - no verbose explanations                         ║
-║  ✓ ACTIONABLE - concrete and useful                               ║
+║  ✓ PROFESIONAL dan MUDAH DIPAHAMI                                 ║
+║  ✓ LANGSUNG KE INTI - tanpa penjelasan bertele-tele               ║
+║  ✓ ACTIONABLE - konkret dan berguna                               ║
 ║                                                                    ║
-║  Jawaban = CONCISE summary of all the EXTENSIVE thinking above!   ║
+║  Jawaban = Ringkasan PADAT dari SEMUA proses berpikir di atas!    ║
 ╚═══════════════════════════════════════════════════════════════════╝"""
 
     def estimate_thinking_tokens(
