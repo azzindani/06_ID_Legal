@@ -105,177 +105,46 @@ class ThinkingPipeline:
 
     def _get_low_thinking_template(self) -> str:
         """Low thinking mode: Basic analysis"""
-        return """Dalam tag <think>, lakukan analisis DASAR dengan struktur berikut:
-
-1. **PEMAHAMAN PERTANYAAN** (1-2 paragraf)
-   - Identifikasi inti pertanyaan
-   - Tentukan jenis pertanyaan (definitional, procedural, sanctions, dll)
-   - Catat kata kunci penting
-
-2. **ANALISIS DOKUMEN** (2-3 paragraf)
-   - Evaluasi relevansi setiap dokumen yang disediakan
-   - Identifikasi pasal dan ayat yang relevan
-   - Catat hierarki peraturan (UU > PP > Permen, dll)
-
-3. **SINTESIS INFORMASI** (2-3 paragraf)
-   - Gabungkan informasi dari berbagai sumber
-   - Identifikasi konsistensi atau konflik antar peraturan
-   - Tentukan peraturan yang paling authoritative
-
-4. **KESIMPULAN ANALISIS** (1-2 paragraf)
-   - Ringkas temuan utama
-   - Identifikasi informasi yang masih kurang (jika ada)
-   - Tentukan arah jawaban"""
+        return """Dalam tag <think>, lakukan analisis berikut:
+1. Pahami pertanyaan & identifikasi jenis pertanyaan
+2. Evaluasi dokumen: relevansi, pasal/ayat, hierarki peraturan
+3. Sintesis informasi & identifikasi konflik
+4. Ringkas temuan & tentukan jawaban"""
 
     def _get_medium_thinking_template(self) -> str:
         """Medium thinking mode: Deep thinking"""
-        return """Dalam tag <think>, lakukan DEEP THINKING dengan struktur berikut:
-
-1. **PEMAHAMAN MENDALAM PERTANYAAN** (2-3 paragraf)
-   - Analisis pertanyaan dari berbagai sudut pandang
-   - Identifikasi asumsi implisit dalam pertanyaan
-   - Tentukan konteks hukum yang relevan (pidana, perdata, administrasi, dll)
-   - Pertimbangkan tujuan user bertanya (preventif, kuratif, informatif)
-
-2. **EVALUASI MENYELURUH DOKUMEN** (3-5 paragraf)
-   - Baca dan pahami setiap dokumen dengan cermat
-   - Buat ranking relevansi dokumen dengan justifikasi
-   - Identifikasi pasal, ayat, huruf, dan butir yang spesifik
-   - Analisis hubungan hierarkis antar peraturan
-   - Catat tanggal efektif dan status peraturan (aktif/dicabut/diubah)
-
-3. **ANALISIS CROSS-REFERENCE** (2-3 paragraf)
-   - Identifikasi referensi silang antar dokumen
-   - Periksa konsistensi antar peraturan terkait
-   - Identifikasi lex specialis dan lex generalis
-   - Catat peraturan pelaksana dan peraturan induk
-
-4. **SINTESIS KOMPREHENSIF** (3-4 paragraf)
-   - Integrasikan informasi dari semua sumber
-   - Analisis potensial konflik atau ambiguitas
-   - Pertimbangkan interpretasi alternatif
-   - Evaluasi kekuatan argumen dari berbagai perspektif
-
-5. **VALIDASI & CROSS-CHECK** (2-3 paragraf)
-   - Periksa ulang pasal dan ayat yang dikutip
-   - Validasi hierarki peraturan
-   - Verifikasi konsistensi interpretasi
-   - Identifikasi gap atau informasi yang masih diperlukan
-
-6. **KESIMPULAN & REKOMENDASI** (2-3 paragraf)
-   - Ringkas temuan dengan detail
-   - Identifikasi tingkat kepastian jawaban (pasti/kemungkinan/tidak pasti)
-   - Tentukan struktur jawaban yang optimal
-   - Rencanakan disclaimer atau catatan penting"""
+        return """Dalam tag <think>, lakukan deep thinking:
+1. Analisis pertanyaan dari berbagai sudut pandang & konteks hukum
+2. Evaluasi dokumen: ranking relevansi, pasal spesifik, hierarki, status peraturan
+3. Cross-reference: referensi silang, konsistensi, lex specialis/generalis
+4. Sintesis komprehensif: integrasikan semua sumber, analisis konflik
+5. Validasi: cross-check pasal, verifikasi hierarki & interpretasi
+6. Kesimpulan: tingkat kepastian, struktur jawaban optimal"""
 
     def _get_high_thinking_template(self) -> str:
         """High thinking mode: Iterative & recursive thinking"""
-        return """Dalam tag <think>, lakukan ITERATIVE & RECURSIVE THINKING dengan struktur berikut:
+        return """Dalam tag <think>, lakukan iterative & recursive thinking:
 
-**FASE 1: INITIAL COMPREHENSION** (3-4 paragraf)
-1.1. Analisis Multi-Dimensional Pertanyaan
-   - Dekonstruksi pertanyaan menjadi sub-pertanyaan
-   - Identifikasi layer eksplisit dan implisit
-   - Tentukan scope dan batasan pertanyaan
-   - Pertimbangkan konteks sosial, ekonomi, politik yang relevan
+**ANALISIS:**
+1. Dekonstruksi pertanyaan → sub-pertanyaan, scope, konteks
+2. Reading: baca semua dokumen, identifikasi section kunci
+3. Analysis: ekstrak pasal/ayat detail, definisi istilah, struktur argumen
+4. Relationship mapping: hierarki, referensi, peraturan terkait
 
-1.2. Pemetaan Kebutuhan Informasi
-   - Buat daftar informasi yang diperlukan
-   - Prioritaskan informasi berdasarkan urgensi
-   - Identifikasi sumber informasi yang ideal
+**EVALUASI:**
+5. Multi-perspective: legal researcher, KG specialist, procedural expert, devil's advocate
+6. Conflict check: inkonsistensi, resolusi konflik (lex superior/specialis/posterior)
+7. Validation loop: semua pertanyaan terjawab? kutipan akurat? interpretasi konsisten?
 
-**FASE 2: DEEP DOCUMENT ANALYSIS** (5-7 paragraf)
-2.1. Reading Phase - First Pass
-   - Baca semua dokumen secara menyeluruh
-   - Buat catatan awal relevansi setiap dokumen
-   - Identifikasi section kunci yang perlu analisis mendalam
+**REFINEMENT:**
+8. Re-check dokumen untuk info terlewat
+9. Bottom-up verification: detail → keseluruhan
+10. Top-down validation: kesimpulan → evidence
+11. Cross-validation: klaim × supporting evidence
 
-2.2. Analysis Phase - Second Pass
-   - Analisis mendalam setiap dokumen yang relevan
-   - Ekstrak pasal, ayat, huruf, butir dengan konteks lengkap
-   - Identifikasi definisi istilah kunci
-   - Catat struktur argumen dalam setiap dokumen
-
-2.3. Relationship Mapping
-   - Buat peta hubungan antar dokumen (hierarki, referensi, implementasi)
-   - Identifikasi peraturan induk → turunan → pelaksana
-   - Catat peraturan yang mencabut atau mengubah peraturan lain
-   - Analisis temporal: urutan pemberlakuan dan implikasinya
-
-**FASE 3: CRITICAL ANALYSIS** (4-5 paragraf)
-3.1. Multi-Perspective Evaluation
-   - Analisis dari sudut pandang Senior Legal Researcher (precedent, authority)
-   - Analisis dari sudut pandang Knowledge Graph Specialist (relationships, entities)
-   - Analisis dari sudut pandang Procedural Expert (steps, requirements)
-   - Analisis dari sudut pandang Devil's Advocate (weaknesses, alternatives)
-
-3.2. Conflict & Consistency Check
-   - Identifikasi inkonsistensi antar peraturan
-   - Analisis cara resolusi konflik (lex superior, lex specialis, lex posterior)
-   - Evaluasi kualitas argumen dari berbagai interpretasi
-   - Pertimbangkan case law atau precedent (jika tersedia)
-
-**FASE 4: SYNTHESIS & VALIDATION** (4-5 paragraf)
-4.1. Create Initial Answer Structure
-   - Susun outline jawaban berdasarkan analisis
-   - Alokasikan informasi ke section yang sesuai
-   - Tentukan urutan penyampaian yang logis
-
-4.2. Validation Loop - First Iteration
-   - Review: Apakah semua bagian pertanyaan terjawab?
-   - Check: Apakah kutipan pasal akurat?
-   - Verify: Apakah interpretasi konsisten?
-   - Test: Apakah ada alternatif interpretasi yang valid?
-
-4.3. Refinement Loop - Second Iteration
-   - Identifikasi kelemahan dalam analisis
-   - Lakukan deep-dive pada area yang kurang kuat
-   - Re-check dokumen untuk informasi yang mungkin terlewat
-   - Pertimbangkan edge cases atau situasi khusus
-
-**FASE 5: RECURSIVE CHECKING** (3-4 paragraf)
-5.1. Bottom-Up Verification
-   - Mulai dari detail terkecil (butir, huruf, ayat, pasal)
-   - Verifikasi akurasi setiap kutipan
-   - Check konsistensi interpretasi di level detail
-
-5.2. Top-Down Validation
-   - Mulai dari kesimpulan utama
-   - Trace back ke evidence yang mendukung
-   - Pastikan logical flow dari evidence → conclusion
-
-5.3. Cross-Validation Matrix
-   - Buat matrix: [Klaim] × [Supporting Evidence]
-   - Verifikasi setiap klaim didukung minimal 2 sumber (jika mungkin)
-   - Identifikasi klaim yang hanya didukung 1 sumber atau weak evidence
-
-**FASE 6: META-ANALYSIS** (3-4 paragraf)
-6.1. Quality Assessment
-   - Evaluasi kualitas analisis yang telah dilakukan
-   - Identifikasi potential blind spots
-   - Assess confidence level untuk setiap komponen jawaban
-
-6.2. Gap Analysis
-   - Identifikasi informasi yang masih kurang
-   - Tentukan dampak gap terhadap kualitas jawaban
-   - Rencanakan disclaimer yang sesuai
-
-6.3. Final Synthesis
-   - Integrasikan semua insight dari fase sebelumnya
-   - Susun struktur jawaban final yang komprehensif
-   - Tentukan tone dan framing yang tepat
-   - Rencanakan follow-up suggestions jika diperlukan
-
-**FASE 7: PRE-RESPONSE CHECKLIST** (2-3 paragraf)
-□ Semua sub-pertanyaan terjawab
-□ Semua kutipan diverifikasi akurat
-□ Hierarki peraturan dijelaskan dengan benar
-□ Tanggal efektif dan status peraturan dicatat
-□ Konflik/ambiguitas dijelaskan dengan fair
-□ Referensi [Dokumen X] konsisten
-□ Disclaimer dan rekomendasi konsultasi included
-□ Tone profesional dan empati seimbang
-□ Follow-up suggestions helpful dan relevan"""
+**FINAL:**
+12. Quality assessment, gap analysis, final synthesis
+13. Checklist: kutipan akurat, hierarki benar, referensi konsisten, disclaimer included"""
 
     def estimate_thinking_tokens(
         self,
