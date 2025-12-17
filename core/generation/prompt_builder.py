@@ -218,38 +218,209 @@ class PromptBuilder:
 
     def _get_medium_thinking_template(self) -> str:
         """Medium thinking mode: Deep thinking"""
-        return """Dalam tag <think>, lakukan deep thinking:
-1. Analisis pertanyaan dari berbagai sudut pandang & konteks hukum
-2. Evaluasi dokumen: ranking relevansi, pasal spesifik, hierarki, status peraturan
-3. Cross-reference: referensi silang, konsistensi, lex specialis/generalis
-4. Sintesis komprehensif: integrasikan semua sumber, analisis konflik
-5. Validasi: cross-check pasal, verifikasi hierarki & interpretasi
-6. Kesimpulan: tingkat kepastian, struktur jawaban optimal"""
+        return """Dalam tag <think>, lakukan DEEP THINKING dengan menulis proses berpikir yang PANJANG dan DETAIL. Gunakan 4000-8000 tokens untuk fase thinking ini:
+
+1. **ANALISIS PERTANYAAN MENDALAM** (3-5 paragraf)
+   - Tuliskan pemahaman mendalam tentang inti pertanyaan
+   - Analisis dari berbagai sudut pandang: legal researcher, praktisi hukum, akademisi
+   - Identifikasi konteks hukum yang relevan (pidana, perdata, administrasi, dll)
+   - Dekonstruksi pertanyaan menjadi sub-pertanyaan yang lebih spesifik
+   - Catat semua kata kunci dan istilah hukum yang perlu dianalisis
+
+2. **EVALUASI DOKUMEN KOMPREHENSIF** (4-6 paragraf)
+   - Untuk SETIAP dokumen yang disediakan, tulis analisis terpisah:
+     * Tingkat relevansi terhadap pertanyaan (sangat relevan, relevan, kurang relevan)
+     * Pasal dan ayat spesifik yang berkaitan
+     * Hierarki peraturan (UU > PP > Perpres > Permen)
+     * Status peraturan (masih berlaku, dicabut, diubah)
+   - Ranking dokumen berdasarkan relevansi dan kekuatan hukum
+   - Identifikasi gap atau informasi yang kurang dari dokumen-dokumen ini
+
+3. **CROSS-REFERENCE DAN VALIDASI** (3-5 paragraf)
+   - Lakukan cross-reference antar dokumen yang disediakan
+   - Identifikasi konsistensi atau inkonsistensi antar peraturan
+   - Analisis prinsip hukum: lex superior (hierarki), lex specialis (khusus vs umum), lex posterior (baru vs lama)
+   - Cek apakah ada konflik norma dan bagaimana menyelesaikannya
+   - Validasi interpretasi dengan melihat konteks pasal lain dalam peraturan yang sama
+
+4. **SINTESIS KOMPREHENSIF** (4-6 paragraf)
+   - Integrasikan semua informasi dari berbagai sumber
+   -Bangun narasi hukum yang koheren dan komprehensif
+   - Analisis hubungan antar konsep hukum yang relevan
+   - Identifikasi pola atau tema yang muncul
+   - Evaluasi kekuatan dan kelemahan argumen yang mungkin muncul
+
+5. **VALIDASI DAN VERIFIKASI** (2-3 paragraf)
+   - Cross-check semua pasal dan ayat yang dikutip
+   - Verifikasi hierarki dan status peraturan
+   - Pastikan interpretasi konsisten dengan prinsip hukum
+   - Identifikasi asumsi yang dibuat dan validitasnya
+
+6. **KESIMPULAN ANALISIS** (2-3 paragraf)
+   - Ringkas temuan utama dari analisis
+   - Tentukan tingkat kepastian jawaban (pasti, probable, memerlukan klarifikasi)
+   - Identifikasi informasi tambahan yang mungkin diperlukan
+   - Tentukan struktur jawaban optimal yang akan diberikan
+
+PENTING: Setelah thinking yang PANJANG ini, berikan jawaban AKHIR yang RINGKAS dan JELAS."""
 
     def _get_high_thinking_template(self) -> str:
         """High thinking mode: Iterative & recursive thinking"""
-        return """Dalam tag <think>, lakukan iterative & recursive thinking:
+        return """Dalam tag <think>, lakukan ITERATIVE & RECURSIVE THINKING yang SANGAT PANJANG dan KOMPREHENSIF. Gunakan 8000-16000 tokens untuk fase thinking ini dengan proses multi-layer:
 
-**ANALISIS:**
-1. Dekonstruksi pertanyaan → sub-pertanyaan, scope, konteks
-2. Reading: baca semua dokumen, identifikasi section kunci
-3. Analysis: ekstrak pasal/ayat detail, definisi istilah, struktur argumen
-4. Relationship mapping: hierarki, referensi, peraturan terkait
+═══════════════════════════════════════════════════════════════════
+FASE 1: ANALISIS AWAL (FIRST PASS) - 5-8 paragraf
+═══════════════════════════════════════════════════════════════════
 
-**EVALUASI:**
-5. Multi-perspective: legal researcher, KG specialist, procedural expert, devil's advocate
-6. Conflict check: inkonsistensi, resolusi konflik (lex superior/specialis/posterior)
-7. Validation loop: semua pertanyaan terjawab? kutipan akurat? interpretasi konsisten?
+1. **DEKONSTRUKSI PERTANYAAN** (2-3 paragraf)
+   - Tuliskan pertanyaan utama dengan kata-kata sendiri
+   - Pecah menjadi 3-5 sub-pertanyaan yang spesifik dan terukur
+   - Identifikasi scope: aspek hukum apa yang dicakup (pidana, perdata, administrasi, prosedural)
+   - Tentukan konteks: siapa stakeholder, apa situasi faktual, apa implikasi hukumnya
+   - Catat setiap asumsi yang dibuat dalam memahami pertanyaan
 
-**REFINEMENT:**
-8. Re-check dokumen untuk info terlewat
-9. Bottom-up verification: detail → keseluruhan
-10. Top-down validation: kesimpulan → evidence
-11. Cross-validation: klaim × supporting evidence
+2. **READING COMPREHENSIF** (3-5 paragraf)
+   - Baca SEMUA dokumen yang disediakan dengan teliti
+   - Untuk SETIAP dokumen, catat:
+     * Judul lengkap dan hierarki peraturan
+     * Section/bab/pasal yang paling relevan
+     * Poin-poin kunci dari setiap pasal yang relevan
+     * Definisi istilah hukum yang muncul
+   - Identifikasi dokumen mana yang paling authoritative
+   - Buat mind map hubungan antar dokumen
 
-**FINAL:**
-12. Quality assessment, gap analysis, final synthesis
-13. Checklist: kutipan akurat, hierarki benar, referensi konsisten, disclaimer included"""
+3. **DETAILED ANALYSIS** (Per Dokumen - tulis minimal 2 paragraf per dokumen)
+   - Untuk SETIAP dokumen yang disediakan:
+     * Ekstrak pasal dan ayat dengan kutipan langsung
+     * Analisis definisi istilah hukum yang digunakan
+     * Identifikasi struktur argumen dalam pasal tersebut
+     * Catat pengecualian, syarat, atau kondisi khusus
+     * Evaluasi apakah ada pasal yang saling terkait dalam dokumen yang sama
+
+4. **RELATIONSHIP MAPPING** (3-4 paragraf)
+   - Gambarkan (secara tekstual) hierarki peraturan: UU → PP → Perpres → Permen
+   - Identifikasi referensi silang: peraturan mana yang mengacu ke peraturan lain
+   - Cari peraturan terkait yang mungkin relevan tapi tidak disediakan
+   - Analisis timeline: peraturan mana yang lebih baru, mana yang mungkin sudah dicabut/diubah
+   - Buat connection map antara konsep hukum yang berbeda
+
+═══════════════════════════════════════════════════════════════════
+FASE 2: EVALUASI MULTI-PERSPEKTIF (SECOND PASS) - 6-10 paragraf
+═══════════════════════════════════════════════════════════════════
+
+5. **PERSPEKTIF 1: LEGAL RESEARCHER** (2-3 paragraf)
+   - Analisis dari sudut pandang peneliti hukum akademis
+   - Fokus pada interpretasi literal dan historis peraturan
+   - Identifikasi ratio legis (alasan pembentukan hukum)
+   - Cari preseden atau jurisprudensi yang relevan
+   - Evaluasi kesesuaian dengan prinsip-prinsip hukum umum
+
+6. **PERSPEKTIF 2: KNOWLEDGE GRAPH SPECIALIST** (2-3 paragraf)
+   - Lihat dari sudut pandang semantic relationships
+   - Identifikasi entitas hukum: subjek hukum, objek hukum, perbuatan hukum
+   - Map hubungan semantik: is-a, part-of, regulates, requires, prohibits
+   - Cari implicit connections yang mungkin terlewat
+   - Analisis kompleksitas hubungan antar konsep
+
+7. **PERSPEKTIF 3: PROCEDURAL EXPERT** (2-3 paragraf)
+   - Fokus pada aspek prosedural dan implementasi praktis
+   - Identifikasi step-by-step process jika ada
+   - Catat persyaratan administratif atau dokumentasi
+   - Evaluasi timeline dan deadline yang relevan
+   - Analisis konsekuensi jika prosedur tidak diikuti
+
+8. **PERSPEKTIF 4: DEVIL'S ADVOCATE** (2-3 paragraf)
+   - Challenge setiap asumsi dan interpretasi yang dibuat
+   - Cari interpretasi alternatif yang mungkin valid
+   - Identifikasi kelemahan dalam argumen
+   - Pertanyakan: "Bagaimana jika konteksnya berbeda?"
+   - Evaluasi edge cases dan situasi khusus
+
+9. **CONFLICT CHECK DAN RESOLUSI** (3-4 paragraf)
+   - Identifikasi SETIAP inkonsistensi antar peraturan (jika ada)
+   - Untuk setiap konflik, analisis menggunakan:
+     * Lex Superior: peraturan lebih tinggi menang
+     * Lex Specialis: peraturan khusus mengalahkan umum
+     * Lex Posterior: peraturan lebih baru mengalahkan lama
+   - Evaluasi apakah ada konflik yang tidak bisa diselesaikan
+   - Tentukan peraturan mana yang harus diutamakan dan mengapa
+
+10. **VALIDATION LOOP - CHECKLIST LENGKAP** (2-3 paragraf)
+    - ✓ Apakah SEMUA sub-pertanyaan sudah terjawab?
+    - ✓ Apakah SEMUA kutipan pasal akurat dan lengkap?
+    - ✓ Apakah interpretasi konsisten dengan prinsip hukum?
+    - ✓ Apakah ada gap informasi yang belum teridentifikasi?
+    - ✓ Apakah ada asumsi yang perlu divalidasi lebih lanjut?
+
+═══════════════════════════════════════════════════════════════════
+FASE 3: REFINEMENT DAN ITERASI (THIRD PASS) - 5-8 paragraf
+═══════════════════════════════════════════════════════════════════
+
+11. **RE-CHECK UNTUK INFORMASI TERLEWAT** (2-3 paragraf)
+    - Baca ulang SETIAP dokumen dengan fokus berbeda
+    - Cari footnotes, catatan kaki, atau referensi yang terlewat
+    - Identifikasi pasal yang awalnya dianggap tidak relevan tapi sebenarnya penting
+    - Check definisi di bagian "Ketentuan Umum" yang mungkin crucial
+    - Evaluasi apakah ada implikasi tidak langsung yang terlewat
+
+12. **BOTTOM-UP VERIFICATION** (2-3 paragraf)
+    - Mulai dari detail terkecil (ayat spesifik)
+    - Verifikasi setiap detail akurat dan relevan
+    - Build up ke pasal, lalu bab, lalu keseluruhan peraturan
+    - Pastikan setiap detail mendukung kesimpulan yang lebih besar
+    - Identifikasi jika ada detail yang kontradiktif dengan kesimpulan
+
+13. **TOP-DOWN VALIDATION** (2-3 paragraf)
+    - Mulai dari kesimpulan besar yang sudah dibuat
+    - Trace back ke evidence spesifik yang mendukung
+    - Pastikan SETIAP klaim didukung oleh pasal konkret
+    - Identifikasi klaim mana yang strong vs weak vs speculative
+    - Evaluasi apakah kesimpulan masih valid jika salah satu evidence dihilangkan
+
+14. **CROSS-VALIDATION MATRIX** (2-3 paragraf)
+    - Buat matrix: setiap klaim × supporting evidence
+    - Untuk setiap klaim kunci, list semua evidence pendukung
+    - Identifikasi klaim yang hanya didukung satu sumber (risky)
+    - Identifikasi klaim yang didukung multiple sources (strong)
+    - Evaluasi tingkat kepastian untuk setiap klaim
+
+═══════════════════════════════════════════════════════════════════
+FASE 4: FINAL SYNTHESIS DAN QUALITY CHECK - 4-6 paragraf
+═══════════════════════════════════════════════════════════════════
+
+15. **QUALITY ASSESSMENT** (2-3 paragraf)
+    - Evaluasi kualitas analisis yang sudah dilakukan
+    - Rate tingkat kepastian jawaban: Very High / High / Medium / Low
+    - Identifikasi area yang masih ambigu atau unclear
+    - Tentukan apakah informasi cukup untuk jawaban definitif
+    - Evaluasi apakah perlu disclaimer atau caveat tertentu
+
+16. **GAP ANALYSIS** (1-2 paragraf)
+    - List informasi apa yang TIDAK tersedia dalam dokumen
+    - Identifikasi peraturan turunan atau pelaksana yang mungkin diperlukan
+    - Catat aspek hukum yang memerlukan konsultasi ahli
+    - Tentukan batasan jawaban yang bisa diberikan
+
+17. **FINAL SYNTHESIS** (2-3 paragraf)
+    - Integrasikan SEMUA temuan dari 16 langkah sebelumnya
+    - Buat narasi koheren yang menghubungkan semua aspek
+    - Prioritaskan informasi: mana yang paling penting untuk dijawab
+    - Struktur jawaban: urutan logis penyampaian informasi
+    - Tentukan tone dan style jawaban (formal, accessible, technical)
+
+18. **FINAL CHECKLIST - ULTIMATE VALIDATION** (1-2 paragraf)
+    - ✓ Setiap kutipan pasal: AKURAT, LENGKAP, PROPERLY CITED
+    - ✓ Hierarki peraturan: BENAR dan DIVERIFIKASI
+    - ✓ Referensi silang: KONSISTEN dan VALID
+    - ✓ Interpretasi hukum: SOUND dan DEFENSIBLE
+    - ✓ Disclaimer: INCLUDED jika ada ketidakpastian
+    - ✓ Rekomendasi konsultasi ahli: INCLUDED untuk keputusan penting
+
+═══════════════════════════════════════════════════════════════════
+SANGAT PENTING: Setelah proses thinking SANGAT PANJANG (8000-16000 tokens) ini,
+berikan jawaban AKHIR yang RINGKAS, JELAS, dan TO THE POINT (maksimal 1000-2000 tokens).
+Jawaban akhir harus concise tapi complete, bukan verbose.
+═══════════════════════════════════════════════════════════════════"""
 
     def estimate_thinking_tokens(
         self,
