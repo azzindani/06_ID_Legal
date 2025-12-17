@@ -162,7 +162,7 @@ class LLMEngine:
     ) -> Dict[str, Any]:
         """
         Generate response from prompt (synchronous)
-        
+
         Args:
             prompt: Input prompt
             max_new_tokens: Maximum tokens to generate
@@ -170,7 +170,7 @@ class LLMEngine:
             top_p: Nucleus sampling parameter
             top_k: Top-k sampling parameter
             stop_sequences: Optional stop sequences
-            
+
         Returns:
             Dictionary with generated text and metadata
         """
@@ -186,7 +186,16 @@ class LLMEngine:
             "prompt_length": len(prompt),
             "max_new_tokens": max_new_tokens or self.max_new_tokens
         })
-        
+
+        # CRITICAL: Clear GPU cache BEFORE generation to prevent OOM
+        # Especially important for long prompts (thinking modes)
+        import gc
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+            self.logger.debug("Cleared GPU cache before generation")
+
         start_time = time.time()
 
         try:
@@ -352,6 +361,15 @@ class LLMEngine:
             return
 
         self.logger.info("Starting streaming generation with TextIteratorStreamer")
+
+        # CRITICAL: Clear GPU cache BEFORE generation to prevent OOM
+        # Especially important for long prompts (thinking modes)
+        import gc
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+            self.logger.debug("Cleared GPU cache before streaming generation")
 
         start_time = time.time()
 
