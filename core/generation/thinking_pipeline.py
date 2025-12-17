@@ -105,11 +105,27 @@ class ThinkingPipeline:
 
     def _get_low_thinking_template(self) -> str:
         """Low thinking mode: Basic analysis"""
-        return """Dalam tag <think>, lakukan analisis berikut:
-1. Pahami pertanyaan & identifikasi jenis pertanyaan
-2. Evaluasi dokumen: relevansi, pasal/ayat, hierarki peraturan
-3. Sintesis informasi & identifikasi konflik
-4. Ringkas temuan & tentukan jawaban"""
+        return """Dalam tag <think>, lakukan analisis DASAR dengan struktur berikut:
+
+1. **PEMAHAMAN PERTANYAAN** (1-2 paragraf)
+   - Identifikasi inti pertanyaan
+   - Tentukan jenis pertanyaan (definitional, procedural, sanctions, dll)
+   - Catat kata kunci penting
+
+2. **ANALISIS DOKUMEN** (2-3 paragraf)
+   - Evaluasi relevansi setiap dokumen yang disediakan
+   - Identifikasi pasal dan ayat yang relevan
+   - Catat hierarki peraturan (UU > PP > Permen, dll)
+
+3. **SINTESIS INFORMASI** (2-3 paragraf)
+   - Gabungkan informasi dari berbagai sumber
+   - Identifikasi konsistensi atau konflik antar peraturan
+   - Tentukan peraturan yang paling authoritative
+
+4. **KESIMPULAN ANALISIS** (1-2 paragraf)
+   - Ringkas temuan utama
+   - Identifikasi informasi yang masih kurang (jika ada)
+   - Tentukan arah jawaban"""
 
     def _get_medium_thinking_template(self) -> str:
         """Medium thinking mode: Deep thinking"""
