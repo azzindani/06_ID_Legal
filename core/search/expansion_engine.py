@@ -4,13 +4,12 @@ Iterative Expansion Engine - Detective-Style Document Retrieval
 Implements multi-round expansion strategies to find related documents
 beyond initial scoring-based retrieval.
 
-Expansion Strategies (Phase 1):
-1. Metadata Expansion: Find documents from same regulation
-
-Future Strategies:
-2. KG Expansion: Follow entity and citation networks
-3. Citation Traversal: Multi-hop citation following
-4. Semantic Clustering: Embedding space neighbors
+Expansion Strategies:
+1. Metadata Expansion (Phase 1): Find documents from same regulation
+2. KG Expansion (Phase 2): Follow entity and citation networks
+3. Citation Traversal (Phase 2): Multi-hop citation following
+4. Semantic Clustering (Phase 3): Embedding space neighbors
+5. Hybrid Adaptive (Phase 4): Query-type-specific strategy selection
 
 Usage:
     engine = IterativeExpansionEngine(data_loader, config)
@@ -18,10 +17,11 @@ Usage:
     expanded_docs = pool.get_ranked_documents()
 """
 
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from collections import defaultdict
 from utils.logger_utils import get_logger
 from .research_pool import ResearchPool
+import numpy as np
 
 
 class IterativeExpansionEngine:
@@ -75,10 +75,34 @@ class IterativeExpansionEngine:
             'bidirectional': True
         })
 
+        # Phase 3: Semantic clustering config
+        self.semantic_config = config.get('semantic_expansion', {
+            'enabled': False,
+            'cluster_radius': 0.15,
+            'min_cluster_size': 3,
+            'max_neighbors': 30,
+            'similarity_threshold': 0.70
+        })
+
+        # Phase 4: Hybrid adaptive config
+        self.hybrid_config = config.get('hybrid_expansion', {
+            'enabled': False,
+            'adaptive_strategy': True,
+            'query_type_detection': True,
+            'strategy_weights': {
+                'metadata': 0.4,
+                'kg': 0.3,
+                'citation': 0.2,
+                'semantic': 0.1
+            }
+        })
+
         self.logger.info(f"ExpansionEngine initialized (enabled={self.enabled}, max_rounds={self.max_rounds}, "
                         f"metadata={self.metadata_config.get('enabled')}, "
                         f"kg={self.kg_config.get('enabled')}, "
-                        f"citation={self.citation_config.get('enabled')})")
+                        f"citation={self.citation_config.get('enabled')}, "
+                        f"semantic={self.semantic_config.get('enabled')}, "
+                        f"hybrid={self.hybrid_config.get('enabled')})")
 
     def expand(
         self,
@@ -165,6 +189,18 @@ class IterativeExpansionEngine:
                 for seed in seeds:
                     count = self._citation_expansion(seed, pool, round_num)
                     added_count += count
+
+            # Strategy 4: Semantic Clustering (Phase 3)
+            if self.semantic_config.get('enabled', False):
+                for seed in seeds:
+                    count = self._semantic_expansion(seed, pool, round_num)
+                    added_count += count
+
+            # Strategy 5: Hybrid Adaptive (Phase 4) - Runs after all strategies
+            if self.hybrid_config.get('enabled', False) and self.hybrid_config.get('adaptive_strategy', True):
+                # Apply query-adaptive strategy selection
+                count = self._hybrid_adaptive_expansion(seeds, pool, round_num, query)
+                added_count += count
 
             self.logger.info(f"Round {round_num}: Added {added_count} new documents (pool size: {len(pool)})")
 
@@ -556,6 +592,260 @@ class IterativeExpansionEngine:
             return (str(reg_number) in citation_text and str(year) in citation_text)
 
         return False
+
+    def _semantic_expansion(
+        self,
+        seed_doc: Dict[str, Any],
+        pool: ResearchPool,
+        round_num: int
+    ) -> int:
+        """
+        Strategy 4: Semantic Clustering Expansion (Phase 3)
+
+        Find documents in embedding space that are semantically similar:
+        1. Calculate cosine similarity between seed and all docs
+        2. Find neighbors within cluster radius
+        3. Group by semantic similarity
+        4. Expand to topic-related documents
+
+        Example:
+            Seed: Tax objection procedure doc
+            Expand: Find docs about tax disputes, tax appeals, tax courts
+            (semantically related but may not share exact keywords)
+
+        Args:
+            seed_doc: Document to expand from
+            pool: Research pool to add results
+            round_num: Current expansion round
+
+        Returns:
+            Number of documents added
+        """
+        added_count = 0
+
+        # Get seed embedding
+        seed_embedding = seed_doc.get('embedding')
+        if seed_embedding is None:
+            self.logger.debug(f"Seed doc {seed_doc.get('global_id')} has no embedding, skipping")
+            return 0
+
+        # Convert to numpy array
+        if isinstance(seed_embedding, list):
+            seed_embedding = np.array(seed_embedding)
+
+        # Normalize seed embedding
+        seed_norm = np.linalg.norm(seed_embedding)
+        if seed_norm == 0:
+            self.logger.debug(f"Seed doc {seed_doc.get('global_id')} has zero embedding, skipping")
+            return 0
+
+        seed_embedding_normalized = seed_embedding / seed_norm
+
+        # Config parameters
+        cluster_radius = self.semantic_config.get('cluster_radius', 0.15)
+        max_neighbors = self.semantic_config.get('max_neighbors', 30)
+        similarity_threshold = self.semantic_config.get('similarity_threshold', 0.70)
+
+        # Find semantically similar documents
+        similarities = []
+
+        for doc in self.data_loader.all_records:
+            if pool.contains(doc.get('global_id')):
+                continue
+
+            doc_embedding = doc.get('embedding')
+            if doc_embedding is None:
+                continue
+
+            # Convert to numpy array
+            if isinstance(doc_embedding, list):
+                doc_embedding = np.array(doc_embedding)
+
+            # Normalize doc embedding
+            doc_norm = np.linalg.norm(doc_embedding)
+            if doc_norm == 0:
+                continue
+
+            doc_embedding_normalized = doc_embedding / doc_norm
+
+            # Calculate cosine similarity
+            similarity = np.dot(seed_embedding_normalized, doc_embedding_normalized)
+
+            # Filter by threshold
+            if similarity >= similarity_threshold:
+                similarities.append((doc, similarity))
+
+        # Sort by similarity descending
+        similarities.sort(key=lambda x: x[1], reverse=True)
+
+        # Add top-K neighbors
+        for doc, similarity in similarities[:max_neighbors]:
+            added = pool.add(
+                doc,
+                source='semantic_expansion',
+                seed_id=seed_doc.get('global_id'),
+                round_num=round_num,
+                score=float(similarity)
+            )
+
+            if added:
+                added_count += 1
+
+        self.logger.debug(f"Semantic expansion: Added {added_count} docs with similarity >= {similarity_threshold}")
+
+        return added_count
+
+    def _hybrid_adaptive_expansion(
+        self,
+        seeds: List[Dict[str, Any]],
+        pool: ResearchPool,
+        round_num: int,
+        query: str
+    ) -> int:
+        """
+        Strategy 5: Hybrid Adaptive Expansion (Phase 4)
+
+        Intelligently select expansion strategies based on query characteristics:
+        1. Detect query type (tax, labor, criminal, procedural, etc.)
+        2. Select appropriate strategies for that query type
+        3. Apply weighted combination of strategies
+        4. Adaptive thresholds based on query complexity
+
+        Example Query Types & Strategies:
+            - Tax procedural query → Metadata + Citation (follow tax regulations)
+            - Entity-focused query → KG + Semantic (find entity relationships)
+            - Research query → All strategies (comprehensive expansion)
+            - Simple lookup → Metadata only (fast, focused)
+
+        Args:
+            seeds: List of seed documents
+            pool: Research pool to add results
+            round_num: Current expansion round
+            query: Original user query
+
+        Returns:
+            Number of documents added
+        """
+        added_count = 0
+
+        # Detect query type
+        query_type = self._detect_query_type(query)
+        self.logger.debug(f"Detected query type: {query_type}")
+
+        # Get strategy weights from config
+        base_weights = self.hybrid_config.get('strategy_weights', {
+            'metadata': 0.4,
+            'kg': 0.3,
+            'citation': 0.2,
+            'semantic': 0.1
+        })
+
+        # Adaptive strategy selection based on query type
+        if query_type == 'procedural':
+            # Procedural queries: Focus on same regulation + citations
+            strategies = ['metadata', 'citation']
+            weights = {'metadata': 0.6, 'citation': 0.4}
+        elif query_type == 'entity_focused':
+            # Entity queries: Focus on KG + semantic
+            strategies = ['kg', 'semantic']
+            weights = {'kg': 0.6, 'semantic': 0.4}
+        elif query_type == 'research':
+            # Research queries: Use all strategies
+            strategies = ['metadata', 'kg', 'citation', 'semantic']
+            weights = base_weights
+        elif query_type == 'citation_heavy':
+            # Citation-heavy queries: Focus on citation networks
+            strategies = ['citation', 'kg']
+            weights = {'citation': 0.7, 'kg': 0.3}
+        else:
+            # Default: Balanced approach
+            strategies = ['metadata', 'kg']
+            weights = {'metadata': 0.6, 'kg': 0.4}
+
+        self.logger.info(f"Hybrid adaptive: Selected strategies {strategies} for query type '{query_type}'")
+
+        # Apply selected strategies to seeds
+        for seed in seeds[:5]:  # Limit to top 5 seeds for adaptive expansion
+            # Apply each strategy with weighting
+            for strategy in strategies:
+                if strategy == 'metadata' and self.metadata_config.get('enabled', True):
+                    count = self._metadata_expansion(seed, pool, round_num)
+                    added_count += int(count * weights.get('metadata', 1.0))
+
+                elif strategy == 'kg' and self.kg_config.get('enabled', False):
+                    count = self._kg_expansion(seed, pool, round_num)
+                    added_count += int(count * weights.get('kg', 1.0))
+
+                elif strategy == 'citation' and self.citation_config.get('enabled', False):
+                    count = self._citation_expansion(seed, pool, round_num)
+                    added_count += int(count * weights.get('citation', 1.0))
+
+                elif strategy == 'semantic' and self.semantic_config.get('enabled', False):
+                    count = self._semantic_expansion(seed, pool, round_num)
+                    added_count += int(count * weights.get('semantic', 1.0))
+
+        self.logger.debug(f"Hybrid adaptive expansion: Added {added_count} docs")
+
+        return added_count
+
+    def _detect_query_type(self, query: str) -> str:
+        """
+        Detect query type from query text
+
+        Types:
+        - procedural: About legal procedures (keberatan, banding, permohonan)
+        - entity_focused: About specific entities (Pengadilan Pajak, Dirjen Pajak)
+        - citation_heavy: Contains many regulation references
+        - research: Complex, multi-faceted research question
+        - simple: Simple fact lookup
+
+        Args:
+            query: User query string
+
+        Returns:
+            Query type string
+        """
+        query_lower = query.lower()
+
+        # Procedural indicators
+        procedural_keywords = [
+            'prosedur', 'tata cara', 'keberatan', 'banding', 'gugatan',
+            'permohonan', 'pengajuan', 'proses', 'mekanisme', 'cara'
+        ]
+        procedural_count = sum(1 for kw in procedural_keywords if kw in query_lower)
+
+        # Entity indicators
+        entity_keywords = [
+            'pengadilan', 'dirjen', 'direktur jenderal', 'menteri',
+            'gubernur', 'bupati', 'walikota', 'pejabat', 'instansi'
+        ]
+        entity_count = sum(1 for kw in entity_keywords if kw in query_lower)
+
+        # Citation indicators (regulation mentions)
+        citation_patterns = [
+            'uu ', 'undang-undang', 'peraturan pemerintah', 'pp ', 'perpres',
+            'tahun ', 'nomor ', 'no.', 'pasal '
+        ]
+        citation_count = sum(1 for pattern in citation_patterns if pattern in query_lower)
+
+        # Research indicators
+        research_keywords = [
+            'analisis', 'bagaimana', 'mengapa', 'jelaskan', 'uraikan',
+            'bandingkan', 'hubungan', 'perbedaan', 'persamaan'
+        ]
+        research_count = sum(1 for kw in research_keywords if kw in query_lower)
+
+        # Determine query type based on counts
+        if procedural_count >= 2:
+            return 'procedural'
+        elif entity_count >= 2:
+            return 'entity_focused'
+        elif citation_count >= 3:
+            return 'citation_heavy'
+        elif research_count >= 2 or len(query.split()) > 15:
+            return 'research'
+        else:
+            return 'simple'
 
     def get_config(self) -> Dict[str, Any]:
         """Get current configuration"""

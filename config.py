@@ -237,6 +237,77 @@ THINKING_MODE_CONFIG = {
 ENABLE_THINKING_PIPELINE = os.getenv("ENABLE_THINKING_PIPELINE", "true").lower() == "true"
 
 # =============================================================================
+# ITERATIVE EXPANSION CONFIGURATION (Phases 1-4)
+# =============================================================================
+#
+# Detective-style document expansion beyond initial scoring
+# Phase 1: Metadata expansion (same regulation context)
+# Phase 2: KG & Citation expansion (entity networks, citation traversal)
+# Phase 3: Semantic clustering (embedding space neighbors)
+# Phase 4: Hybrid adaptive (query-type-specific strategy selection)
+#
+
+DEFAULT_EXPANSION_CONFIG = {
+    # Master switch
+    'enable_expansion': False,  # Default OFF (opt-in), set True to enable
+
+    # Expansion limits
+    'max_expansion_rounds': 2,        # Number of expansion iterations
+    'max_pool_size': 1000,            # Stop if pool exceeds this
+    'min_docs_per_round': 5,          # Stop if round adds fewer than this
+
+    # Seed selection
+    'seeds_per_round': 10,            # Top-K seeds for expansion per round
+    'seed_score_threshold': 0.50,     # Only expand from high-scoring docs
+
+    # Strategy 1: Metadata Expansion (Phase 1)
+    'metadata_expansion': {
+        'enabled': True,
+        'max_docs_per_regulation': 50,  # Limit docs from same regulation
+        'include_preamble': True,        # Include regulation preambles
+        'include_attachments': True       # Include regulation attachments
+    },
+
+    # Strategy 2: KG Expansion (Phase 2) - Entity co-occurrence & citation following
+    'kg_expansion': {
+        'enabled': False,                # Default OFF, set True to enable
+        'max_entity_docs': 20,
+        'entity_score_threshold': 0.3,
+        'follow_citations': True,
+        'citation_max_hops': 2
+    },
+
+    # Strategy 3: Citation Network Traversal (Phase 2) - Multi-hop citation expansion
+    'citation_expansion': {
+        'enabled': False,                # Default OFF, set True to enable
+        'max_hops': 2,
+        'bidirectional': True
+    },
+
+    # Strategy 4: Semantic Clustering (Phase 3) - Embedding space neighbors
+    'semantic_expansion': {
+        'enabled': False,                # Default OFF, set True to enable
+        'cluster_radius': 0.15,          # Distance threshold for clustering
+        'min_cluster_size': 3,           # Minimum docs in cluster
+        'max_neighbors': 30,             # Max similar docs per seed
+        'similarity_threshold': 0.70     # Cosine similarity threshold
+    },
+
+    # Strategy 5: Hybrid Adaptive (Phase 4) - Query-type-specific strategy selection
+    'hybrid_expansion': {
+        'enabled': False,                # Default OFF, set True to enable
+        'adaptive_strategy': True,       # Enable adaptive strategy selection
+        'query_type_detection': True,    # Auto-detect query type
+        'strategy_weights': {
+            'metadata': 0.4,
+            'kg': 0.3,
+            'citation': 0.2,
+            'semantic': 0.1
+        }
+    }
+}
+
+# =============================================================================
 # DEFAULT SYSTEM CONFIGURATION
 # =============================================================================
 
@@ -314,59 +385,6 @@ DEFAULT_SEARCH_PHASES = {
         'time_limit': 40,
         'focus_areas': ['legal_richness', 'completeness_score'],
         'enabled': False
-    }
-}
-
-# =============================================================================
-# ITERATIVE EXPANSION CONFIGURATION (Phase 1)
-# =============================================================================
-#
-# Detective-style document expansion beyond initial scoring
-# Strategies: Metadata expansion (same regulation context)
-# Future: KG expansion, citation following, semantic clustering
-#
-
-DEFAULT_EXPANSION_CONFIG = {
-    # Master switch
-    'enable_expansion': False,  # Default OFF (opt-in), set True to enable
-
-    # Expansion limits
-    'max_expansion_rounds': 2,        # Number of expansion iterations
-    'max_pool_size': 1000,            # Stop if pool exceeds this
-    'min_docs_per_round': 5,          # Stop if round adds fewer than this
-
-    # Seed selection
-    'seeds_per_round': 10,            # Top-K seeds for expansion per round
-    'seed_score_threshold': 0.50,     # Only expand from high-scoring docs
-
-    # Strategy 1: Metadata Expansion (Phase 1)
-    'metadata_expansion': {
-        'enabled': True,
-        'max_docs_per_regulation': 50,  # Limit docs from same regulation
-        'include_preamble': True,        # Include regulation preambles
-        'include_attachments': True       # Include regulation attachments
-    },
-
-    # Strategy 2: KG Expansion (Phase 2) - Entity co-occurrence & citation following
-    'kg_expansion': {
-        'enabled': False,                # Default OFF, set True to enable
-        'max_entity_docs': 20,
-        'entity_score_threshold': 0.3,
-        'follow_citations': True,
-        'citation_max_hops': 2
-    },
-
-    # Strategy 3: Citation Network Traversal (Phase 2) - Multi-hop citation expansion
-    'citation_expansion': {
-        'enabled': False,                # Default OFF, set True to enable
-        'max_hops': 2,
-        'bidirectional': True
-    },
-
-    'semantic_expansion': {
-        'enabled': False,                # Not implemented yet
-        'cluster_radius': 0.05,
-        'min_cluster_size': 3
     }
 }
 
