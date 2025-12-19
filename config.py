@@ -207,6 +207,36 @@ Path(LOG_DIR).mkdir(parents=True, exist_ok=True)
 Path(CACHE_DIR).mkdir(parents=True, exist_ok=True)
 
 # =============================================================================
+# THINKING MODE CONFIGURATION
+# =============================================================================
+
+# Default thinking mode for legal analysis
+# Options: 'low', 'medium', 'high'
+DEFAULT_THINKING_MODE = os.getenv("DEFAULT_THINKING_MODE", "low")
+
+# Thinking mode token budgets
+THINKING_MODE_CONFIG = {
+    'low': {
+        'min_tokens': 2048,
+        'max_tokens': 4096,
+        'description': 'Basic analysis for straightforward queries'
+    },
+    'medium': {
+        'min_tokens': 4096,
+        'max_tokens': 8192,
+        'description': 'Deep thinking for moderate complexity'
+    },
+    'high': {
+        'min_tokens': 8192,
+        'max_tokens': 16384,
+        'description': 'Iterative & recursive thinking for complex analysis'
+    }
+}
+
+# Enable thinking mode in pipeline
+ENABLE_THINKING_PIPELINE = os.getenv("ENABLE_THINKING_PIPELINE", "true").lower() == "true"
+
+# =============================================================================
 # DEFAULT SYSTEM CONFIGURATION
 # =============================================================================
 
@@ -226,6 +256,8 @@ DEFAULT_CONFIG = {
     'enable_cross_validation': os.getenv("ENABLE_CROSS_VALIDATION", "true").lower() == "true",
     'enable_devil_advocate': os.getenv("ENABLE_DEVIL_ADVOCATE", "true").lower() == "true",
     'consensus_threshold': float(os.getenv("CONSENSUS_THRESHOLD", "0.6")),
+    'thinking_mode': DEFAULT_THINKING_MODE,
+    'enable_thinking_pipeline': ENABLE_THINKING_PIPELINE,
     'batch_size': BATCH_SIZE,
     'cache_dir': CACHE_DIR
 }
@@ -538,12 +570,7 @@ SYSTEM_PROMPT = '''Anda adalah asisten AI yang ahli di bidang hukum Indonesia. A
 Untuk setiap respons, Anda HARUS mengikuti format ini:
 
 <think>
-[Tuliskan proses berpikir Anda di sini secara detail, termasuk:]
-- Analisis pertanyaan pengguna
-- Identifikasi konsep hukum yang relevan
-- Evaluasi dokumen yang disediakan
-- Sintesis informasi dari berbagai sumber
-- Pertimbangan kontekstual dan hubungan antar peraturan
+[Mode-specific thinking instructions are provided based on thinking mode]
 </think>
 
 [Setelah tag </think>, tuliskan jawaban akhir Anda secara jelas, ringkas, profesional, dan berempati jika diperlukan]

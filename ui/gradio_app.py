@@ -147,12 +147,15 @@ def clear_conversation():
 
     current_session, history, text = clear_conversation_session(manager)
     return history, text
-def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_sources=True, show_metadata=True):
+def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_sources=True, show_metadata=True, show_prompt=False):
     """
     Main chat function with conversational RAG - Now uses ConversationalRAGService
 
     This is a thin wrapper around ConversationalRAGService that handles Gradio-specific
     display formatting and progress updates.
+
+    Args:
+        show_prompt: If True, display the complete prompt sent to LLM (for test transparency)
     """
     if not message.strip():
         return history, ""
@@ -170,6 +173,16 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
         all_phase_metadata = {}
         streamed_answer = ""
         result = None
+
+        # Streaming state tracking for <think> tags
+        thinking_content = []
+        final_answer = []
+        live_output = []
+        in_thinking_block = False
+        saw_think_tag = False
+        thinking_header_shown = False
+        accumulated_text = ''
+        last_chunk_text = ''
 
         def add_progress(msg):
             """Helper to add progress updates in Gradio 6.x message format"""
@@ -198,17 +211,61 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                 yield add_progress("Query analysis complete"), ""
 
             elif event_type == 'streaming_chunk':
-                # Accumulate streamed text
+                # Get new text chunk
                 streamed_answer = data['accumulated']
                 chunk_count = data['chunk_count']
 
-                # Build streaming display
+                # Extract new text since last chunk
+                new_text = streamed_answer[len(accumulated_text):]
+                accumulated_text = streamed_answer
+
+                # Build progress header
                 progress_header = '<details open><summary>📋 <b>Proses Penelitian</b></summary>\n\n'
                 progress_header += "\n".join([f"🔄 {m}" for m in current_progress])
-                progress_header += '\n</details>\n\n'
+                progress_header += '\n</details>\n\n---\n\n'
 
-                display_text = progress_header + f"**✍️ Generating answer...**\n\n{streamed_answer}"
+                # Process <think> tags in new text
+                if '<think>' in new_text:
+                    in_thinking_block = True
+                    saw_think_tag = True
+                    new_text = new_text.replace('<think>', '')
+                    if not thinking_header_shown and show_thinking:
+                        live_output = [progress_header, '🧠 **Sedang berfikir...**\n\n']
+                        thinking_header_shown = True
 
+                if '</think>' in new_text:
+                    in_thinking_block = False
+                    new_text = new_text.replace('</think>', '')
+                    if show_thinking:
+                        live_output.append('\n\n---\n\n✅ **Sedang menjawab...**\n\n')
+
+                # Accumulate content based on current state
+                if saw_think_tag:
+                    if in_thinking_block:
+                        thinking_content.append(new_text)
+                        if show_thinking:
+                            live_output.append(new_text)
+                    else:
+                        final_answer.append(new_text)
+                        live_output.append(new_text)
+                else:
+                    # No think tags detected yet
+                    if len(accumulated_text) > 20 and not saw_think_tag:
+                        # Likely direct answer without thinking
+                        if not thinking_header_shown:
+                            live_output = [progress_header, '⭐ **Jawaban langsung:**\n\n']
+                            thinking_header_shown = True
+                        final_answer.append(new_text)
+                        live_output.append(new_text)
+                    else:
+                        # Still waiting to see if think tag appears
+                        if not thinking_header_shown:
+                            live_output = [progress_header, f"🤖 Generating response...\n\n{new_text}"]
+                        else:
+                            live_output.append(new_text)
+
+                # Yield current state
+                display_text = ''.join(live_output)
                 yield history + [
                     {"role": "user", "content": message},
                     {"role": "assistant", "content": display_text}
@@ -234,31 +291,39 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
         # Format final output
         if result:
             final_output = ""
-            response_text = result.get('answer', streamed_answer)
 
-            # Get thinking content from result field first, then try parsing from answer
-            thinking_content = result.get('thinking', '')
-            if not thinking_content:
-                thinking_content, response_text = parse_think_tags(response_text)
+            # Use streamed content if available, otherwise parse from result
+            if final_answer:
+                response_text = ''.join(final_answer).strip()
+            else:
+                response_text = result.get('answer', streamed_answer)
+                # If no streaming occurred, parse think tags from answer
+                if not thinking_content:
+                    parsed_thinking, response_text = parse_think_tags(response_text)
+                    if parsed_thinking:
+                        thinking_content = [parsed_thinking]
+
+            # Get thinking text
+            thinking_text = ''.join(thinking_content).strip() if thinking_content else result.get('thinking', '')
 
             # Add research process summary (what was done)
             if current_progress:
-                final_output += '<details open><summary>📋 <b>Proses yang Sudah Dilakukan</b></summary>\n\n'
+                final_output += '<details><summary>📋 <strong>Proses yang Sudah Dilakukan</strong></summary>\n\n'
                 for msg in current_progress:
                     final_output += f"✅ {msg}\n"
                 final_output += '\n</details>\n\n---\n\n'
 
             # Add thinking section if available
-            if show_thinking and thinking_content:
+            if show_thinking and thinking_text:
                 final_output += (
-                    '<details><summary>🧠 <b>Proses Berpikir (klik untuk melihat)</b></summary>\n\n'
-                    + thinking_content +
+                    '<details><summary>🧠 <strong>Proses Berpikir</strong></summary>\n\n'
+                    + thinking_text +
                     '\n</details>\n\n'
-                    + '---\n\n✅ **Jawaban:**\n\n'
+                    + '---\n\n### ✅ Jawaban\n\n'
                     + response_text
                 )
             else:
-                final_output += f"✅ **Jawaban:**\n\n{response_text}"
+                final_output += f"### ✅ Jawaban\n\n{response_text}"
 
             # Add community clusters if available
             if result.get('communities') or result.get('clusters'):
@@ -294,15 +359,7 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                 if citations:
                     sources_info = format_sources_info(citations, config_dict)
                     collapsible_sections.append(
-                        f'<details><summary>📖 <b>Sumber Hukum Utama ({len(citations)})</b></summary>\n\n{sources_info}\n</details>'
-                    )
-
-            # Add metadata
-            if show_metadata and all_phase_metadata:
-                metadata_info = format_retrieved_metadata(all_phase_metadata, config_dict)
-                if metadata_info.strip():
-                    collapsible_sections.append(
-                        f'<details><summary>🔬 <b>Detail Proses Penelitian</b></summary>\n\n{metadata_info}\n</details>'
+                        f'<details><summary>📖 <strong>Sumber Hukum Utama ({len(citations)})</strong></summary>\n\n{sources_info}\n</details>'
                     )
 
             # Add detailed step-by-step research process
@@ -314,15 +371,31 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                 )
                 if detailed_research.strip():
                     collapsible_sections.append(
-                        f'<details><summary>🔬 <b>Detailed Research Process (Step-by-Step)</b></summary>\n\n{detailed_research}\n</details>'
+                        f'<details><summary>🔬 <strong>Detail Proses Penelitian</strong></summary>\n\n{detailed_research}\n</details>'
                     )
 
-            # Add all retrieved documents
-            if show_metadata:
-                all_docs_formatted = format_all_documents(result, max_docs=50)
-                if all_docs_formatted:
+            # Add complete prompt for test transparency
+            if show_prompt:
+                complete_prompt = result.get('metadata', {}).get('complete_prompt') or result.get('complete_prompt')
+                if complete_prompt:
+                    # Get conversation history if this is a conversational query
+                    conv_history = result.get('metadata', {}).get('conversation_history', [])
+
+                    prompt_display = f"**📊 Complete LLM Input Prompt ({len(complete_prompt):,} characters)**\n\n"
+
+                    # Show conversation history if available
+                    if conv_history:
+                        prompt_display += "**📝 Conversation History:**\n```\n"
+                        for i, turn in enumerate(conv_history, 1):
+                            role = turn.get('role', 'unknown')
+                            content = turn.get('content', '')
+                            prompt_display += f"Turn {i} [{role}]: {content[:200]}{'...' if len(content) > 200 else ''}\n\n"
+                        prompt_display += "```\n\n"
+
+                    prompt_display += "**📄 Full Prompt:**\n```\n" + complete_prompt + "\n```"
+
                     collapsible_sections.append(
-                        f'<details><summary>📚 <b>Semua Dokumen yang Ditemukan</b></summary>\n\n{all_docs_formatted}\n</details>'
+                        f'<details><summary>🔍 <strong>Complete LLM Input Prompt (Test Transparency)</strong></summary>\n\n{prompt_display}\n</details>'
                     )
 
             # Combine all sections
@@ -441,14 +514,15 @@ def run_conversational_test_auto(history, config_state, show_thinking, show_sour
         # Remove progress indicator and process question through chat
         history = history[:-1]
 
-        # Call the regular chat function
+        # Call the regular chat function with prompt transparency enabled
         for updated_history, cleared_input in chat_with_legal_rag(
             question,
             history,
             config_state,
             show_thinking,
             show_sources,
-            show_metadata
+            show_metadata,
+            show_prompt=True  # Enable complete prompt display for test transparency
         ):
             yield updated_history, cleared_input
 
@@ -485,7 +559,7 @@ def run_stress_test_auto(history, config_state, show_thinking, show_sources, sho
     stress_config = {
         'final_top_k': 30,
         'research_team_size': 5,  # All 5 personas
-        'max_new_tokens': 6144,
+        'max_new_tokens': 8192,
         'temperature': 0.7,
         'top_p': 1.0,
         'top_k': 80,
@@ -549,14 +623,15 @@ def run_stress_test_auto(history, config_state, show_thinking, show_sources, sho
         # Remove progress indicator
         history = history[:-1]
 
-        # Call chat with STRESS CONFIG
+        # Call chat with STRESS CONFIG and prompt transparency
         for updated_history, cleared_input in chat_with_legal_rag(
             question,
             history,
             stress_config,  # Use stress config instead of current config
             show_thinking,
             show_sources,
-            show_metadata
+            show_metadata,
+            show_prompt=True  # Enable complete prompt display for test transparency
         ):
             yield updated_history, cleared_input
 
@@ -958,16 +1033,6 @@ def create_gradio_interface():
 
             with gr.TabItem("📥 Export Conversation", id="export"):
                 with gr.Column(elem_classes="main-chat-area"):
-                    gr.Markdown("""
-                    ## Export Your Conversation
-
-                    Download your complete consultation history including:
-                    - All questions and answers
-                    - Research team process details
-                    - Legal sources consulted
-                    - Metadata and analysis
-                    """)
-
                     with gr.Row():
                         export_format = gr.Radio(
                             choices=["Markdown", "JSON", "HTML"],
@@ -1002,14 +1067,6 @@ def create_gradio_interface():
                         label="Download Export File",
                         visible=True
                     )
-
-                    gr.Markdown("""
-                    ### Export Format Guide
-
-                    - **Markdown**: Human-readable format, great for reading and sharing
-                    - **JSON**: Structured data, perfect for processing or archiving
-                    - **HTML**: Styled webpage, best for printing or presentation
-                    """)
 
             # Export function
             def export_conversation_handler(export_format, include_metadata, include_research, include_full):
@@ -1276,5 +1333,7 @@ def launch_app(share: bool = False, server_port: int = 7860):
 
 if __name__ == "__main__":
     launch_app()
+
+
 
 

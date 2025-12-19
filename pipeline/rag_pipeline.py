@@ -182,7 +182,8 @@ class RAGPipeline:
         self,
         question: str,
         conversation_history: Optional[List[Dict[str, str]]] = None,
-        stream: bool = False
+        stream: bool = False,
+        thinking_mode: str = 'low'
     ) -> Dict[str, Any]:
         """
         Execute complete RAG query
@@ -191,6 +192,7 @@ class RAGPipeline:
             question: User question
             conversation_history: Optional conversation context
             stream: Whether to stream the response
+            thinking_mode: Thinking mode ('low', 'medium', 'high')
 
         Returns:
             Dictionary with:
@@ -272,7 +274,8 @@ class RAGPipeline:
                     conversation_history=conversation_history,
                     retrieval_time=retrieval_time,
                     start_time=start_time,
-                    rag_result=rag_result  # Pass full rag_result for metadata
+                    rag_result=rag_result,  # Pass full rag_result for metadata
+                    thinking_mode=thinking_mode
                 )
             else:
                 generation_result = self.generation_engine.generate_answer(
@@ -280,7 +283,8 @@ class RAGPipeline:
                     retrieved_results=final_results,
                     query_analysis=query_analysis,
                     conversation_history=conversation_history,
-                    stream=False
+                    stream=False,
+                    thinking_mode=thinking_mode
                 )
 
                 total_time = time.time() - start_time
@@ -423,11 +427,14 @@ class RAGPipeline:
         conversation_history: Optional[List],
         retrieval_time: float,
         start_time: float,
-        rag_result: Optional[Dict] = None
+        rag_result: Optional[Dict] = None,
+        thinking_mode: str = 'low'
     ) -> Generator[Dict[str, Any], None, None]:
         """Generate streaming response with full metadata"""
 
-        self.logger.info("Starting streaming generation")
+        self.logger.info("Starting streaming generation", {
+            "thinking_mode": thinking_mode
+        })
 
         # Pre-build phase_metadata from rag_result for inclusion in complete chunk
         phase_metadata = {}
@@ -491,7 +498,8 @@ class RAGPipeline:
                 retrieved_results=retrieved_results,
                 query_analysis=query_analysis,
                 conversation_history=conversation_history,
-                stream=True
+                stream=True,
+                thinking_mode=thinking_mode
             ):
                 if chunk.get('type') == 'token':
                     yield {
@@ -502,22 +510,61 @@ class RAGPipeline:
                 elif chunk.get('type') == 'complete':
                     total_time = time.time() - start_time
 
-                    # Format sources from retrieved results
+                    # Format sources from retrieved results with COMPLETE metadata
                     sources = []
                     citations = []
                     for r in retrieved_results:
                         record = r.get('record', r)
-                        source = {
+                        scores = r.get('scores', {})
+
+                        # Build complete citation with all required fields for formatting
+                        citation = {
+                            # Basic regulation info
                             'regulation_type': record.get('regulation_type', ''),
                             'regulation_number': record.get('regulation_number', ''),
                             'year': record.get('year', ''),
                             'about': record.get('about', ''),
                             'content': record.get('content', ''),
                             'enacting_body': record.get('enacting_body', ''),
-                            'score': r.get('scores', {}).get('final', r.get('final_score', 0))
+                            'global_id': record.get('global_id', ''),
+
+                            # Article/Chapter location
+                            'chapter': record.get('chapter', record.get('bab', '')),
+                            'article': record.get('article', record.get('pasal', '')),
+                            'article_number': record.get('article_number', ''),
+                            'section': record.get('section', record.get('bagian', '')),
+                            'paragraph': record.get('paragraph', record.get('ayat', '')),
+
+                            # Effective date
+                            'effective_date': record.get('effective_date', record.get('tanggal_penetapan', '')),
+                            'tanggal_penetapan': record.get('tanggal_penetapan', record.get('effective_date', '')),
+
+                            # All scores
+                            'final_score': scores.get('final', r.get('final_score', 0)),
+                            'score': scores.get('final', r.get('final_score', 0)),
+                            'semantic_score': scores.get('semantic', r.get('semantic_score', 0)),
+                            'keyword_score': scores.get('keyword', r.get('keyword_score', 0)),
+                            'kg_score': scores.get('kg', r.get('kg_score', 0)),
+                            'authority_score': scores.get('authority', r.get('authority_score', 0)),
+                            'temporal_score': scores.get('temporal', r.get('temporal_score', 0)),
+                            'completeness_score': scores.get('completeness', r.get('completeness_score', 0)),
+                            'rerank_score': r.get('rerank_score', 0),
+                            'composite_score': r.get('composite_score', 0),
+
+                            # KG metadata
+                            'kg_primary_domain': record.get('kg_primary_domain', ''),
+                            'kg_hierarchy_level': record.get('kg_hierarchy_level', 0),
+                            'kg_cross_ref_count': record.get('kg_cross_ref_count', 0),
+                            'kg_pagerank': record.get('kg_pagerank', 0),
+
+                            # Team consensus info (if available)
+                            'team_consensus': r.get('team_consensus', False),
+                            'researcher_agreement': r.get('researcher_agreement', 0),
+                            'supporting_researchers': r.get('supporting_researchers', [])
                         }
-                        sources.append(source)
-                        citations.append(source)
+
+                        sources.append(citation)
+                        citations.append(citation)
 
                     yield {
                         'type': 'complete',

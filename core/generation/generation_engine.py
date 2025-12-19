@@ -62,59 +62,82 @@ class GenerationEngine:
         retrieved_results: List[Dict[str, Any]],
         query_analysis: Optional[Dict[str, Any]] = None,
         conversation_history: Optional[List[Dict[str, str]]] = None,
-        stream: bool = False
+        stream: bool = False,
+        thinking_mode: str = 'low'
     ) -> Dict[str, Any]:
         """
         Generate complete answer with all enhancements
-        
+
         Args:
             query: User query
             retrieved_results: Retrieved and ranked documents
             query_analysis: Optional query analysis
             conversation_history: Optional conversation context
             stream: Whether to stream response
-            
+            thinking_mode: Thinking mode ('low', 'medium', 'high')
+
         Returns:
             Complete generation result dictionary
         """
         self.logger.info("Starting answer generation", {
             "query": query[:50] + "..." if len(query) > 50 else query,
             "num_results": len(retrieved_results),
-            "stream": stream
+            "stream": stream,
+            "thinking_mode": thinking_mode
         })
-        
+
         start_time = time.time()
-        
+
         try:
             # Step 1: Determine template type
             template_type = self._determine_template_type(query, query_analysis)
-            
+
             self.logger.debug("Template type determined", {
                 "template": template_type
             })
-            
-            # Step 2: Build prompt
+
+            # Step 2: Build prompt with thinking mode
             prompt = self.prompt_builder.build_prompt(
                 query=query,
                 retrieved_results=retrieved_results,
                 query_analysis=query_analysis,
                 conversation_history=conversation_history,
-                template_type=template_type
+                template_type=template_type,
+                thinking_mode=thinking_mode
             )
             
             self.logger.debug("Prompt built", {
                 "prompt_length": len(prompt)
             })
-            
+
+            # Print complete prompt for test transparency
+            print("\n" + "=" * 100)
+            print("COMPLETE LLM INPUT PROMPT (FULL TRANSPARENCY)")
+            print("=" * 100)
+            print(f"Character Count: {len(prompt):,}")
+            print("-" * 100)
+            print(prompt)
+            print("-" * 100)
+            print()
+
+            # Step 2.5: Determine max_new_tokens based on thinking mode
+            max_new_tokens = self._get_max_tokens_for_thinking_mode(thinking_mode)
+
+            self.logger.info("Max tokens determined", {
+                "thinking_mode": thinking_mode,
+                "max_new_tokens": max_new_tokens
+            })
+
             # Step 3: Generate response
             if stream:
                 return self._generate_streaming_answer(
                     query=query,
                     prompt=prompt,
-                    retrieved_results=retrieved_results
+                    retrieved_results=retrieved_results,
+                    max_new_tokens=max_new_tokens
                 )
             else:
-                generation_result = self.llm_engine.generate(prompt)
+                generation_result = self.llm_engine.generate(prompt, max_new_tokens=max_new_tokens)
                 
                 if not generation_result['success']:
                     self.logger.error("Generation failed", {
@@ -182,7 +205,8 @@ class GenerationEngine:
                         'tokens_generated': generation_result['tokens_generated'],
                         'tokens_per_second': generation_result['tokens_per_second'],
                         'validation': validation_result if validation_result else {},
-                        'prompt_length': len(prompt)
+                        'prompt_length': len(prompt),
+                        'complete_prompt': prompt  # Store complete prompt for transparency
                     },
                     'citations': self._extract_citations(retrieved_results),
                     'sources': self._format_sources(retrieved_results)
@@ -218,17 +242,20 @@ class GenerationEngine:
         self,
         query: str,
         prompt: str,
-        retrieved_results: List[Dict[str, Any]]
+        retrieved_results: List[Dict[str, Any]],
+        max_new_tokens: Optional[int] = None
     ) -> Generator[Dict[str, Any], None, None]:
         """Generate answer with streaming"""
-        
-        self.logger.info("Starting streaming generation")
-        
+
+        self.logger.info("Starting streaming generation", {
+            "max_new_tokens": max_new_tokens
+        })
+
         full_response = ""
         tokens_generated = 0
-        
+
         try:
-            for chunk in self.llm_engine.generate_stream(prompt):
+            for chunk in self.llm_engine.generate_stream(prompt, max_new_tokens=max_new_tokens):
                 if chunk['success']:
                     if not chunk['done']:
                         token = chunk['token']
@@ -276,6 +303,7 @@ class GenerationEngine:
                             'tokens_per_second': chunk.get('tokens_per_second', 0),
                             'validation': validation_result,
                             'citations': self._extract_citations(retrieved_results),
+                            'complete_prompt': prompt,  # Store complete prompt for transparency
                             'done': True
                         }
                 else:
@@ -294,7 +322,35 @@ class GenerationEngine:
                 'error': str(e),
                 'done': True
             }
-    
+
+    def _get_max_tokens_for_thinking_mode(self, thinking_mode: str) -> int:
+        """
+        Menentukan max_new_tokens berdasarkan thinking mode.
+
+        Args:
+            thinking_mode: Mode berpikir ('low', 'medium', 'high')
+
+        Returns:
+            Max tokens untuk generation
+        """
+        thinking_mode_lower = thinking_mode.lower()
+
+        # Mapping thinking mode ke max_new_tokens
+        mode_to_tokens = {
+            'low': self.config.get('max_new_tokens', 2048),  # Gunakan default dari config
+            'medium': 8192,   # Medium mode: 8K tokens
+            'high': 16384     # High mode: 16K tokens
+        }
+
+        max_tokens = mode_to_tokens.get(thinking_mode_lower, 2048)
+
+        self.logger.debug("Thinking mode max tokens mapping", {
+            "thinking_mode": thinking_mode,
+            "max_new_tokens": max_tokens
+        })
+
+        return max_tokens
+
     def _determine_template_type(
         self,
         query: str,

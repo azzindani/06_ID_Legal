@@ -39,8 +39,8 @@ def format_sources_info(results: List[Dict], config_dict: Dict) -> str:
         # No duplicate header - header is in collapsible summary
         output = [f"**Documents Used in Prompt: {len(results)}**"]
         output.append("")
-        output.append("These are the final selected documents sent to the LLM for answer generation.")
-        output.append("")
+        #output.append("These are the final selected documents sent to the LLM for answer generation.")
+        #output.append("")
 
         for i, result in enumerate(results, 1):
             try:
@@ -50,32 +50,49 @@ def format_sources_info(results: List[Dict], config_dict: Dict) -> str:
                 reg_num = record.get('regulation_number', 'N/A')
                 year = record.get('year', 'N/A')
                 about = record.get('about', 'N/A')
-                enacting_body = record.get('enacting_body', 'N/A')
-                global_id = record.get('global_id', 'N/A')
+                enacting_body = record.get('enacting_body', '')
+                global_id = record.get('global_id', '')
+                effective_date = record.get('effective_date', record.get('tanggal_penetapan', ''))
 
-                output.append(f"### {i}. {reg_type} No. {reg_num}/{year}")
-                output.append(f"- **Global ID:** {global_id}")
+                # Build regulation full name - skip N/A enacting_body
+                if enacting_body and enacting_body != 'N/A':
+                    regulation_full_name = f"{reg_type} {enacting_body} No. {reg_num} Tahun {year}"
+                else:
+                    regulation_full_name = f"{reg_type} No. {reg_num} Tahun {year}"
+
+                output.append(f"### {i}. {regulation_full_name}")
+
+                # Only show Global ID if it exists and is not N/A
+                if global_id and global_id != 'N/A':
+                    output.append(f"- **Global ID:** {global_id}")
+
                 output.append(f"- **Tentang:** {about}")
-                output.append(f"- **Ditetapkan oleh:** {enacting_body}")
 
-                # Article/Chapter location
+                # Only show effective date if it exists and is not N/A
+                if effective_date and effective_date != 'N/A':
+                    output.append(f"- **Tanggal Penetapan:** {effective_date}")
+
+                # Article/Chapter location - MORE PROMINENT
                 chapter = record.get('chapter', record.get('bab', ''))
                 article = record.get('article', record.get('pasal', ''))
+                article_number = record.get('article_number', '')  # More specific article number
                 section = record.get('section', record.get('bagian', ''))
                 paragraph = record.get('paragraph', record.get('ayat', ''))
 
                 location_parts = []
                 if chapter:
-                    location_parts.append(f"Bab {chapter}")
+                    location_parts.append(f"{chapter}")
                 if section:
-                    location_parts.append(f"Bagian {section}")
+                    location_parts.append(f"{section}")
                 if article:
-                    location_parts.append(f"Pasal {article}")
+                    location_parts.append(f"{article}")
+                elif article_number:
+                    location_parts.append(f"{article_number}")
                 if paragraph:
-                    location_parts.append(f"Ayat {paragraph}")
+                    location_parts.append(f"{paragraph}")
 
                 if location_parts:
-                    output.append(f"- **Lokasi:** {' > '.join(location_parts)}")
+                    output.append(f"- **Lokasi:** {' | '.join(location_parts)}")
                 else:
                     output.append(f"- **Lokasi:** (Dokumen Lengkap)")
 
@@ -139,6 +156,9 @@ def format_sources_info(results: List[Dict], config_dict: Dict) -> str:
             except Exception as e:
                 output.append(f"Error formatting source {i}: {e}")
                 continue
+
+        output.append("---")
+        output.append("")
 
         return "\n".join(output)
     except Exception as e:
@@ -277,8 +297,9 @@ def format_all_documents(metadata: Dict, max_docs: int = 50) -> str:
             reg_num = record.get('regulation_number', 'N/A')
             year = record.get('year', 'N/A')
             about = record.get('about', 'N/A')
-            enacting_body = record.get('enacting_body', 'N/A')
-            global_id = record.get('global_id', 'N/A')
+            enacting_body = record.get('enacting_body', '')
+            global_id = record.get('global_id', '')
+            effective_date = record.get('effective_date', record.get('tanggal_penetapan', ''))
 
             # Scores
             final_score = scores.get('final', doc.get('final_score', doc.get('composite_score', record.get('score', 0))))
@@ -292,6 +313,7 @@ def format_all_documents(metadata: Dict, max_docs: int = 50) -> str:
             # Article-level location
             chapter = record.get('chapter', record.get('bab', ''))
             article = record.get('article', record.get('pasal', ''))
+            article_number = record.get('article_number', '')
             section = record.get('section', record.get('bagian', ''))
             paragraph = record.get('paragraph', record.get('ayat', ''))
 
@@ -304,24 +326,39 @@ def format_all_documents(metadata: Dict, max_docs: int = 50) -> str:
             phase = doc.get('_phase', '')
             researcher = doc.get('_researcher', '')
 
-            output.append(f"**[{i}] {reg_type} No. {reg_num}/{year}**")
-            output.append(f"- Global ID: {global_id}")
+            # Build regulation full name - skip N/A enacting_body
+            if enacting_body and enacting_body != 'N/A':
+                regulation_full_name = f"{reg_type} {enacting_body} No. {reg_num} Tahun {year}"
+            else:
+                regulation_full_name = f"{reg_type} No. {reg_num} Tahun {year}"
+
+            output.append(f"**[{i}] {regulation_full_name}**")
+
+            # Only show Global ID if it exists and is not N/A
+            if global_id and global_id != 'N/A':
+                output.append(f"- Global ID: {global_id}")
+
             output.append(f"- About: {about}")
-            output.append(f"- Enacting Body: {enacting_body}")
+
+            # Only show effective date if it exists and is not N/A
+            if effective_date and effective_date != 'N/A':
+                output.append(f"- Effective Date: {effective_date}")
 
             # Article-level location
             location_parts = []
             if chapter:
-                location_parts.append(f"Bab {chapter}")
+                location_parts.append(f"{chapter}")
             if section:
-                location_parts.append(f"Bagian {section}")
+                location_parts.append(f"{section}")
             if article:
-                location_parts.append(f"Pasal {article}")
+                location_parts.append(f"{article}")
+            elif article_number:
+                location_parts.append(f"{article_number}")
             if paragraph:
-                location_parts.append(f"Ayat {paragraph}")
+                location_parts.append(f"{paragraph}")
 
             if location_parts:
-                output.append(f"- Location: {' > '.join(location_parts)}")
+                output.append(f"- Location: {' | '.join(location_parts)}")
             else:
                 output.append(f"- Location: (Full Document)")
 
@@ -440,8 +477,27 @@ def format_retrieved_metadata(phase_metadata: Dict, config_dict: Dict) -> str:
                         reg_type = record.get('regulation_type', 'N/A')
                         reg_num = record.get('regulation_number', 'N/A')
                         year = record.get('year', 'N/A')
+                        enacting_body = record.get('enacting_body', '')
 
-                        output.append(f"   {i}. {reg_type} No. {reg_num}/{year} (Score: {score:.3f}, KG: {kg_score:.3f})")
+                        # Get article/chapter info
+                        chapter = record.get('chapter', record.get('bab', ''))
+                        article = record.get('article', record.get('pasal', ''))
+                        article_number = record.get('article_number', '')
+
+                        # Build regulation name
+                        if enacting_body:
+                            reg_name = f"{reg_type} {enacting_body} No. {reg_num} Tahun {year}"
+                        else:
+                            reg_name = f"{reg_type} No. {reg_num} Tahun {year}"
+
+                        # Add article location if available
+                        location = ""
+                        if article or article_number:
+                            location = f" | {article or article_number}"
+                        elif chapter:
+                            location = f" | {chapter}"
+
+                        output.append(f"   {i}. {reg_name}{location} (Score: {score:.3f}, KG: {kg_score:.3f})")
                     except Exception:
                         continue
 
@@ -484,3 +540,5 @@ def final_selection_with_kg(candidates: List[Dict], query_type: str, config_dict
     )
 
     return sorted_candidates[:top_k]
+
+

@@ -121,12 +121,13 @@ MODERATE_CONFIG = {
 class StressTester:
     """Single query stress test with maximum settings"""
 
-    def __init__(self, quick_mode: bool = False, verbose: bool = False, memory_profile: bool = False):
+    def __init__(self, quick_mode: bool = False, verbose: bool = False, memory_profile: bool = False, thinking_mode: str = 'low'):
         initialize_logging()
         self.logger = get_logger("StressTest")
         self.quick_mode = quick_mode
         self.verbose = verbose
         self.memory_profile = memory_profile
+        self.thinking_mode = thinking_mode
 
         # Select config based on mode
         self.config = MODERATE_CONFIG.copy() if quick_mode else STRESS_CONFIG_MAX.copy()
@@ -226,8 +227,8 @@ class StressTester:
             stream_start = time.time()
             result = None
 
-            # Use query() with stream=True
-            for chunk in self.pipeline.query(query, stream=True):
+            # Use query() with stream=True and thinking_mode
+            for chunk in self.pipeline.query(query, stream=True, thinking_mode=self.thinking_mode):
                 if chunk.get('type') == 'token':
                     token = chunk.get('token', '')
                     print(token, end='', flush=True)
@@ -276,6 +277,8 @@ class StressTester:
                 self.results['research_log'] = result.get('research_log', {})
                 self.results['consensus_data'] = result.get('consensus_data', {})
                 self.results['research_data'] = result.get('research_data', {})
+                # Store complete prompt for transparency
+                self.results['complete_prompt'] = result.get('complete_prompt', '')
 
             return self.results
 
@@ -346,6 +349,21 @@ class StressTester:
                         return all_docs
 
         return all_docs
+
+    def print_complete_prompt(self):
+        """Print COMPLETE LLM INPUT PROMPT (FULL TRANSPARENCY)"""
+        complete_prompt = self.results.get('complete_prompt', '')
+
+        if not complete_prompt:
+            return
+
+        print("\n" + "=" * 100)
+        print("## COMPLETE LLM INPUT PROMPT (FULL TRANSPARENCY)")
+        print("=" * 100)
+        print(f"Character Count: {len(complete_prompt):,}")
+        print("-" * 100)
+        print(complete_prompt)
+        print("-" * 100)
 
     def print_legal_references(self):
         """Print LEGAL REFERENCES (Top K Documents Used in LLM Prompt)"""
@@ -509,6 +527,7 @@ class StressTester:
                 print(f"  Peak: {mem.get('peak_mb', 0):.2f} MB")
 
             # Print detailed sections
+            self.print_complete_prompt()
             self.print_legal_references()
             self.print_research_process()
             self.print_all_documents()
@@ -571,13 +590,29 @@ def main():
     parser.add_argument('--memory', action='store_true', help='Enable memory profiling')
     parser.add_argument('--export', action='store_true', help='Export results to JSON')
     parser.add_argument('--output', type=str, help='Output file path for export')
+
+    # Add thinking mode arguments (mutually exclusive)
+    thinking_group = parser.add_mutually_exclusive_group()
+    thinking_group.add_argument('--low', action='store_const', const='low', dest='thinking_mode',
+                               help='Low thinking mode (2048-4096 tokens, basic analysis)')
+    thinking_group.add_argument('--medium', action='store_const', const='medium', dest='thinking_mode',
+                               help='Medium thinking mode (4096-8192 tokens, deep thinking)')
+    thinking_group.add_argument('--high', action='store_const', const='high', dest='thinking_mode',
+                               help='High thinking mode (8192-16384 tokens, iterative & recursive)')
+    parser.set_defaults(thinking_mode='low')
+
     args = parser.parse_args()
+
+    print(f"\n{'=' * 80}")
+    print(f"THINKING MODE: {args.thinking_mode.upper()}")
+    print(f"{'=' * 80}\n")
 
     # Create tester
     tester = StressTester(
         quick_mode=args.quick,
         verbose=args.verbose,
-        memory_profile=args.memory
+        memory_profile=args.memory,
+        thinking_mode=args.thinking_mode
     )
 
     # Print header

@@ -32,11 +32,12 @@ from utils.research_transparency import format_detailed_research_process
 class CompleteOutputTester:
     """Tests comprehensive RAG output with streaming and full metadata"""
 
-    def __init__(self):
+    def __init__(self, thinking_mode: str = 'low'):
         initialize_logging()
         self.logger = get_logger("CompleteOutputTest")
         self.pipeline: Optional[RAGPipeline] = None
         self.results: List[Dict[str, Any]] = []
+        self.thinking_mode = thinking_mode
 
     def initialize(self) -> bool:
         """Initialize RAG pipeline"""
@@ -88,6 +89,16 @@ class CompleteOutputTester:
             lines.append(f"\n## THINKING PROCESS")
             lines.append("-" * 80)
             lines.append(thinking)
+
+        # Complete Prompt - FULL TRANSPARENCY
+        complete_prompt = metadata.get('complete_prompt', '')
+        if complete_prompt:
+            lines.append(f"\n## COMPLETE LLM INPUT PROMPT (FULL TRANSPARENCY)")
+            lines.append("=" * 100)
+            lines.append(f"Character Count: {len(complete_prompt):,}")
+            lines.append("-" * 80)
+            lines.append(complete_prompt)
+            lines.append("-" * 80)
 
         # Answer (already streamed, show final)
         lines.append(f"\n## ANSWER")
@@ -371,7 +382,7 @@ class CompleteOutputTester:
             sources = []
             citations = []
 
-            for chunk in self.pipeline.query(query, stream=True):
+            for chunk in self.pipeline.query(query, stream=True, thinking_mode=self.thinking_mode):
                 chunk_type = chunk.get('type', '')
 
                 if chunk_type == 'token':
@@ -389,9 +400,12 @@ class CompleteOutputTester:
                     research_log = chunk.get('research_log', {})
                     sources = chunk.get('sources', [])
                     citations = chunk.get('citations', [])
+                    # Store complete prompt for transparency
+                    complete_prompt = chunk.get('complete_prompt', '')
                     # Also include consensus and research data
                     final_metadata['consensus_data'] = chunk.get('consensus_data', {})
                     final_metadata['research_data'] = chunk.get('research_data', {})
+                    final_metadata['complete_prompt'] = complete_prompt
 
                 elif chunk_type == 'error':
                     error_msg = chunk.get('error', 'Unknown error')
@@ -547,9 +561,24 @@ def main():
     parser = argparse.ArgumentParser(description="Test complete RAG output with streaming")
     parser.add_argument('--export', action='store_true', help='Export results to JSON')
     parser.add_argument('--output', type=str, help='Output file path for export')
+
+    # Add thinking mode arguments (mutually exclusive)
+    thinking_group = parser.add_mutually_exclusive_group()
+    thinking_group.add_argument('--low', action='store_const', const='low', dest='thinking_mode',
+                               help='Low thinking mode (2048-4096 tokens, basic analysis)')
+    thinking_group.add_argument('--medium', action='store_const', const='medium', dest='thinking_mode',
+                               help='Medium thinking mode (4096-8192 tokens, deep thinking)')
+    thinking_group.add_argument('--high', action='store_const', const='high', dest='thinking_mode',
+                               help='High thinking mode (8192-16384 tokens, iterative & recursive)')
+    parser.set_defaults(thinking_mode='low')
+
     args = parser.parse_args()
 
-    tester = CompleteOutputTester()
+    print(f"\n{'=' * 80}")
+    print(f"THINKING MODE: {args.thinking_mode.upper()}")
+    print(f"{'=' * 80}\n")
+
+    tester = CompleteOutputTester(thinking_mode=args.thinking_mode)
 
     try:
         success = tester.run_all_queries()

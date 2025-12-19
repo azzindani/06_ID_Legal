@@ -7,6 +7,13 @@ File: conversation/export/html_exporter.py
 from typing import Dict, Any, List, Optional
 from .base_exporter import BaseExporter
 
+# Optional markdown import for proper markdown-to-HTML conversion
+try:
+    import markdown
+    MARKDOWN_AVAILABLE = True
+except ImportError:
+    MARKDOWN_AVAILABLE = False
+
 
 class HTMLExporter(BaseExporter):
     """
@@ -128,6 +135,66 @@ class HTMLExporter(BaseExporter):
             border-bottom: 1px solid var(--border-color);
         }}
 
+        h3 {{
+            color: var(--secondary-color);
+            margin: 15px 0 10px 0;
+            font-size: 1.2em;
+        }}
+
+        h4 {{
+            color: var(--text-color);
+            margin: 10px 0 8px 0;
+            font-size: 1.1em;
+        }}
+
+        ul, ol {{
+            margin: 10px 0;
+            padding-left: 30px;
+        }}
+
+        li {{
+            margin: 5px 0;
+        }}
+
+        p {{
+            margin: 10px 0;
+        }}
+
+        code {{
+            background-color: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }}
+
+        pre {{
+            background-color: #f4f4f4;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            margin: 15px 0;
+        }}
+
+        pre code {{
+            background-color: transparent;
+            padding: 0;
+        }}
+
+        blockquote {{
+            border-left: 4px solid var(--secondary-color);
+            margin: 15px 0;
+            padding: 10px 20px;
+            background-color: var(--background-color);
+            font-style: italic;
+        }}
+
+        hr {{
+            border: none;
+            border-top: 1px solid var(--border-color);
+            margin: 20px 0;
+        }}
+
         .meta {{
             color: #7f8c8d;
             font-size: 0.9em;
@@ -195,12 +262,26 @@ class HTMLExporter(BaseExporter):
         details {{
             font-size: 0.9em;
             color: #7f8c8d;
+            margin: 10px 0;
         }}
 
-        summary {{
+        details summary {{
             cursor: pointer;
             font-weight: bold;
             padding: 5px 0;
+            user-select: none;
+        }}
+
+        details[open] {{
+            padding: 10px;
+            background: var(--background-color);
+            border-radius: 5px;
+        }}
+
+        details[open] summary {{
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border-color);
         }}
 
         table {{
@@ -298,9 +379,85 @@ class HTMLExporter(BaseExporter):
         return html
 
     def _format_answer_text(self, text: str) -> str:
-        """Format answer text with paragraph breaks"""
-        paragraphs = text.split('\n\n')
-        return ''.join(f'<p>{p}</p>' for p in paragraphs if p.strip())
+        """
+        Format answer text with proper markdown-to-HTML conversion
+
+        Converts markdown syntax to HTML including:
+        - Headers (###, ##, etc.)
+        - Bold (**text**)
+        - Lists
+        - Code blocks
+        - Tables
+        - Details/summary tags
+        - Line breaks
+        """
+        if not text:
+            return ''
+
+        import re
+
+        # Pre-process: Convert markdown inside HTML tags (like <details>) to HTML
+        # The markdown processor won't process content inside HTML tags
+        def convert_markdown_in_html_tags(match):
+            opening_tag = match.group(1)
+            content = match.group(2)
+            closing_tag = match.group(3)
+
+            # Process the content inside <details> as markdown
+            if MARKDOWN_AVAILABLE:
+                # Convert markdown to HTML for content inside details
+                content_html = markdown.markdown(
+                    content,
+                    extensions=['tables', 'fenced_code', 'nl2br', 'extra']
+                )
+            else:
+                # Fallback: basic formatting
+                # Convert double newlines to paragraphs
+                paragraphs = content.split('\n\n')
+                content_parts = []
+                for para in paragraphs:
+                    if para.strip():
+                        # Convert single newlines to <br>
+                        formatted = para.replace('\n', '<br>')
+                        # Basic bold conversion
+                        formatted = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', formatted)
+                        # Basic header conversion
+                        formatted = re.sub(r'^### (.*?)$', r'<h3>\1</h3>', formatted, flags=re.MULTILINE)
+                        formatted = re.sub(r'^## (.*?)$', r'<h2>\1</h2>', formatted, flags=re.MULTILINE)
+                        # Basic list conversion
+                        formatted = re.sub(r'^- (.*?)$', r'<li>\1</li>', formatted, flags=re.MULTILINE)
+                        content_parts.append(formatted)
+                content_html = '<br>'.join(content_parts)
+
+            return opening_tag + content_html + closing_tag
+
+        # Process <details> tags before markdown conversion
+        text = re.sub(
+            r'(<details[^>]*>)(.*?)(</details>)',
+            convert_markdown_in_html_tags,
+            text,
+            flags=re.DOTALL
+        )
+
+        # Convert markdown to HTML if library is available
+        if MARKDOWN_AVAILABLE:
+            # Use markdown with extensions for tables, code, and line breaks
+            html_content = markdown.markdown(
+                text,
+                extensions=['tables', 'fenced_code', 'nl2br', 'extra']
+            )
+            return html_content
+        else:
+            # Fallback: basic formatting with paragraph breaks and line breaks
+            html_parts = []
+            for paragraph in text.split('\n\n'):
+                if paragraph.strip():
+                    # Convert line breaks within paragraphs
+                    formatted = paragraph.replace('\n', '<br>')
+                    # Basic bold conversion
+                    formatted = formatted.replace('**', '<strong>').replace('**', '</strong>')
+                    html_parts.append(f'<p>{formatted}</p>')
+            return ''.join(html_parts)
 
     def _format_turn_details(self, metadata: Dict[str, Any], timestamp: str) -> str:
         """Format turn metadata as collapsible details"""

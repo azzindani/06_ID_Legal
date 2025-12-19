@@ -41,10 +41,9 @@ def format_detailed_research_process(
     """
     lines = []
 
-    lines.append("\n## 📊 DETAILED RESEARCH PROCESS")
-    lines.append("=" * 100)
-    lines.append("Step-by-step tracking of document discovery, evaluation, and selection")
-    lines.append("")
+    #lines.append("-" * 100)
+    #lines.append("Step-by-step tracking of document discovery, evaluation, and selection")
+    #lines.append("")
 
     # Extract data
     research_data = result.get('research_data', {})
@@ -59,8 +58,9 @@ def format_detailed_research_process(
     # ============================================================================
     # STEP 1: RESEARCH TEAM
     # ============================================================================
+    lines.append("")
     lines.append("### 👥 STEP 1: Research Team Assembly")
-    lines.append("-" * 80)
+    #lines.append("-" * 80)
 
     # Extract unique researchers
     researchers = set()
@@ -85,16 +85,18 @@ def format_detailed_research_process(
         lines.append(f"   - **{name}**")
         lines.append(f"     Expertise: {expertise}")
 
-    lines.append("")
+    #lines.append("")
+    lines.append("---")
 
     # ============================================================================
     # STEP 2: INDIVIDUAL RESEARCHER FINDINGS
     # ============================================================================
-    lines.append("### 🔍 STEP 2: Individual Researcher Findings")
-    lines.append("-" * 80)
-    lines.append(f"Each researcher independently searches from their unique perspective.")
-    lines.append(f"Showing top {top_n_per_researcher} documents per researcher.")
     lines.append("")
+    lines.append("### 🔍 STEP 2: Individual Researcher Findings")
+    #lines.append("-" * 80)
+    #lines.append(f"Each researcher independently searches from their unique perspective.")
+    #lines.append(f"Showing top {top_n_per_researcher} documents per researcher.")
+    #lines.append("")
 
     # Group by researcher
     researcher_findings = {}
@@ -148,15 +150,42 @@ def format_detailed_research_process(
                 reg_num = record.get('regulation_number', 'N/A')
                 year = record.get('year', 'N/A')
                 about = record.get('about', 'N/A')
+                enacting_body = record.get('enacting_body', '')
+                effective_date = record.get('effective_date', record.get('tanggal_penetapan', ''))
+
+                # Get article/chapter info
+                chapter = record.get('chapter', record.get('bab', ''))
+                article = record.get('article', record.get('pasal', ''))
+                article_number = record.get('article_number', '')
 
                 final_score = scores.get('final', doc.get('composite_score', 0))
                 semantic = scores.get('semantic', 0)
                 keyword = scores.get('keyword', 0)
                 kg = scores.get('kg', 0)
 
-                lines.append(f"   {i}. {reg_type} No. {reg_num}/{year}")
+                # Build full regulation name - skip N/A enacting_body
+                if enacting_body and enacting_body != 'N/A':
+                    reg_name = f"{reg_type} {enacting_body} No. {reg_num} Tahun {year}"
+                else:
+                    reg_name = f"{reg_type} No. {reg_num} Tahun {year}"
+
+                lines.append(f"   {i}. {reg_name}")
                 lines.append(f"      About: {about[:100]}...")
-                lines.append(f"      Scores: Final={final_score:.3f} | Semantic={semantic:.3f} | Keyword={keyword:.3f} | KG={kg:.3f}")
+
+                # Add article/chapter if available
+                location_parts = []
+                if chapter:
+                    location_parts.append(f"{chapter}")
+                if article or article_number:
+                    location_parts.append(f"{article or article_number}")
+                if location_parts:
+                    lines.append(f"      Location: {' | '.join(location_parts)}")
+
+                # Only show effective date if it exists and is not N/A
+                if effective_date and effective_date != 'N/A':
+                    lines.append(f"      Effective Date: {effective_date}")
+
+                lines.append(f"      Scores: Final: {final_score:.3f} | Semantic: {semantic:.3f} | Keyword: {keyword:.3f} | KG: {kg:.3f}")
 
                 # Team consensus marker
                 if doc.get('team_consensus'):
@@ -166,20 +195,20 @@ def format_detailed_research_process(
                     content = record.get('content', '')[:200]
                     lines.append(f"      Content: {content}...")
 
-                lines.append("")
+                # Don't add separator between list items - they should be adjacent
 
             lines.append("")
 
-        lines.append("-" * 80)
-        lines.append("")
+        lines.append("---")
 
     # ============================================================================
     # STEP 3: CONSENSUS BUILDING
     # ============================================================================
-    lines.append("### 🤝 STEP 3: Team Consensus & Cross-Validation")
-    lines.append("-" * 80)
-    lines.append("Documents validated through team agreement and cross-validation.")
     lines.append("")
+    lines.append("### 🤝 STEP 3: Team Consensus & Cross-Validation")
+    #lines.append("-" * 80)
+    #lines.append("Documents validated through team agreement and cross-validation.")
+    #lines.append("")
 
     if consensus_data:
         consensus_results = consensus_data.get('consensus_results', [])
@@ -199,28 +228,57 @@ def format_detailed_research_process(
             reg_num = record.get('regulation_number', 'N/A')
             year = record.get('year', 'N/A')
             about = record.get('about', 'N/A')
+            enacting_body = record.get('enacting_body', '')
+            effective_date = record.get('effective_date', record.get('tanggal_penetapan', ''))
+
+            # Get article/chapter info
+            chapter = record.get('chapter', record.get('bab', ''))
+            article = record.get('article', record.get('pasal', ''))
+            article_number = record.get('article_number', '')
 
             consensus_score = doc.get('consensus_score', 0)
             agreement = doc.get('researcher_agreement', 0)
             found_by = doc.get('found_by_researchers', [])
 
-            lines.append(f"{i}. {reg_type} No. {reg_num}/{year}")
+            # Build full regulation name - skip N/A enacting_body
+            if enacting_body and enacting_body != 'N/A':
+                reg_name = f"{reg_type} {enacting_body} No. {reg_num} Tahun {year}"
+            else:
+                reg_name = f"{reg_type} No. {reg_num} Tahun {year}"
+
+            lines.append(f"{i}. {reg_name}")
             lines.append(f"   About: {about[:100]}...")
+
+            # Add article/chapter if available
+            location_parts = []
+            if chapter:
+                location_parts.append(f"{chapter}")
+            if article or article_number:
+                location_parts.append(f"{article or article_number}")
+            if location_parts:
+                lines.append(f"   Location: {' > '.join(location_parts)}")
+
+            # Only show effective date if it exists and is not N/A
+            if effective_date and effective_date != 'N/A':
+                lines.append(f"   Effective Date: {effective_date}")
+
             lines.append(f"   Consensus Score: {consensus_score:.3f} | Agreement: {agreement:.2f}")
             lines.append(f"   Found by {len(found_by)} researchers: {', '.join(found_by[:3])}{'...' if len(found_by) > 3 else ''}")
-            lines.append("")
+            # Don't add separator between list items - they should be adjacent
     else:
         lines.append("⚠️  No consensus data available")
 
-    lines.append("")
+    #lines.append("")
+    lines.append("---")
 
     # ============================================================================
     # STEP 4: RERANKING & FINAL SELECTION
     # ============================================================================
-    lines.append("### 🎯 STEP 4: Reranking & Final Selection")
-    lines.append("-" * 80)
-    lines.append("Final reranking using cross-encoder to select most relevant documents.")
     lines.append("")
+    lines.append("### 🎯 STEP 4: Reranking & Final Selection")
+    #lines.append("-" * 80)
+    #lines.append("Final reranking using cross-encoder to select most relevant documents.")
+    #lines.append("")
 
     if final_results:
         lines.append(f"**Final Documents Selected:** {len(final_results)}")
@@ -232,27 +290,56 @@ def format_detailed_research_process(
             reg_num = doc.get('regulation_number', 'N/A')
             year = doc.get('year', 'N/A')
             about = doc.get('about', 'N/A')
+            enacting_body = doc.get('enacting_body', '')
+            effective_date = doc.get('effective_date', doc.get('tanggal_penetapan', ''))
             score = doc.get('score', doc.get('final_score', 0))
 
-            lines.append(f"{i}. {reg_type} No. {reg_num}/{year}")
+            # Get article/chapter info
+            chapter = doc.get('chapter', doc.get('bab', ''))
+            article = doc.get('article', doc.get('pasal', ''))
+            article_number = doc.get('article_number', '')
+
+            # Build full regulation name - skip N/A enacting_body
+            if enacting_body and enacting_body != 'N/A':
+                reg_name = f"{reg_type} {enacting_body} No. {reg_num} Tahun {year}"
+            else:
+                reg_name = f"{reg_type} No. {reg_num} Tahun {year}"
+
+            lines.append(f"{i}. {reg_name}")
             lines.append(f"   About: {about}")
+
+            # Add article/chapter if available
+            location_parts = []
+            if chapter:
+                location_parts.append(f"{chapter}")
+            if article or article_number:
+                location_parts.append(f"{article or article_number}")
+            if location_parts:
+                lines.append(f"   Location: {' | '.join(location_parts)}")
+
+            # Only show effective date if it exists and is not N/A
+            if effective_date and effective_date != 'N/A':
+                lines.append(f"   Effective Date: {effective_date}")
+
             lines.append(f"   Final Score: {score:.4f}")
 
             if show_content:
                 content = doc.get('content', '')[:300]
                 lines.append(f"   Content: {content}...")
 
-            lines.append("")
+            # Don't add separator between list items - they should be adjacent
     else:
         lines.append("⚠️  No final results available")
 
-    lines.append("")
+    lines.append("---")
+    #lines.append("")
 
     # ============================================================================
     # STEP 5: SUMMARY STATISTICS
     # ============================================================================
+    lines.append("")
     lines.append("### 📈 STEP 5: Summary Statistics")
-    lines.append("-" * 80)
+    #lines.append("-" * 80)
 
     # Calculate stats
     total_retrieved = sum(f['total_documents'] for f in researcher_findings.values())
@@ -275,7 +362,6 @@ def format_detailed_research_process(
         lines.append(f"   - {name}: {docs} documents ({percentage:.1f}%)")
 
     lines.append("")
-    lines.append("=" * 100)
 
     return '\n'.join(lines)
 
@@ -317,4 +403,9 @@ def format_researcher_summary(phase_metadata: Dict[str, Any]) -> str:
         lines.append(f"   - {name}: {count} docs ({percentage:.1f}%)")
 
     return '\n'.join(lines)
+
+
+
+
+
 
