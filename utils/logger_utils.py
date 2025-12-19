@@ -43,29 +43,33 @@ class CentralizedLogger:
     def __init__(self):
         if self._initialized:
             return
-            
+
         self.log_file = None
         self.enable_file_logging = False
         self.log_dir = "logs"
         self.append = True
+        self.verbosity_mode = "minimal"  # minimal, normal, verbose
         self._initialized = True
     
-    def initialize(self, enable_file_logging: bool = True, 
-                   log_dir: str = "logs", 
+    def initialize(self, enable_file_logging: bool = True,
+                   log_dir: str = "logs",
                    append: bool = True,
-                   log_filename: str = None):
+                   log_filename: str = None,
+                   verbosity_mode: str = "minimal"):
         """
         Initialize the centralized logger
-        
+
         Args:
             enable_file_logging: Enable/disable file logging
             log_dir: Directory for log files
             append: If True, append to daily log. If False, create new file each run
             log_filename: Custom filename (if None, auto-generated)
+            verbosity_mode: Logging verbosity ('minimal', 'normal', 'verbose')
         """
         self.enable_file_logging = enable_file_logging
         self.log_dir = log_dir
         self.append = append
+        self.verbosity_mode = verbosity_mode
         
         if enable_file_logging:
             os.makedirs(log_dir, exist_ok=True)
@@ -98,7 +102,7 @@ class CentralizedLogger:
     def log(self, level: LogLevel, module: str, message: str, context: Optional[dict] = None):
         """
         Write a log entry
-        
+
         Args:
             level: Log level
             module: Module name (e.g., "DataLoader", "Config", "Main")
@@ -106,11 +110,15 @@ class CentralizedLogger:
             context: Optional context dictionary
         """
         formatted_msg = self._format_message(level, module, message, context)
-        
-        # Always print to console
-        print(formatted_msg)
-        
-        # Write to file if enabled
+
+        # Determine if should print to console based on verbosity mode
+        should_print = self._should_print_to_console(level)
+
+        # Print to console if allowed
+        if should_print:
+            print(formatted_msg)
+
+        # Always write to file if enabled (regardless of verbosity)
         if self.enable_file_logging and self.log_file:
             try:
                 with self._file_lock:
@@ -118,6 +126,35 @@ class CentralizedLogger:
                         f.write(formatted_msg + "\n")
             except Exception as e:
                 print(f"Warning: Failed to write to log file: {e}")
+
+    def _should_print_to_console(self, level: LogLevel) -> bool:
+        """
+        Determine if a log message should be printed to console based on verbosity mode
+
+        Verbosity modes:
+        - minimal: Only ERROR, WARNING, SUCCESS
+        - normal: ERROR, WARNING, SUCCESS, INFO
+        - verbose: All (ERROR, WARNING, SUCCESS, INFO, DEBUG)
+
+        Args:
+            level: Log level
+
+        Returns:
+            True if should print to console, False otherwise
+        """
+        # Always print critical messages
+        if level in [LogLevel.ERROR, LogLevel.WARNING, LogLevel.SUCCESS]:
+            return True
+
+        # Check verbosity mode for INFO and DEBUG
+        if level == LogLevel.INFO:
+            return self.verbosity_mode in ['normal', 'verbose']
+
+        if level == LogLevel.DEBUG:
+            return self.verbosity_mode == 'verbose'
+
+        # Default: print
+        return True
     
     def _format_message(self, level: LogLevel, module: str, message: str, 
                        context: Optional[dict] = None) -> str:
@@ -180,23 +217,25 @@ class Logger:
 def initialize_logging(enable_file_logging: bool = True,
                       log_dir: str = "logs",
                       append: bool = True,
-                      log_filename: str = None):
+                      log_filename: str = None,
+                      verbosity_mode: str = "minimal"):
     """
     Initialize the centralized logging system
     CALL THIS ONCE at the start of your application
-    
+
     Args:
         enable_file_logging: Enable/disable file logging
         log_dir: Directory for log files
         append: If True, append to daily log. If False, create new file each run
         log_filename: Custom filename (if None, auto-generated)
-        
+        verbosity_mode: Logging verbosity ('minimal', 'normal', 'verbose')
+
     Example:
         # At the start of main.py
         from logger_utils import initialize_logging
-        initialize_logging(enable_file_logging=True, append=True)
+        initialize_logging(enable_file_logging=True, append=True, verbosity_mode='minimal')
     """
-    _central_logger.initialize(enable_file_logging, log_dir, append, log_filename)
+    _central_logger.initialize(enable_file_logging, log_dir, append, log_filename, verbosity_mode)
 
 
 def get_logger(name: str) -> Logger:

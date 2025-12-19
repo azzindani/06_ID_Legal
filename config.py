@@ -202,6 +202,23 @@ CACHE_DIR = os.getenv("CACHE_DIR", ".cache")
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", "32"))
 MAX_MEMORY_MB = int(os.getenv("MAX_MEMORY_MB", "15000"))
 
+# =============================================================================
+# LOGGING VERBOSITY CONFIGURATION
+# =============================================================================
+
+# Logging verbosity mode:
+# - 'minimal': Only critical messages (ERROR, WARNING, SUCCESS, key INFO) - DEFAULT
+# - 'normal': Standard logging (all INFO + above)
+# - 'verbose': Full debug logging (all DEBUG + INFO + above)
+LOG_VERBOSITY = os.getenv("LOG_VERBOSITY", "minimal")
+
+# Determines which logs are printed to console (file always gets everything)
+VERBOSE_CONSOLE_LOGGING = {
+    'minimal': False,   # Only critical messages to console
+    'normal': True,     # Standard logging to console
+    'verbose': True     # All logs to console including DEBUG
+}.get(LOG_VERBOSITY, False)
+
 # Create necessary directories
 Path(LOG_DIR).mkdir(parents=True, exist_ok=True)
 Path(CACHE_DIR).mkdir(parents=True, exist_ok=True)

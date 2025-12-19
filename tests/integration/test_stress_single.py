@@ -36,6 +36,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 from utils.logger_utils import get_logger, initialize_logging
 from utils.research_transparency import format_detailed_research_process, format_researcher_summary
+from config import LOG_DIR, ENABLE_FILE_LOGGING, LOG_VERBOSITY
 
 
 # Maximum stress test configuration
@@ -122,7 +123,13 @@ class StressTester:
     """Single query stress test with maximum settings"""
 
     def __init__(self, quick_mode: bool = False, verbose: bool = False, memory_profile: bool = False, thinking_mode: str = 'low'):
-        initialize_logging()
+        # Initialize logging with verbosity from config (can be overridden by verbose flag)
+        verbosity = 'verbose' if verbose else LOG_VERBOSITY
+        initialize_logging(
+            enable_file_logging=ENABLE_FILE_LOGGING,
+            log_dir=LOG_DIR,
+            verbosity_mode=verbosity
+        )
         self.logger = get_logger("StressTest")
         self.quick_mode = quick_mode
         self.verbose = verbose
