@@ -175,11 +175,13 @@ class ResearchPool:
         Returns:
             List of top-scoring documents
         """
-        # Get documents with scores
-        docs_with_scores = [
-            (doc_id, self.provenance[doc_id].get('score', 0.0))
-            for doc_id in self.documents
-        ]
+        # Get documents with scores (handle None scores from expansion)
+        docs_with_scores = []
+        for doc_id in self.documents:
+            score = self.provenance[doc_id].get('score')
+            # Convert None to 0.0 for comparison/sorting
+            score = score if score is not None else 0.0
+            docs_with_scores.append((doc_id, score))
 
         # Filter by score threshold
         docs_with_scores = [
@@ -205,13 +207,15 @@ class ResearchPool:
         Returns:
             List of documents sorted by score
         """
-        # Get all docs with scores
-        docs_with_scores = [
-            (doc_id, self.provenance[doc_id].get('score', 0.0))
-            for doc_id in self.documents
-        ]
+        # Get all docs with scores (handle None scores from expansion)
+        docs_with_scores = []
+        for doc_id in self.documents:
+            score = self.provenance[doc_id].get('score')
+            # Convert None to 0.0 for sorting
+            score = score if score is not None else 0.0
+            docs_with_scores.append((doc_id, score))
 
-        # Sort by score
+        # Sort by score (all values are now float, no None)
         docs_with_scores.sort(key=lambda x: x[1], reverse=True)
 
         if not diversity_filter:
