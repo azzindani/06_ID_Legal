@@ -249,7 +249,7 @@ ENABLE_THINKING_PIPELINE = os.getenv("ENABLE_THINKING_PIPELINE", "true").lower()
 
 DEFAULT_EXPANSION_CONFIG = {
     # Master switch
-    'enable_expansion': False,  # Default OFF (opt-in), set True to enable
+    'enable_expansion': True,  # ✅ ENABLED by default for testing and production
 
     # Expansion limits
     'max_expansion_rounds': 2,        # Number of expansion iterations
@@ -270,7 +270,7 @@ DEFAULT_EXPANSION_CONFIG = {
 
     # Strategy 2: KG Expansion (Phase 2) - Entity co-occurrence & citation following
     'kg_expansion': {
-        'enabled': False,                # Default OFF, set True to enable
+        'enabled': True,                 # ✅ ENABLED by default
         'max_entity_docs': 20,
         'entity_score_threshold': 0.3,
         'follow_citations': True,
@@ -279,14 +279,14 @@ DEFAULT_EXPANSION_CONFIG = {
 
     # Strategy 3: Citation Network Traversal (Phase 2) - Multi-hop citation expansion
     'citation_expansion': {
-        'enabled': False,                # Default OFF, set True to enable
+        'enabled': True,                 # ✅ ENABLED by default
         'max_hops': 2,
         'bidirectional': True
     },
 
     # Strategy 4: Semantic Clustering (Phase 3) - Embedding space neighbors
     'semantic_expansion': {
-        'enabled': False,                # Default OFF, set True to enable
+        'enabled': True,                 # ✅ ENABLED by default
         'cluster_radius': 0.15,          # Distance threshold for clustering
         'min_cluster_size': 3,           # Minimum docs in cluster
         'max_neighbors': 30,             # Max similar docs per seed
@@ -295,7 +295,7 @@ DEFAULT_EXPANSION_CONFIG = {
 
     # Strategy 5: Hybrid Adaptive (Phase 4) - Query-type-specific strategy selection
     'hybrid_expansion': {
-        'enabled': False,                # Default OFF, set True to enable
+        'enabled': True,                 # ✅ ENABLED by default
         'adaptive_strategy': True,       # Enable adaptive strategy selection
         'query_type_detection': True,    # Auto-detect query type
         'strategy_weights': {
