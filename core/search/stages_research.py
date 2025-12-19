@@ -5,6 +5,7 @@ Proper threshold degradation and adaptive search with correct return values
 
 from typing import Dict, Any, List
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from utils.logger_utils import get_logger
 from config import DEFAULT_SEARCH_PHASES
 from core.search.hybrid_search import HybridSearchEngine
@@ -32,7 +33,52 @@ class StagesResearchEngine:
             "degradation_rate": self.quality_degradation,
             "min_quality": self.min_quality
         })
-    
+
+    def _execute_persona_search(
+        self,
+        query: str,
+        persona_name: str,
+        phase_config: Dict[str, Any],
+        priority_weights: Dict[str, float],
+        round_number: int,
+        quality_multiplier: float,
+        phase_name: str
+    ) -> Dict[str, Any]:
+        """
+        Execute search for a single persona (for parallel execution)
+
+        Returns:
+            Dict with 'persona_name', 'results', 'error' (if any)
+        """
+        try:
+            persona_results = self.hybrid_search.search_with_persona(
+                query=query,
+                persona_name=persona_name,
+                phase_config=phase_config,
+                priority_weights=priority_weights,
+                top_k=50,
+                round_number=round_number,
+                quality_multiplier=quality_multiplier
+            )
+
+            return {
+                'persona_name': persona_name,
+                'results': persona_results,
+                'error': None
+            }
+
+        except Exception as e:
+            self.logger.error(f"Persona search error", {
+                "persona": persona_name,
+                "phase": phase_name,
+                "error": str(e)
+            })
+            return {
+                'persona_name': persona_name,
+                'results': [],
+                'error': str(e)
+            }
+
     def conduct_research(
         self,
         query: str,
@@ -199,35 +245,44 @@ class StagesResearchEngine:
                 continue
             
             self.logger.debug(f"Executing phase: {phase_name} (round {round_number})")
-            
+
             phase_results = []
-            
-            # Each team member searches
-            for persona_name in team_composition:
-                try:
-                    persona_results = self.hybrid_search.search_with_persona(
+
+            # PERFORMANCE: Parallelize persona searches using ThreadPoolExecutor
+            # Each persona search is independent and can run concurrently
+            # Expected speedup: ~Nx for N personas (typically 3-5 personas)
+            max_workers = min(len(team_composition), 8)  # Cap at 8 concurrent threads
+
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                # Submit all persona searches concurrently
+                future_to_persona = {
+                    executor.submit(
+                        self._execute_persona_search,
                         query=query,
                         persona_name=persona_name,
                         phase_config=phase_config,
                         priority_weights=priority_weights,
-                        top_k=50,
                         round_number=round_number,
-                        quality_multiplier=quality_multiplier
-                    )
-                    
-                    phase_results.extend(persona_results)
-                    
+                        quality_multiplier=quality_multiplier,
+                        phase_name=phase_name
+                    ): persona_name
+                    for persona_name in team_composition
+                }
+
+                # Collect results as they complete
+                for future in as_completed(future_to_persona):
+                    persona_result = future.result()
+                    persona_name = persona_result['persona_name']
+                    results = persona_result['results']
+
+                    # Add results to phase
+                    phase_results.extend(results)
+
+                    # Update persona breakdown
                     if persona_name not in round_results['persona_breakdown']:
                         round_results['persona_breakdown'][persona_name] = 0
-                    round_results['persona_breakdown'][persona_name] += len(persona_results)
-                    
-                except Exception as e:
-                    self.logger.error(f"Persona search error", {
-                        "persona": persona_name,
-                        "phase": phase_name,
-                        "error": str(e)
-                    })
-            
+                    round_results['persona_breakdown'][persona_name] += len(results)
+
             round_results['phase_breakdown'][phase_name] = len(phase_results)
             round_results['results'].extend(phase_results)
             round_results['candidates_evaluated'] += len(phase_results)
