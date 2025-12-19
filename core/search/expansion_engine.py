@@ -221,6 +221,25 @@ class IterativeExpansionEngine:
 
         return pool
 
+    def _get_doc_id(self, doc: Dict[str, Any]) -> Optional[str]:
+        """
+        Extract global_id from document (handles both top-level and nested metadata)
+        
+        Args:
+            doc: Document dictionary
+            
+        Returns:
+            global_id string or None
+        """
+        # Try top-level first
+        doc_id = doc.get('global_id')
+        
+        # Try metadata
+        if not doc_id and 'metadata' in doc:
+            doc_id = doc['metadata'].get('global_id')
+        
+        return doc_id
+
     def _metadata_expansion(
         self,
         seed_doc: Dict[str, Any],
@@ -255,7 +274,7 @@ class IterativeExpansionEngine:
         regulation_year = seed_doc.get('year')
 
         if not regulation_type or not regulation_number:
-            self.logger.debug(f"Seed doc {seed_doc.get('global_id')} missing regulation metadata, skipping")
+            self.logger.debug(f"Seed doc {self._get_doc_id(seed_doc)} missing regulation metadata, skipping")
             return 0
 
         self.logger.debug(f"Metadata expansion for {regulation_type} {regulation_number}/{regulation_year}")
@@ -266,7 +285,9 @@ class IterativeExpansionEngine:
 
         for doc in self.data_loader.all_records:
             # Check if already in pool
-            if pool.contains(doc.get('global_id')):
+            doc_id = self._get_doc_id(doc)
+
+            if not doc_id or pool.contains(doc_id):
                 continue
 
             # Match regulation
@@ -278,7 +299,7 @@ class IterativeExpansionEngine:
                 added = pool.add(
                     doc,
                     source='metadata_expansion',
-                    seed_id=seed_doc.get('global_id'),
+                    seed_id=self._get_doc_id(seed_doc),
                     round_num=round_num,
                     score=None  # No score for expanded docs (will be scored later if needed)
                 )
@@ -331,7 +352,7 @@ class IterativeExpansionEngine:
         kg_cross_references = seed_doc.get('kg_cross_references', [])
 
         if not kg_entities and not kg_citations and not kg_cross_references:
-            self.logger.debug(f"Seed doc {seed_doc.get('global_id')} has no KG data, skipping")
+            self.logger.debug(f"Seed doc {self._get_doc_id(seed_doc)} has no KG data, skipping")
             return 0
 
         self.logger.debug(f"KG expansion for {len(kg_entities)} entities, {len(kg_citations)} citations")
@@ -344,7 +365,9 @@ class IterativeExpansionEngine:
             found_count = 0
 
             for doc in self.data_loader.all_records:
-                if pool.contains(doc.get('global_id')):
+                doc_id = self._get_doc_id(doc)
+
+                if not doc_id or pool.contains(doc_id):
                     continue
 
                 # Check if doc mentions this entity
@@ -355,7 +378,7 @@ class IterativeExpansionEngine:
                     added = pool.add(
                         doc,
                         source='kg_expansion',
-                        seed_id=seed_doc.get('global_id'),
+                        seed_id=self._get_doc_id(seed_doc),
                         round_num=round_num,
                         score=None
                     )
@@ -377,7 +400,9 @@ class IterativeExpansionEngine:
                     continue
 
                 for doc in self.data_loader.all_records:
-                    if pool.contains(doc.get('global_id')):
+                    doc_id = self._get_doc_id(doc)
+
+                    if not doc_id or pool.contains(doc_id):
                         continue
 
                     # Match citation to document
@@ -385,7 +410,7 @@ class IterativeExpansionEngine:
                         added = pool.add(
                             doc,
                             source='kg_expansion',
-                            seed_id=seed_doc.get('global_id'),
+                            seed_id=self._get_doc_id(seed_doc),
                             round_num=round_num,
                             score=None
                         )
@@ -430,7 +455,7 @@ class IterativeExpansionEngine:
         kg_citations = seed_doc.get('kg_citations', [])
 
         if not kg_citations:
-            self.logger.debug(f"Seed doc {seed_doc.get('global_id')} has no citations, skipping")
+            self.logger.debug(f"Seed doc {self._get_doc_id(seed_doc)} has no citations, skipping")
             return 0
 
         max_hops = self.citation_config.get('max_hops', 2)
@@ -444,7 +469,7 @@ class IterativeExpansionEngine:
 
         while queue:
             current_doc, hop = queue.pop(0)
-            doc_id = current_doc.get('global_id')
+            doc_id = self._get_doc_id(current_doc)
 
             if doc_id in visited or hop >= max_hops:
                 continue
@@ -462,7 +487,9 @@ class IterativeExpansionEngine:
 
                 # Find matching documents
                 for doc in self.data_loader.all_records:
-                    if pool.contains(doc.get('global_id')):
+                    doc_id = self._get_doc_id(doc)
+
+                    if not doc_id or pool.contains(doc_id):
                         continue
 
                     if self._citation_matches_doc(citation_parts, doc):
@@ -489,7 +516,9 @@ class IterativeExpansionEngine:
 
             # Look for docs that cite this regulation
             for doc in self.data_loader.all_records:
-                if pool.contains(doc.get('global_id')):
+                doc_id = self._get_doc_id(doc)
+
+                if not doc_id or pool.contains(doc_id):
                     continue
 
                 doc_citations = doc.get('kg_citations', [])
@@ -500,7 +529,7 @@ class IterativeExpansionEngine:
                         added = pool.add(
                             doc,
                             source='citation_expansion',
-                            seed_id=seed_doc.get('global_id'),
+                            seed_id=self._get_doc_id(seed_doc),
                             round_num=round_num,
                             score=None
                         )
@@ -626,7 +655,7 @@ class IterativeExpansionEngine:
         # Get seed embedding
         seed_embedding = seed_doc.get('embedding')
         if seed_embedding is None:
-            self.logger.debug(f"Seed doc {seed_doc.get('global_id')} has no embedding, skipping")
+            self.logger.debug(f"Seed doc {self._get_doc_id(seed_doc)} has no embedding, skipping")
             return 0
 
         # Convert to numpy array
@@ -636,7 +665,7 @@ class IterativeExpansionEngine:
         # Normalize seed embedding
         seed_norm = np.linalg.norm(seed_embedding)
         if seed_norm == 0:
-            self.logger.debug(f"Seed doc {seed_doc.get('global_id')} has zero embedding, skipping")
+            self.logger.debug(f"Seed doc {self._get_doc_id(seed_doc)} has zero embedding, skipping")
             return 0
 
         seed_embedding_normalized = seed_embedding / seed_norm
@@ -650,7 +679,9 @@ class IterativeExpansionEngine:
         similarities = []
 
         for doc in self.data_loader.all_records:
-            if pool.contains(doc.get('global_id')):
+            doc_id = self._get_doc_id(doc)
+
+            if not doc_id or pool.contains(doc_id):
                 continue
 
             doc_embedding = doc.get('embedding')
@@ -683,7 +714,7 @@ class IterativeExpansionEngine:
             added = pool.add(
                 doc,
                 source='semantic_expansion',
-                seed_id=seed_doc.get('global_id'),
+                seed_id=self._get_doc_id(seed_doc),
                 round_num=round_num,
                 score=float(similarity)
             )

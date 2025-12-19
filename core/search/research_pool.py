@@ -54,7 +54,7 @@ class ResearchPool:
         Add document to pool with provenance tracking
 
         Args:
-            doc: Document dictionary (must have 'global_id')
+            doc: Document dictionary (must have 'global_id' or 'metadata.global_id')
             source: How this doc was found ('initial_retrieval', 'metadata_expansion', etc.)
             seed_id: global_id of seed document that led to this doc
             round_num: Expansion round number (0 = initial)
@@ -63,11 +63,32 @@ class ResearchPool:
         Returns:
             True if added (new), False if duplicate
         """
+        # Extract global_id from either top-level or metadata
         doc_id = doc.get('global_id')
+        if not doc_id and 'metadata' in doc:
+            doc_id = doc['metadata'].get('global_id')
 
+        # Fallback: Generate ID from regulation metadata
         if not doc_id:
-            self.logger.warning(f"Document missing global_id, cannot add to pool")
-            return False
+            reg_type = doc.get('regulation_type') or (doc.get('metadata', {}).get('regulation_type'))
+            reg_num = doc.get('regulation_number') or (doc.get('metadata', {}).get('regulation_number'))
+            year = doc.get('year') or (doc.get('metadata', {}).get('year'))
+            article = doc.get('article_number') or doc.get('pasal')
+
+            if reg_type and reg_num and year:
+                # Create ID from metadata
+                if article:
+                    doc_id = f"{reg_type}_{reg_num}_{year}_{article}"
+                else:
+                    doc_id = f"{reg_type}_{reg_num}_{year}"
+
+                # Store generated ID back in document for consistency
+                if 'metadata' not in doc:
+                    doc['metadata'] = {}
+                doc['metadata']['global_id'] = doc_id
+            else:
+                self.logger.warning(f"Document missing global_id and cannot generate from metadata")
+                return False
 
         # Check for duplicate
         if doc_id in self.documents:
