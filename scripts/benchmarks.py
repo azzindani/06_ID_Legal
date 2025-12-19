@@ -6,6 +6,7 @@ Measures search and generation performance.
 """
 
 import sys
+from config import LOG_DIR, ENABLE_FILE_LOGGING, LOG_VERBOSITY
 import os
 import time
 import json
@@ -83,7 +84,11 @@ def run_generation_benchmark(pipeline, queries: List[str]) -> Dict:
 
 
 def main():
-    initialize_logging()
+    initialize_logging(
+        enable_file_logging=ENABLE_FILE_LOGGING,
+        log_dir=LOG_DIR,
+        verbosity_mode=LOG_VERBOSITY
+    )
     logger.info("=" * 60)
     logger.info("Performance Benchmarks")
     logger.info("=" * 60)

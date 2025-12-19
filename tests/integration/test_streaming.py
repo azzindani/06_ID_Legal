@@ -15,6 +15,7 @@ You'll see the LLM output streaming in REAL-TIME!
 """
 
 import sys
+from config import LOG_DIR, ENABLE_FILE_LOGGING, LOG_VERBOSITY
 import os
 import time
 import json
@@ -34,7 +35,11 @@ class StreamingTester:
     """Tests streaming LLM output with real-time display"""
 
     def __init__(self):
-        initialize_logging()
+        initialize_logging(
+        enable_file_logging=ENABLE_FILE_LOGGING,
+        log_dir=LOG_DIR,
+        verbosity_mode=LOG_VERBOSITY
+    )
         self.logger = get_logger("StreamingTest")
         self.pipeline: Optional[RAGPipeline] = None
         self.server_process: Optional[subprocess.Popen] = None

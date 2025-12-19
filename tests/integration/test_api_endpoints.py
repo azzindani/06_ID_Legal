@@ -12,6 +12,7 @@ This shows REAL output like production would generate.
 """
 
 import sys
+from config import LOG_DIR, ENABLE_FILE_LOGGING, LOG_VERBOSITY
 import os
 import time
 import json
@@ -30,7 +31,11 @@ class APIEndpointTester:
     """Comprehensive API endpoint tester with real server"""
 
     def __init__(self, port: int = 8000):
-        initialize_logging()
+        initialize_logging(
+        enable_file_logging=ENABLE_FILE_LOGGING,
+        log_dir=LOG_DIR,
+        verbosity_mode=LOG_VERBOSITY
+    )
         self.logger = get_logger("APITest")
         self.port = port
         self.base_url = f"http://localhost:{port}/api/v1"

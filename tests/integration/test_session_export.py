@@ -9,6 +9,7 @@ This initializes the full system and shows real output.
 """
 
 import sys
+from config import LOG_DIR, ENABLE_FILE_LOGGING, LOG_VERBOSITY
 import os
 import time
 import json
@@ -24,7 +25,11 @@ class SessionExportTester:
     """Comprehensive session and export tester"""
 
     def __init__(self):
-        initialize_logging()
+        initialize_logging(
+        enable_file_logging=ENABLE_FILE_LOGGING,
+        log_dir=LOG_DIR,
+        verbosity_mode=LOG_VERBOSITY
+    )
         self.logger = get_logger("SessionExportTest")
         self.manager: ConversationManager = None
 

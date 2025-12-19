@@ -39,6 +39,7 @@ Options:
 """
 
 import sys
+from config import LOG_DIR, ENABLE_FILE_LOGGING, LOG_VERBOSITY
 import os
 import time
 import tracemalloc
@@ -239,7 +240,11 @@ class ConversationalStressTester:
     """Multi-turn conversation stress test with maximum settings"""
 
     def __init__(self, quick_mode: bool = False, verbose: bool = False, memory_profile: bool = False, thinking_mode: str = 'low'):
-        initialize_logging()
+        initialize_logging(
+        enable_file_logging=ENABLE_FILE_LOGGING,
+        log_dir=LOG_DIR,
+        verbosity_mode=LOG_VERBOSITY
+    )
         self.logger = get_logger("ConvStressTest")
         self.quick_mode = quick_mode
         self.verbose = verbose

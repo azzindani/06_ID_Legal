@@ -12,6 +12,7 @@ Run with:
 """
 
 import sys
+from config import LOG_DIR, ENABLE_FILE_LOGGING, LOG_VERBOSITY
 import os
 import json
 import re
@@ -80,7 +81,11 @@ class OutputParser:
     """Parser for complete RAG output"""
 
     def __init__(self):
-        initialize_logging()
+        initialize_logging(
+        enable_file_logging=ENABLE_FILE_LOGGING,
+        log_dir=LOG_DIR,
+        verbosity_mode=LOG_VERBOSITY
+    )
         self.logger = get_logger("OutputParser")
 
     def parse_json_export(self, file_path: str) -> Tuple[bool, List[QueryResult]]:
@@ -266,7 +271,11 @@ class OutputValidator:
     """Validator for parsed output"""
 
     def __init__(self):
-        initialize_logging()
+        initialize_logging(
+        enable_file_logging=ENABLE_FILE_LOGGING,
+        log_dir=LOG_DIR,
+        verbosity_mode=LOG_VERBOSITY
+    )
         self.logger = get_logger("OutputValidator")
 
     def validate_results(self, results: List[QueryResult]) -> Tuple[bool, List[str]]:
@@ -330,7 +339,11 @@ class OutputReporter:
     """Generate reports from parsed output"""
 
     def __init__(self):
-        initialize_logging()
+        initialize_logging(
+        enable_file_logging=ENABLE_FILE_LOGGING,
+        log_dir=LOG_DIR,
+        verbosity_mode=LOG_VERBOSITY
+    )
         self.logger = get_logger("OutputReporter")
 
     def generate_audit_report(self, results: List[QueryResult], output_path: Optional[str] = None) -> str:
@@ -442,7 +455,11 @@ class OutputReporter:
 
 def run_parser_test(file_path: Optional[str] = None) -> bool:
     """Run complete parser test"""
-    initialize_logging()
+    initialize_logging(
+        enable_file_logging=ENABLE_FILE_LOGGING,
+        log_dir=LOG_DIR,
+        verbosity_mode=LOG_VERBOSITY
+    )
     logger = get_logger("ParserTest")
 
     logger.info("=" * 80)
