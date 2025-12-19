@@ -236,8 +236,39 @@ class StagesResearchEngine:
 
                 self.logger.info(f"Expansion complete: {len(initial_docs)} → {len(expanded_docs)} documents")
 
-                # Update research_data with expanded results
-                research_data['all_results'] = expanded_docs
+                # Wrap expanded documents in HybridSearch result format for consistency
+                wrapped_expanded_docs = []
+                for idx, doc in enumerate(expanded_docs):
+                    # Check if already wrapped (from initial_retrieval)
+                    if 'record' in doc:
+                        wrapped_expanded_docs.append(doc)
+                    else:
+                        # Wrap raw document in HybridSearch format
+                        wrapped_doc = {
+                            'index': idx,
+                            'record': doc,
+                            'scores': {
+                                'final': 0.0,  # Expanded docs get 0 score (will be reranked)
+                                'semantic': 0.0,
+                                'keyword': 0.0,
+                                'kg': 0.0,
+                                'authority': 0.0,
+                                'temporal': 0.0,
+                                'completeness': 0.0
+                            },
+                            'metadata': {
+                                'persona': 'expansion',
+                                'phase': 'expansion',
+                                'global_id': doc.get('global_id') or doc.get('metadata', {}).get('global_id'),
+                                'regulation_type': doc.get('regulation_type') or doc.get('metadata', {}).get('regulation_type'),
+                                'regulation_number': doc.get('regulation_number') or doc.get('metadata', {}).get('regulation_number'),
+                                'year': doc.get('year') or doc.get('metadata', {}).get('year')
+                            }
+                        }
+                        wrapped_expanded_docs.append(wrapped_doc)
+
+                # Update research_data with wrapped expanded results
+                research_data['all_results'] = wrapped_expanded_docs
                 research_data['expansion_stats'] = pool.get_stats()
             else:
                 self.logger.warning("No initial results to expand from")
