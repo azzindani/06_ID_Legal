@@ -5,7 +5,7 @@ More lenient filtering with better debugging
 
 from typing import Dict, Any, List, Optional
 from collections import defaultdict, Counter
-from logger_utils import get_logger
+from utils.logger_utils import get_logger
 from config import RESEARCH_TEAM_PERSONAS
 
 

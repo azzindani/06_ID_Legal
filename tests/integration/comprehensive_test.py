@@ -9,10 +9,10 @@ import os
 # Add project root to path (two directories up from this file)
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from logger_utils import initialize_logging, get_logger, log_session_end
+from utils.logger_utils import initialize_logging, get_logger, log_session_end
 from config import DATASET_NAME, EMBEDDING_DIM, get_default_config
 from loader.dataloader import EnhancedKGDatasetLoader
-from model_manager import get_model_manager
+from core.model_manager import get_model_manager
 from core.search.query_detection import QueryDetector
 from core.search.hybrid_search import HybridSearchEngine
 from core.search.stages_research import StagesResearchEngine

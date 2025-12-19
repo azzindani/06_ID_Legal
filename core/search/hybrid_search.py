@@ -7,7 +7,7 @@ import torch
 import numpy as np
 from typing import Dict, Any, List, Tuple, Optional
 from scipy import sparse
-from logger_utils import get_logger
+from utils.logger_utils import get_logger
 from config import RESEARCH_TEAM_PERSONAS, KG_WEIGHTS
 
 

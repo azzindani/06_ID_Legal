@@ -7,7 +7,7 @@ Supports keyword_first, semantic_first, and hybrid_balanced strategies.
 
 from typing import Dict, Any, List, Tuple
 import re
-from logger_utils import get_logger
+from utils.logger_utils import get_logger
 
 logger = get_logger(__name__)
 

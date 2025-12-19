@@ -14,7 +14,7 @@ from scipy import sparse
 from sklearn.feature_extraction.text import TfidfVectorizer
 
 # Import centralized logging system
-from logger_utils import get_logger, ProgressTracker
+from utils.logger_utils import get_logger, ProgressTracker
 
 
 class EnhancedKGDatasetLoader:

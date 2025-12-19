@@ -16,7 +16,7 @@ File: conversation/conversational_service.py
 """
 
 from typing import Dict, Any, List, Optional, Callable, Generator
-from logger_utils import get_logger
+from utils.logger_utils import get_logger
 
 logger = get_logger(__name__)
 

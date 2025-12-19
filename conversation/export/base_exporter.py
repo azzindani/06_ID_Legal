@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from datetime import datetime
-from logger_utils import get_logger
+from utils.logger_utils import get_logger
 
 
 class BaseExporter(ABC):

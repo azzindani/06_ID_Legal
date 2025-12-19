@@ -16,7 +16,7 @@ from typing import Optional
 from config import Config
 from pipeline import RAGPipeline
 from conversation import ConversationManager, MarkdownExporter, JSONExporter, HTMLExporter
-from logger_utils import get_logger
+from utils.logger_utils import get_logger
 
 logger = get_logger(__name__)
 

@@ -5,7 +5,7 @@ Analyzes user queries to determine search strategy and team composition
 
 import re
 from typing import Dict, Any, List, Tuple, Optional
-from logger_utils import get_logger
+from utils.logger_utils import get_logger
 from config import (
     QUERY_PATTERNS,
     QUERY_TEAM_COMPOSITIONS,
@@ -272,7 +272,7 @@ class QueryDetector:
 
 
 if __name__ == "__main__":
-    from logger_utils import initialize_logging
+    from utils.logger_utils import initialize_logging
     initialize_logging(enable_file_logging=False)
 
     print("=" * 60)

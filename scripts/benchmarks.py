@@ -13,7 +13,7 @@ from typing import List, Dict
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from logger_utils import get_logger, initialize_logging
+from utils.logger_utils import get_logger, initialize_logging
 
 logger = get_logger("Benchmarks")
 

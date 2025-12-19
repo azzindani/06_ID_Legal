@@ -25,7 +25,7 @@ from typing import Dict, Any, Optional
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from logger_utils import get_logger, initialize_logging
+from utils.logger_utils import get_logger, initialize_logging
 from pipeline import RAGPipeline
 
 

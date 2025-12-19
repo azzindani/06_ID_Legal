@@ -7,7 +7,7 @@ File: core/generation/generation_engine.py
 
 from typing import Dict, Any, List, Optional, Generator
 import time
-from logger_utils import get_logger
+from utils.logger_utils import get_logger
 from .llm_engine import LLMEngine
 from .prompt_builder import PromptBuilder
 from .citation_formatter import CitationFormatter

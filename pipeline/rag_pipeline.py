@@ -12,7 +12,7 @@ File: pipeline/rag_pipeline.py
 
 import time
 from typing import Dict, Any, List, Optional, Generator
-from logger_utils import get_logger
+from utils.logger_utils import get_logger
 from config import (
     get_default_config,
     DEFAULT_SEARCH_PHASES,
@@ -100,7 +100,7 @@ class RAGPipeline:
                 progress_callback("Loading models", 1, total_steps)
 
             self.logger.info("Step 1/5: Loading models...")
-            from model_manager import load_models
+            from core.model_manager import load_models
             self.embedding_model, self.reranker_model = load_models()
 
             if self.embedding_model is None or self.reranker_model is None:

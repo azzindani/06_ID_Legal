@@ -5,7 +5,7 @@ Proper threshold degradation and adaptive search with correct return values
 
 from typing import Dict, Any, List
 from collections import defaultdict
-from logger_utils import get_logger
+from utils.logger_utils import get_logger
 from config import DEFAULT_SEARCH_PHASES
 from core.search.hybrid_search import HybridSearchEngine
 

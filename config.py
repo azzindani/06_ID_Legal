@@ -15,7 +15,7 @@ try:
 except ImportError:
     pass
 
-from logger_utils import get_logger
+from utils.logger_utils import get_logger
 
 # Initialize logger for config module
 logger = get_logger("Config")
@@ -33,7 +33,7 @@ def _get_auto_config():
         return {}
 
     try:
-        from hardware_detection import detect_hardware
+        from core.hardware_detection import detect_hardware
         config = detect_hardware()
         logger.info(f"Auto-detected: VRAM={config.vram_available:.1f}GB, RAM={config.ram_available:.1f}GB")
         return {

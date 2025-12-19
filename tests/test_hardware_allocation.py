@@ -5,7 +5,7 @@ This script simulates different hardware scenarios and shows
 how the optimization algorithm allocates models.
 """
 
-from hardware_detection import (
+from core.hardware_detection import (
     GPUInfo, detect_hardware, optimize_model_allocation,
     MODEL_SPECS, MEMORY_OVERHEAD, print_hardware_info
 )

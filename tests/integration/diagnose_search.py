@@ -7,10 +7,10 @@ import os
 # Add project root to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
-from logger_utils import initialize_logging, get_logger
+from utils.logger_utils import initialize_logging, get_logger
 from config import DATASET_NAME, EMBEDDING_DIM, get_default_config
 from loader.dataloader import EnhancedKGDatasetLoader
-from model_manager import get_model_manager
+from core.model_manager import get_model_manager
 import numpy as np
 
 initialize_logging(enable_file_logging=True, log_filename="diagnose.log")

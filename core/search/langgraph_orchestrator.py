@@ -5,7 +5,7 @@ Proper state handling and error management
 
 from typing import Dict, Any, List, TypedDict, Optional
 from langgraph.graph import StateGraph, END
-from logger_utils import get_logger
+from utils.logger_utils import get_logger
 
 from .query_detection import QueryDetector
 from .hybrid_search import HybridSearchEngine

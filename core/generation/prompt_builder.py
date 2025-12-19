@@ -7,7 +7,7 @@ File: core/generation/prompt_builder.py
 
 from typing import Dict, Any, List, Optional
 from enum import Enum
-from logger_utils import get_logger
+from utils.logger_utils import get_logger
 from config import SYSTEM_PROMPT
 
 

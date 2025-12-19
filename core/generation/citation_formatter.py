@@ -7,7 +7,7 @@ File: core/generation/citation_formatter.py
 
 import re
 from typing import Dict, Any, List, Optional, Tuple
-from logger_utils import get_logger
+from utils.logger_utils import get_logger
 
 
 class CitationFormatter:

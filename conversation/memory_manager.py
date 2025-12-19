@@ -17,7 +17,7 @@ File: conversation/memory_manager.py
 
 from typing import Dict, Any, List, Optional
 from datetime import datetime
-from logger_utils import get_logger
+from utils.logger_utils import get_logger
 import config as app_config
 
 from .manager import ConversationManager

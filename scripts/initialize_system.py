@@ -13,7 +13,7 @@ from config import (
     EMBEDDING_MODEL, RERANKER_MODEL, LLM_MODEL,
     DATASET_NAME, EMBEDDING_DEVICE, LLM_DEVICE
 )
-from logger_utils import get_logger, initialize_logging
+from utils.logger_utils import get_logger, initialize_logging
 
 logger = get_logger("Initialize")
 

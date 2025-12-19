@@ -6,7 +6,7 @@ File: utils/gpu_memory.py
 """
 
 import torch
-from logger_utils import get_logger
+from utils.logger_utils import get_logger
 
 
 def get_available_gpu_memory() -> float:

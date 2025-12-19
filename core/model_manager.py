@@ -6,9 +6,9 @@ import torch
 from transformers import AutoModel, AutoTokenizer
 from typing import Optional, Any
 import time
-from logger_utils import get_logger
+from utils.logger_utils import get_logger
 from config import EMBEDDING_MODEL, RERANKER_MODEL, DEVICE, CACHE_DIR, get_model_path, USE_LOCAL_MODELS
-from hardware_detection import detect_hardware, HardwareConfig
+from core.hardware_detection import detect_hardware, HardwareConfig
 
 
 class EmbeddingModelWrapper:
@@ -517,7 +517,7 @@ def load_models(use_mock_reranker: bool = False):
 
 
 if __name__ == "__main__":
-    from logger_utils import initialize_logging
+    from utils.logger_utils import initialize_logging
     initialize_logging(enable_file_logging=False)
 
     print("=" * 60)

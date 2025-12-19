@@ -9,7 +9,8 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, validator
 from typing import List, Dict, Any, Optional
 import json
-import re
+
+from ..validators import validate_query, validate_session_id
 
 router = APIRouter()
 
@@ -20,28 +21,14 @@ class GenerateRequest(BaseModel):
     stream: bool = Field(False, description="Enable streaming response")
 
     @validator('query')
-    def validate_query(cls, v):
-        """Enhanced validation for query input"""
-        v = v.strip()
-        if len(v) == 0:
-            raise ValueError("Query cannot be empty or only whitespace")
-        # Check for suspicious patterns
-        dangerous_patterns = ['<script', 'javascript:', 'onerror=', 'onclick=']
-        v_lower = v.lower()
-        for pattern in dangerous_patterns:
-            if pattern in v_lower:
-                raise ValueError("Query contains potentially dangerous content")
-        return v
+    def validate_query_field(cls, v):
+        """Validate query using shared validator"""
+        return validate_query(v)
 
     @validator('session_id')
-    def validate_session_id(cls, v):
-        """Validate session ID format"""
-        if v is None:
-            return v
-        # Session ID should be alphanumeric with hyphens/underscores only
-        if not re.match(r'^[a-zA-Z0-9_-]+$', v):
-            raise ValueError("Session ID must contain only alphanumeric characters, hyphens, and underscores")
-        return v
+    def validate_session_id_field(cls, v):
+        """Validate session ID using shared validator"""
+        return validate_session_id(v)
 
 
 class Citation(BaseModel):

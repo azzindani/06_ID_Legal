@@ -11,10 +11,10 @@ import os
 # Add current directory to path
 sys.path.insert(0, os.path.abspath('.'))
 
-from logger_utils import initialize_logging, get_logger
+from utils.logger_utils import initialize_logging, get_logger
 from config import get_default_config, DATASET_NAME, EMBEDDING_DIM
 from loader.dataloader import EnhancedKGDatasetLoader
-from model_manager import get_model_manager
+from core.model_manager import get_model_manager
 from core.search.langgraph_orchestrator import LangGraphRAGOrchestrator
 from core.generation import GenerationEngine
 

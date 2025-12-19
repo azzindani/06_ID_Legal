@@ -17,7 +17,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 from loader.dataloader import EnhancedKGDatasetLoader
 from config import DATASET_NAME
-from logger_utils import get_logger, initialize_logging
+from utils.logger_utils import get_logger, initialize_logging
 
 
 class TestEnhancedKGDatasetLoader(unittest.TestCase):
@@ -330,7 +330,7 @@ if __name__ == '__main__':
     success = run_tests()
     
     # Write session end marker
-    from logger_utils import log_session_end
+    from utils.logger_utils import log_session_end
     log_session_end()
     
     sys.exit(0 if success else 1)

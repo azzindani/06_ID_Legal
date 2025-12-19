@@ -5,7 +5,7 @@ Final reranking of consensus results using reranker model
 
 import torch
 from typing import Dict, Any, List, Optional
-from logger_utils import get_logger
+from utils.logger_utils import get_logger
 
 
 class RerankerEngine:

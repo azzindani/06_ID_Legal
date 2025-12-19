@@ -10,7 +10,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, TextIteratorStream
 from typing import Dict, Any, List, Optional, Generator
 import time
 from threading import Thread
-from logger_utils import get_logger
+from utils.logger_utils import get_logger
 from config import (
     LLM_MODEL,
     MAX_LENGTH,

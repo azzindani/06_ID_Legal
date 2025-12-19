@@ -7,7 +7,7 @@ Parses PDF, DOCX, and TXT files for analysis.
 import os
 from pathlib import Path
 from typing import Dict, Any, Optional, List
-from logger_utils import get_logger
+from utils.logger_utils import get_logger
 
 logger = get_logger("DocumentParser")
 
