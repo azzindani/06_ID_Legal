@@ -347,17 +347,18 @@ DEFAULT_EXPANSION_CONFIG = {
         'include_attachments': True       # Include regulation attachments
     },
 
-    # Future strategies (Phase 2+)
+    # Strategy 2: KG Expansion (Phase 2) - Entity co-occurrence & citation following
     'kg_expansion': {
-        'enabled': False,                # Not implemented yet
+        'enabled': False,                # Default OFF, set True to enable
         'max_entity_docs': 20,
         'entity_score_threshold': 0.3,
         'follow_citations': True,
         'citation_max_hops': 2
     },
 
+    # Strategy 3: Citation Network Traversal (Phase 2) - Multi-hop citation expansion
     'citation_expansion': {
-        'enabled': False,                # Not implemented yet
+        'enabled': False,                # Default OFF, set True to enable
         'max_hops': 2,
         'bidirectional': True
     },
