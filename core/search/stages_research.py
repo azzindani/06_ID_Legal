@@ -186,8 +186,8 @@ class StagesResearchEngine:
             
             if total_results >= min_results_threshold:
                 high_quality_count = sum(
-                    1 for r in research_data['all_results'] 
-                    if r['scores']['final'] >= 0.6
+                    1 for r in research_data['all_results']
+                    if r.get('scores', {}).get('final', 0.0) >= 0.6
                 )
                 
                 if high_quality_count >= min_results_threshold:
@@ -252,11 +252,18 @@ class StagesResearchEngine:
         research_data['phase_results'] = dict(research_data['phase_results'])
         research_data['persona_results'] = dict(research_data['persona_results'])
         
+        # Get top score safely (handle expanded documents without scores)
+        top_score = "N/A"
+        if research_data['all_results']:
+            first_doc = research_data['all_results'][0]
+            if 'scores' in first_doc and isinstance(first_doc['scores'], dict):
+                top_score = f"{first_doc['scores'].get('final', 0.0):.4f}"
+
         self.logger.success("Multi-stage research completed", {
             "rounds": research_data['rounds_executed'],
             "unique_results": len(research_data['all_results']),
             "total_evaluated": research_data['total_candidates_evaluated'],
-            "top_score": f"{research_data['all_results'][0]['scores']['final']:.4f}" if research_data['all_results'] else "N/A"
+            "top_score": top_score
         })
         
         return research_data
@@ -340,12 +347,15 @@ class StagesResearchEngine:
         unique_results = {}
         for result in round_results['results']:
             global_id = result['record']['global_id']
-            if global_id not in unique_results or result['scores']['final'] > unique_results[global_id]['scores']['final']:
+            # Safely compare scores (handle expanded documents without scores)
+            result_score = result.get('scores', {}).get('final', 0.0)
+            existing_score = unique_results.get(global_id, {}).get('scores', {}).get('final', 0.0)
+            if global_id not in unique_results or result_score > existing_score:
                 unique_results[global_id] = result
-        
+
         round_results['results'] = sorted(
             unique_results.values(),
-            key=lambda x: x['scores']['final'],
+            key=lambda x: x.get('scores', {}).get('final', 0.0),
             reverse=True
         )
         
@@ -374,14 +384,24 @@ class StagesResearchEngine:
         
         # Score statistics
         if research_data['all_results']:
-            scores = [r['scores']['final'] for r in research_data['all_results']]
-            summary['score_statistics'] = {
-                'min': min(scores),
-                'max': max(scores),
-                'mean': sum(scores) / len(scores),
-                'median': sorted(scores)[len(scores)//2],
-                'top_10_mean': sum(sorted(scores, reverse=True)[:10]) / min(10, len(scores))
-            }
+            # Safely extract scores (handle both scored and unscored documents from expansion)
+            scores = []
+            for r in research_data['all_results']:
+                if 'scores' in r and isinstance(r['scores'], dict):
+                    score = r['scores'].get('final', 0.0)
+                else:
+                    # Expanded documents may not have scores
+                    score = 0.0
+                scores.append(score)
+
+            if scores:
+                summary['score_statistics'] = {
+                    'min': min(scores),
+                    'max': max(scores),
+                    'mean': sum(scores) / len(scores),
+                    'median': sorted(scores)[len(scores)//2],
+                    'top_10_mean': sum(sorted(scores, reverse=True)[:10]) / min(10, len(scores))
+                }
 
         return summary
 
