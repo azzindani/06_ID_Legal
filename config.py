@@ -180,7 +180,7 @@ CONTEXT_SUMMARY_THRESHOLD = int(os.getenv("CONTEXT_SUMMARY_THRESHOLD", "4096"))
 MEMORY_MAX_HISTORY_TURNS = int(os.getenv("MEMORY_MAX_HISTORY_TURNS", "100"))  # Total turns stored
 MEMORY_MAX_CONTEXT_TURNS = int(os.getenv("MEMORY_MAX_CONTEXT_TURNS", "30"))    # Turns passed to LLM
 MEMORY_MIN_CONTEXT_TURNS = int(os.getenv("MEMORY_MIN_CONTEXT_TURNS", "10"))    # Minimum context
-MEMORY_MAX_TOKENS = int(os.getenv("MEMORY_MAX_TOKENS", "16000"))               # Max tokens for context
+MEMORY_MAX_TOKENS = int(os.getenv("MEMORY_MAX_TOKENS", "128000"))               # Max tokens for context
 
 # Intelligent summarization settings
 MEMORY_ENABLE_SUMMARIZATION = os.getenv("MEMORY_ENABLE_SUMMARIZATION", "true").lower() == "true"
@@ -253,7 +253,7 @@ DEFAULT_EXPANSION_CONFIG = {
 
     # Expansion limits
     'max_expansion_rounds': 2,        # Number of expansion iterations
-    'max_pool_size': 1000,            # Stop if pool exceeds this
+    'max_pool_size': 10000,            # Stop if pool exceeds this
     'min_docs_per_round': 5,          # Stop if round adds fewer than this
 
     # Seed selection
@@ -903,4 +903,5 @@ def get_adaptive_thresholds(query_complexity: float) -> dict:
             phases[phase_name]['semantic_threshold'] *= complexity_factor
             phases[phase_name]['keyword_threshold'] *= complexity_factor
     
+
     return phases
