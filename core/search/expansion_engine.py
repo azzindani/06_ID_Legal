@@ -268,10 +268,17 @@ class IterativeExpansionEngine:
         """
         added_count = 0
 
-        # Extract regulation identifiers
+        # Extract regulation identifiers (check both top-level and metadata)
         regulation_type = seed_doc.get('regulation_type')
         regulation_number = seed_doc.get('regulation_number')
         regulation_year = seed_doc.get('year')
+
+        # Fallback to metadata dict if not in top-level
+        if not regulation_type or not regulation_number:
+            metadata = seed_doc.get('metadata', {})
+            regulation_type = regulation_type or metadata.get('regulation_type')
+            regulation_number = regulation_number or metadata.get('regulation_number')
+            regulation_year = regulation_year or metadata.get('year')
 
         if not regulation_type or not regulation_number:
             self.logger.debug(f"Seed doc {self._get_doc_id(seed_doc)} missing regulation metadata, skipping")

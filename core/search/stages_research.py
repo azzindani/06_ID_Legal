@@ -228,9 +228,10 @@ class StagesResearchEngine:
                 pool = self.expansion_engine.expand(initial_docs, query)
 
                 # Replace all_results with expanded pool
+                # Use higher max_per_source to preserve documents for high final_top_k values
                 expanded_docs = pool.get_ranked_documents(
                     diversity_filter=True,
-                    max_per_source=5
+                    max_per_source=100  # Allow more docs per regulation
                 )
 
                 self.logger.info(f"Expansion complete: {len(initial_docs)} → {len(expanded_docs)} documents")

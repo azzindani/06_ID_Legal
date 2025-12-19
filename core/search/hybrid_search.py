@@ -109,7 +109,7 @@ class HybridSearchEngine:
         """Initialize FAISS index for semantic search"""
         try:
             # Get embedding dimension
-            embeddings = self.data_loader.data_embeddings
+            embeddings = self.data_loader.embeddings
             if embeddings is None:
                 self.logger.warning("No embeddings available - FAISS index not created")
                 self.use_faiss = False
