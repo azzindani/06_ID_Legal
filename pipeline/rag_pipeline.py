@@ -250,7 +250,7 @@ class RAGPipeline:
 
             if not final_results:
                 self.logger.warning("No results retrieved")
-                return {
+                no_results_response = {
                     'success': True,
                     'answer': 'Maaf, tidak ditemukan dokumen yang relevan untuk pertanyaan Anda.',
                     'sources': [],
@@ -260,6 +260,27 @@ class RAGPipeline:
                         'results_count': 0
                     }
                 }
+
+                # Handle streaming case
+                if stream:
+                    def no_results_generator():
+                        # Yield answer as tokens
+                        answer = no_results_response['answer']
+                        for char in answer:
+                            yield {
+                                'type': 'token',
+                                'token': char,
+                                'done': False
+                            }
+                        # Yield complete
+                        yield {
+                            'type': 'complete',
+                            'done': True,
+                            **no_results_response
+                        }
+                    return no_results_generator()
+                else:
+                    return no_results_response
 
             # Step 2: Generate answer
             self.logger.info("Generating answer...")
