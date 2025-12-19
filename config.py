@@ -259,7 +259,10 @@ DEFAULT_CONFIG = {
     'thinking_mode': DEFAULT_THINKING_MODE,
     'enable_thinking_pipeline': ENABLE_THINKING_PIPELINE,
     'batch_size': BATCH_SIZE,
-    'cache_dir': CACHE_DIR
+    'cache_dir': CACHE_DIR,
+
+    # Expansion configuration (can be overridden)
+    'expansion_config': DEFAULT_EXPANSION_CONFIG.copy()
 }
 
 # =============================================================================
@@ -311,6 +314,58 @@ DEFAULT_SEARCH_PHASES = {
         'time_limit': 40,
         'focus_areas': ['legal_richness', 'completeness_score'],
         'enabled': False
+    }
+}
+
+# =============================================================================
+# ITERATIVE EXPANSION CONFIGURATION (Phase 1)
+# =============================================================================
+#
+# Detective-style document expansion beyond initial scoring
+# Strategies: Metadata expansion (same regulation context)
+# Future: KG expansion, citation following, semantic clustering
+#
+
+DEFAULT_EXPANSION_CONFIG = {
+    # Master switch
+    'enable_expansion': False,  # Default OFF (opt-in), set True to enable
+
+    # Expansion limits
+    'max_expansion_rounds': 2,        # Number of expansion iterations
+    'max_pool_size': 1000,            # Stop if pool exceeds this
+    'min_docs_per_round': 5,          # Stop if round adds fewer than this
+
+    # Seed selection
+    'seeds_per_round': 10,            # Top-K seeds for expansion per round
+    'seed_score_threshold': 0.50,     # Only expand from high-scoring docs
+
+    # Strategy 1: Metadata Expansion (Phase 1)
+    'metadata_expansion': {
+        'enabled': True,
+        'max_docs_per_regulation': 50,  # Limit docs from same regulation
+        'include_preamble': True,        # Include regulation preambles
+        'include_attachments': True       # Include regulation attachments
+    },
+
+    # Future strategies (Phase 2+)
+    'kg_expansion': {
+        'enabled': False,                # Not implemented yet
+        'max_entity_docs': 20,
+        'entity_score_threshold': 0.3,
+        'follow_citations': True,
+        'citation_max_hops': 2
+    },
+
+    'citation_expansion': {
+        'enabled': False,                # Not implemented yet
+        'max_hops': 2,
+        'bidirectional': True
+    },
+
+    'semantic_expansion': {
+        'enabled': False,                # Not implemented yet
+        'cluster_radius': 0.05,
+        'min_cluster_size': 3
     }
 }
 

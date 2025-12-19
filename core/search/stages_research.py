@@ -10,6 +10,13 @@ from utils.logger_utils import get_logger
 from config import DEFAULT_SEARCH_PHASES
 from core.search.hybrid_search import HybridSearchEngine
 
+# Phase 1: Expansion support (optional, lazy import)
+try:
+    from core.search.expansion_engine import IterativeExpansionEngine
+    EXPANSION_AVAILABLE = True
+except ImportError:
+    EXPANSION_AVAILABLE = False
+
 
 class StagesResearchEngine:
     """
@@ -20,18 +27,34 @@ class StagesResearchEngine:
         self.hybrid_search = hybrid_search
         self.config = config
         self.logger = get_logger("StagesResearch")
-        
+
         self.search_phases = config.get('search_phases', DEFAULT_SEARCH_PHASES)
         self.max_rounds = config.get('max_rounds', 5)
         self.initial_quality = config.get('initial_quality', 0.95)
         self.quality_degradation = config.get('quality_degradation', 0.1)
         self.min_quality = config.get('min_quality', 0.5)
-        
+
+        # Phase 1: Expansion engine (if enabled)
+        expansion_config = config.get('expansion_config', {'enable_expansion': False})
+        self.expansion_enabled = expansion_config.get('enable_expansion', False) and EXPANSION_AVAILABLE
+
+        if self.expansion_enabled:
+            self.expansion_engine = IterativeExpansionEngine(
+                data_loader=hybrid_search.data_loader,
+                config=expansion_config
+            )
+            self.logger.info("Expansion engine enabled", expansion_config)
+        else:
+            self.expansion_engine = None
+            if expansion_config.get('enable_expansion', False) and not EXPANSION_AVAILABLE:
+                self.logger.warning("Expansion requested but not available (missing dependencies)")
+
         self.logger.info("StagesResearchEngine initialized", {
             "max_rounds": self.max_rounds,
             "initial_quality": self.initial_quality,
             "degradation_rate": self.quality_degradation,
-            "min_quality": self.min_quality
+            "min_quality": self.min_quality,
+            "expansion_enabled": self.expansion_enabled
         })
 
     def _execute_persona_search(
@@ -192,10 +215,35 @@ class StagesResearchEngine:
                 break
             
             round_num += 1
-        
+
+        # PHASE 1: ITERATIVE EXPANSION (if enabled)
+        if self.expansion_enabled and self.expansion_engine:
+            self.logger.info("Starting iterative expansion from initial results")
+
+            # Use all_results as seeds for expansion
+            initial_docs = research_data['all_results']
+
+            if initial_docs:
+                # Expand documents
+                pool = self.expansion_engine.expand(initial_docs, query)
+
+                # Replace all_results with expanded pool
+                expanded_docs = pool.get_ranked_documents(
+                    diversity_filter=True,
+                    max_per_source=5
+                )
+
+                self.logger.info(f"Expansion complete: {len(initial_docs)} → {len(expanded_docs)} documents")
+
+                # Update research_data with expanded results
+                research_data['all_results'] = expanded_docs
+                research_data['expansion_stats'] = pool.get_stats()
+            else:
+                self.logger.warning("No initial results to expand from")
+
         # Sort results
         research_data['all_results'].sort(
-            key=lambda x: x['scores']['final'],
+            key=lambda x: x.get('scores', {}).get('final', 0.0),  # Safe access for expanded docs
             reverse=True
         )
         
