@@ -24,6 +24,13 @@ from .research_pool import ResearchPool
 import numpy as np
 import gc
 
+# Optional GPU support
+try:
+    import torch
+    TORCH_AVAILABLE = True
+except ImportError:
+    TORCH_AVAILABLE = False
+
 
 class IterativeExpansionEngine:
     """
@@ -257,6 +264,10 @@ class IterativeExpansionEngine:
 
             self.logger.info(f"Round {round_num}: Added {added_count} new documents (pool size: {len(pool)})")
 
+            # Periodic GPU cleanup after each round to prevent memory buildup
+            if round_num % 1 == 0:  # Every round
+                self._cleanup_gpu_memory()
+
             # Check stop conditions
             if added_count < self.min_docs_per_round:
                 self.logger.info(f"Convergence reached (added only {added_count} docs)")
@@ -275,10 +286,16 @@ class IterativeExpansionEngine:
             del pool
             pool = filtered_pool
 
-            # Force garbage collection to free memory from expansion artifacts
+            # Force garbage collection to free CPU memory
             gc.collect()
 
+            # GPU memory cleanup (if available)
+            self._cleanup_gpu_memory()
+
             self.logger.info(f"Memory cleanup: Released {old_pool_size - len(pool)} documents from memory")
+
+        # Final GPU cleanup after expansion
+        self._cleanup_gpu_memory()
 
         # Log final statistics
         stats = pool.get_stats()
@@ -288,23 +305,61 @@ class IterativeExpansionEngine:
 
         return pool
 
+    def _cleanup_gpu_memory(self):
+        """
+        Clean up GPU memory after expansion operations
+
+        This is critical for:
+        - Freeing cached embeddings on GPU
+        - Clearing CUDA cache fragmentation
+        - Preventing GPU OOM errors during long sessions
+        - Releasing memory from similarity calculations
+        """
+        if not TORCH_AVAILABLE:
+            return
+
+        try:
+            if torch.cuda.is_available():
+                # Get memory stats before cleanup
+                allocated_before = torch.cuda.memory_allocated() / 1024**2  # MB
+                cached_before = torch.cuda.memory_reserved() / 1024**2  # MB
+
+                # Empty CUDA cache
+                torch.cuda.empty_cache()
+
+                # Force garbage collection on GPU tensors
+                gc.collect()
+
+                # Get memory stats after cleanup
+                allocated_after = torch.cuda.memory_allocated() / 1024**2  # MB
+                cached_after = torch.cuda.memory_reserved() / 1024**2  # MB
+
+                freed_allocated = allocated_before - allocated_after
+                freed_cached = cached_before - cached_after
+
+                if freed_allocated > 0 or freed_cached > 0:
+                    self.logger.info(f"GPU cleanup: Freed {freed_allocated:.1f}MB allocated, {freed_cached:.1f}MB cached "
+                                   f"(Now: {allocated_after:.1f}MB allocated, {cached_after:.1f}MB cached)")
+        except Exception as e:
+            self.logger.debug(f"GPU cleanup warning: {e}")
+
     def _get_doc_id(self, doc: Dict[str, Any]) -> Optional[str]:
         """
         Extract global_id from document (handles both top-level and nested metadata)
-        
+
         Args:
             doc: Document dictionary
-            
+
         Returns:
             global_id string or None
         """
         # Try top-level first
         doc_id = doc.get('global_id')
-        
+
         # Try metadata
         if not doc_id and 'metadata' in doc:
             doc_id = doc['metadata'].get('global_id')
-        
+
         return doc_id
 
     def _metadata_expansion(
@@ -1371,10 +1426,13 @@ class IterativeExpansionEngine:
         self.logger.info(f"Smart filtering: Reduced pool from {len(pool)} to {len(filtered_pool)} docs "
                         f"({len(filtered_pool) - len([p for p in pool.provenance.values() if p['source'] == 'initial_retrieval'])} expanded kept)")
 
-        # Cleanup temporary objects to free memory
+        # Cleanup temporary objects to free CPU memory
         del top_embeddings, avg_embedding, avg_embedding_normalized
         del expanded_docs_scored, regulation_counts
         gc.collect()
+
+        # GPU cleanup after intensive similarity calculations
+        self._cleanup_gpu_memory()
 
         return filtered_pool
 
