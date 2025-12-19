@@ -269,8 +269,8 @@ DEFAULT_CONFIG = {
 DEFAULT_SEARCH_PHASES = {
     'initial_scan': {
         'candidates': 400,
-        'semantic_threshold': 0.20,
-        'keyword_threshold': 0.06,
+        'semantic_threshold': 0.25,  # ↑ from 0.20 - stricter initial filtering
+        'keyword_threshold': 0.10,   # ↑ from 0.06 - require keyword relevance
         'description': 'Quick broad scan like human initial reading',
         'time_limit': 30,
         'focus_areas': ['regulation_type', 'enacting_body'],
@@ -278,8 +278,8 @@ DEFAULT_SEARCH_PHASES = {
     },
     'focused_review': {
         'candidates': 150,
-        'semantic_threshold': 0.35,
-        'keyword_threshold': 0.12,
+        'semantic_threshold': 0.35,  # = (unchanged, already good)
+        'keyword_threshold': 0.12,   # = (unchanged, already good)
         'description': 'Focused review of promising candidates',
         'time_limit': 45,
         'focus_areas': ['content', 'chapter', 'article'],
@@ -287,8 +287,8 @@ DEFAULT_SEARCH_PHASES = {
     },
     'deep_analysis': {
         'candidates': 60,
-        'semantic_threshold': 0.45,
-        'keyword_threshold': 0.18,
+        'semantic_threshold': 0.45,  # = (unchanged, already strict)
+        'keyword_threshold': 0.18,   # = (unchanged, already strict)
         'description': 'Deep contextual analysis like careful reading',
         'time_limit': 60,
         'focus_areas': ['kg_entities', 'cross_references'],
@@ -296,8 +296,8 @@ DEFAULT_SEARCH_PHASES = {
     },
     'verification': {
         'candidates': 30,
-        'semantic_threshold': 0.55,
-        'keyword_threshold': 0.22,
+        'semantic_threshold': 0.55,  # = (unchanged, very strict)
+        'keyword_threshold': 0.22,   # = (unchanged, very strict)
         'description': 'Final verification and cross-checking',
         'time_limit': 30,
         'focus_areas': ['authority_score', 'temporal_score'],
@@ -305,8 +305,8 @@ DEFAULT_SEARCH_PHASES = {
     },
     'expert_review': {
         'candidates': 45,
-        'semantic_threshold': 0.50,
-        'keyword_threshold': 0.20,
+        'semantic_threshold': 0.50,  # = (unchanged, strict)
+        'keyword_threshold': 0.20,   # = (unchanged, strict)
         'description': 'Expert specialist review for complex cases',
         'time_limit': 40,
         'focus_areas': ['legal_richness', 'completeness_score'],
@@ -426,15 +426,25 @@ QUERY_TEAM_COMPOSITIONS = {
 # =============================================================================
 # HUMAN PRIORITIES
 # =============================================================================
-
+#
+# UPDATED 2025-12-19: Rebalanced to prioritize query relevance
+#
+# Previous weights had authority+temporal dominating (38%) over relevance (30%),
+# causing irrelevant but "high quality" documents to rank higher than relevant ones.
+#
+# New weights: Relevance (semantic+keyword) = 65%, Metadata = 35%
+# This ensures documents must be relevant to the query to rank high.
+#
 DEFAULT_HUMAN_PRIORITIES = {
-    'authority_hierarchy': 0.20,
-    'temporal_relevance': 0.18,
-    'semantic_match': 0.18,
-    'knowledge_graph': 0.15,
-    'keyword_precision': 0.12,
-    'legal_completeness': 0.09,
-    'cross_validation': 0.08
+    # RELEVANCE SCORES (PRIMARY) - 65%
+    'semantic_match': 0.40,       # ↑ from 0.18 (embedding similarity)
+    'keyword_precision': 0.25,    # ↑ from 0.12 (TF-IDF match)
+
+    # METADATA SCORES (SECONDARY) - 35%
+    'knowledge_graph': 0.15,      # = (entity/relationship matching)
+    'authority_hierarchy': 0.10,  # ↓ from 0.20 (regulation authority level)
+    'temporal_relevance': 0.05,   # ↓ from 0.18 (document recency)
+    'legal_completeness': 0.05,   # ↓ from 0.09 (document completeness)
 }
 
 # =============================================================================
@@ -445,41 +455,42 @@ QUERY_PATTERNS = {
     'specific_article': {
         'indicators': ['pasal', 'ayat', 'huruf', 'angka', 'butir'],
         'priority_weights': {
-            'authority_hierarchy': 0.30,
-            'semantic_match': 0.25,
-            'knowledge_graph': 0.20,
-            'keyword_precision': 0.15,
-            'temporal_relevance': 0.10
+            'semantic_match': 0.35,       # Relevance primary
+            'keyword_precision': 0.30,    # Keywords critical for articles
+            'knowledge_graph': 0.15,      # Entity matching helps
+            'authority_hierarchy': 0.15,  # Some weight for official sources
+            'temporal_relevance': 0.05    # Less important for articles
         }
     },
     'procedural': {
         'indicators': ['prosedur', 'tata cara', 'persyaratan', 'cara', 'langkah'],
         'priority_weights': {
-            'semantic_match': 0.25,
-            'knowledge_graph': 0.20,
-            'legal_completeness': 0.20,
-            'temporal_relevance': 0.20,
-            'authority_hierarchy': 0.15
+            'semantic_match': 0.40,       # Relevance primary
+            'keyword_precision': 0.25,    # Keywords important
+            'knowledge_graph': 0.15,      # Procedure steps in KG
+            'legal_completeness': 0.10,   # Want complete procedures
+            'temporal_relevance': 0.05,   # Prefer recent procedures
+            'authority_hierarchy': 0.05   # Less critical
         }
     },
     'definitional': {
         'indicators': ['definisi', 'pengertian', 'dimaksud dengan', 'adalah'],
         'priority_weights': {
-            'authority_hierarchy': 0.35,
-            'semantic_match': 0.25,
-            'knowledge_graph': 0.15,
-            'keyword_precision': 0.15,
-            'temporal_relevance': 0.10
+            'semantic_match': 0.40,       # Relevance primary
+            'keyword_precision': 0.25,    # Exact term matching important
+            'authority_hierarchy': 0.15,  # Official definitions matter
+            'knowledge_graph': 0.15,      # Concept relationships help
+            'temporal_relevance': 0.05    # Definitions rarely change
         }
     },
     'sanctions': {
         'indicators': ['sanksi', 'pidana', 'denda', 'hukuman', 'larangan'],
         'priority_weights': {
-            'authority_hierarchy': 0.30,
-            'knowledge_graph': 0.25,
-            'keyword_precision': 0.20,
-            'temporal_relevance': 0.15,
-            'semantic_match': 0.10
+            'semantic_match': 0.40,       # Relevance primary
+            'keyword_precision': 0.25,    # Sanction keywords critical
+            'knowledge_graph': 0.15,      # Violation-sanction relationships
+            'authority_hierarchy': 0.10,  # Official sources matter
+            'temporal_relevance': 0.10    # Recent sanctions may differ
         }
     },
     'general': {

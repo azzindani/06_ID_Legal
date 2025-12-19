@@ -43,7 +43,8 @@ class HybridSearchEngine:
         faiss_index_type: str = 'auto',
         use_cache: bool = True,
         cache_size: int = 1000,
-        cache_ttl_seconds: int = 3600
+        cache_ttl_seconds: int = 3600,
+        minimum_relevance_threshold: float = 0.15
     ):
         """
         Initialize hybrid search engine with optional FAISS indexing and caching
@@ -58,11 +59,16 @@ class HybridSearchEngine:
             use_cache: Whether to cache query results (recommended)
             cache_size: Maximum number of cached queries
             cache_ttl_seconds: Time-to-live for cache entries in seconds
+            minimum_relevance_threshold: Minimum combined relevance score (semantic+keyword)/2
+                                        to prevent irrelevant documents from ranking high
         """
         self.data_loader = data_loader
         self.embedding_model = embedding_model
         self.reranker_model = reranker_model
         self.logger = get_logger("HybridSearch")
+
+        # Relevance gating threshold
+        self.minimum_relevance_threshold = minimum_relevance_threshold
 
         # Use the same device as embedding model (supports multi-GPU distribution)
         # In multi-GPU setup, embedding model may be on cuda:1, not cuda:0
@@ -427,7 +433,18 @@ class HybridSearchEngine:
             # Normalize scores to 0-1 range if needed
             semantic_score = max(0.0, min(1.0, semantic_score))
             keyword_score = max(0.0, min(1.0, keyword_score))
-            
+
+            # RELEVANCE GATING: Filter out documents with insufficient query relevance
+            # This prevents irrelevant but "high quality" documents from ranking high
+            # A document must have SOME relevance to the query to be considered
+            relevance_score = (semantic_score + keyword_score) / 2.0
+
+            if relevance_score < self.minimum_relevance_threshold:
+                # Skip this document - too irrelevant regardless of other scores
+                # Example: Banking regulation for a tax query (high authority, zero relevance)
+                # Configurable via minimum_relevance_threshold parameter (default: 0.15)
+                continue
+
             # Get KG score
             kg_score = self._calculate_kg_score(record, query)
             
