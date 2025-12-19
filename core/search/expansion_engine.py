@@ -22,6 +22,7 @@ from collections import defaultdict
 from utils.logger_utils import get_logger
 from .research_pool import ResearchPool
 import numpy as np
+import gc
 
 
 class IterativeExpansionEngine:
@@ -267,7 +268,17 @@ class IterativeExpansionEngine:
 
         # Apply smart filtering before returning pool
         if self.filtering_config.get('enabled', True) and len(pool) > 0:
-            pool = self._apply_smart_filtering(pool, initial_documents)
+            old_pool_size = len(pool)
+            filtered_pool = self._apply_smart_filtering(pool, initial_documents)
+
+            # Explicit memory cleanup: Delete old unfiltered pool
+            del pool
+            pool = filtered_pool
+
+            # Force garbage collection to free memory from expansion artifacts
+            gc.collect()
+
+            self.logger.info(f"Memory cleanup: Released {old_pool_size - len(pool)} documents from memory")
 
         # Log final statistics
         stats = pool.get_stats()
@@ -1054,6 +1065,9 @@ class IterativeExpansionEngine:
 
         self.logger.debug(f"Temporal expansion: Added {added_count} temporal versions")
 
+        # Cleanup temporary list
+        del temporal_docs
+
         return added_count
 
     def _hierarchical_expansion(
@@ -1357,6 +1371,11 @@ class IterativeExpansionEngine:
         self.logger.info(f"Smart filtering: Reduced pool from {len(pool)} to {len(filtered_pool)} docs "
                         f"({len(filtered_pool) - len([p for p in pool.provenance.values() if p['source'] == 'initial_retrieval'])} expanded kept)")
 
+        # Cleanup temporary objects to free memory
+        del top_embeddings, avg_embedding, avg_embedding_normalized
+        del expanded_docs_scored, regulation_counts
+        gc.collect()
+
         return filtered_pool
 
     def _topical_expansion(
@@ -1442,6 +1461,9 @@ class IterativeExpansionEngine:
                 added_count += 1
 
         self.logger.debug(f"Topical expansion: Added {added_count} docs from domain '{seed_domain}'")
+
+        # Cleanup temporary list
+        del topical_docs
 
         return added_count
 
