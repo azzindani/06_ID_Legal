@@ -304,6 +304,37 @@ DEFAULT_EXPANSION_CONFIG = {
             'citation': 0.2,
             'semantic': 0.1
         }
+    },
+
+    # Strategy 6: Temporal Expansion (Phase 5) - Legal amendments/versions
+    'temporal_expansion': {
+        'enabled': True,                 # ✅ ENABLED - Critical for Indonesian law
+        'max_years_range': 30,           # Look back 30 years for amendments
+        'prioritize_recent': True,       # Newest versions rank higher
+        'include_superseded': True       # Include old versions for context
+    },
+
+    # Strategy 7: Hierarchical Expansion (Phase 6) - Legal hierarchy (UU → PP → Perpres)
+    'hierarchical_expansion': {
+        'enabled': True,                 # ✅ ENABLED - Critical for legal hierarchy
+        'expand_up': True,               # Find parent regulations (PP → UU)
+        'expand_down': True,             # Find implementing regulations (UU → PP)
+        'max_hierarchy_distance': 2      # Max levels up/down (1=direct, 2=grandparent)
+    },
+
+    # Strategy 8: Topical Expansion (Phase 7) - Legal domain/topic clustering
+    'topical_expansion': {
+        'enabled': True,                 # ✅ ENABLED - Important for legal topic clustering
+        'max_docs_per_topic': 20,        # Limit docs from same legal domain
+        'domain_threshold': 0.7          # Minimum domain confidence (high confidence only)
+    },
+
+    # Smart Filtering - Reduce noise after expansion
+    'smart_filtering': {
+        'enabled': True,                 # ✅ ENABLED - Filter expanded pool before reranking
+        'semantic_threshold': 0.60,      # Min similarity to top-10 initial docs
+        'max_pool_size': 500,            # Maximum docs after filtering (down from 1000+)
+        'diversity_weight': 0.3          # Balance between relevance (0.7) and diversity (0.3)
     }
 }
 

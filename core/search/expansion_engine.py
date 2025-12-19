@@ -97,12 +97,46 @@ class IterativeExpansionEngine:
             }
         })
 
+        # Phase 5: Temporal expansion config (legal amendments/versions)
+        self.temporal_config = config.get('temporal_expansion', {
+            'enabled': True,  # Important for Indonesian law
+            'max_years_range': 30,  # Look back 30 years for amendments
+            'prioritize_recent': True,  # Newest versions rank higher
+            'include_superseded': True  # Include old versions for context
+        })
+
+        # Phase 6: Hierarchical expansion config (UU → PP → Perpres)
+        self.hierarchical_config = config.get('hierarchical_expansion', {
+            'enabled': True,  # Critical for legal hierarchy
+            'expand_up': True,  # Find parent regulations (PP → UU)
+            'expand_down': True,  # Find implementing regulations (UU → PP)
+            'max_hierarchy_distance': 2  # Max levels up/down
+        })
+
+        # Phase 7: Topical expansion config (same legal domain)
+        self.topical_config = config.get('topical_expansion', {
+            'enabled': True,  # Important for legal topic clustering
+            'max_docs_per_topic': 20,  # Limit docs from same topic
+            'domain_threshold': 0.7  # Minimum domain confidence
+        })
+
+        # Smart filtering config
+        self.filtering_config = config.get('smart_filtering', {
+            'enabled': True,
+            'semantic_threshold': 0.60,  # Similarity to top docs
+            'max_pool_size': 500,  # Maximum docs after filtering
+            'diversity_weight': 0.3  # Balance relevance vs diversity
+        })
+
         self.logger.info(f"ExpansionEngine initialized (enabled={self.enabled}, max_rounds={self.max_rounds}, "
                         f"metadata={self.metadata_config.get('enabled')}, "
                         f"kg={self.kg_config.get('enabled')}, "
                         f"citation={self.citation_config.get('enabled')}, "
                         f"semantic={self.semantic_config.get('enabled')}, "
-                        f"hybrid={self.hybrid_config.get('enabled')})")
+                        f"hybrid={self.hybrid_config.get('enabled')}, "
+                        f"temporal={self.temporal_config.get('enabled')}, "
+                        f"hierarchical={self.hierarchical_config.get('enabled')}, "
+                        f"topical={self.topical_config.get('enabled')})")
 
     def expand(
         self,
@@ -202,6 +236,24 @@ class IterativeExpansionEngine:
                 count = self._hybrid_adaptive_expansion(seeds, pool, round_num, query)
                 added_count += count
 
+            # Strategy 6: Temporal Expansion (Phase 5) - Legal amendments/versions
+            if self.temporal_config.get('enabled', True):
+                for seed in seeds:
+                    count = self._temporal_expansion(seed, pool, round_num)
+                    added_count += count
+
+            # Strategy 7: Hierarchical Expansion (Phase 6) - Legal hierarchy
+            if self.hierarchical_config.get('enabled', True):
+                for seed in seeds:
+                    count = self._hierarchical_expansion(seed, pool, round_num)
+                    added_count += count
+
+            # Strategy 8: Topical Expansion (Phase 7) - Same legal domain
+            if self.topical_config.get('enabled', True):
+                for seed in seeds:
+                    count = self._topical_expansion(seed, pool, round_num)
+                    added_count += count
+
             self.logger.info(f"Round {round_num}: Added {added_count} new documents (pool size: {len(pool)})")
 
             # Check stop conditions
@@ -212,6 +264,10 @@ class IterativeExpansionEngine:
             if len(pool) >= self.max_pool_size:
                 self.logger.warning(f"Max pool size reached ({len(pool)} >= {self.max_pool_size})")
                 break
+
+        # Apply smart filtering before returning pool
+        if self.filtering_config.get('enabled', True) and len(pool) > 0:
+            pool = self._apply_smart_filtering(pool, initial_documents)
 
         # Log final statistics
         stats = pool.get_stats()
@@ -884,6 +940,510 @@ class IterativeExpansionEngine:
             return 'research'
         else:
             return 'simple'
+
+    def _temporal_expansion(
+        self,
+        seed_doc: Dict[str, Any],
+        pool: ResearchPool,
+        round_num: int
+    ) -> int:
+        """
+        Strategy 6: Temporal Expansion (Phase 5) - Legal Amendments/Versions
+
+        Find temporal relationships in Indonesian legal regulations:
+        1. Amendments (perubahan): UU 6/1983 → UU 16/2000 → UU 28/2007
+        2. Revisions (revisi): Later versions of same regulation
+        3. Superseded regulations: Old versions replaced by new ones
+        4. Related years: Same regulation type + number, different years
+
+        Critical for Indonesian law where amendments create complex chains.
+
+        Args:
+            seed_doc: Document to expand from
+            pool: Research pool to add results
+            round_num: Current expansion round
+
+        Returns:
+            Number of documents added
+        """
+        added_count = 0
+
+        # Extract regulation identifiers
+        reg_type = seed_doc.get('regulation_type')
+        reg_number = seed_doc.get('regulation_number')
+        seed_year = seed_doc.get('year')
+
+        if not reg_type or not reg_number or not seed_year:
+            metadata = seed_doc.get('metadata', {})
+            reg_type = reg_type or metadata.get('regulation_type')
+            reg_number = reg_number or metadata.get('regulation_number')
+            seed_year = seed_year or metadata.get('year')
+
+        if not reg_type or not reg_number or not seed_year:
+            self.logger.debug(f"Seed doc {self._get_doc_id(seed_doc)} missing temporal metadata, skipping")
+            return 0
+
+        try:
+            seed_year_int = int(seed_year)
+        except (ValueError, TypeError):
+            self.logger.debug(f"Invalid year format: {seed_year}")
+            return 0
+
+        max_years_range = self.temporal_config.get('max_years_range', 30)
+        prioritize_recent = self.temporal_config.get('prioritize_recent', True)
+        include_superseded = self.temporal_config.get('include_superseded', True)
+
+        self.logger.debug(f"Temporal expansion for {reg_type} {reg_number}/{seed_year}")
+
+        # Find all versions of this regulation (same type + number, different years)
+        temporal_docs = []
+
+        for doc in self.data_loader.all_records:
+            doc_id = self._get_doc_id(doc)
+
+            if not doc_id or pool.contains(doc_id):
+                continue
+
+            doc_reg_type = doc.get('regulation_type')
+            doc_reg_number = doc.get('regulation_number')
+            doc_year = doc.get('year')
+
+            # Match regulation type and number
+            if doc_reg_type == reg_type and doc_reg_number == reg_number:
+                try:
+                    doc_year_int = int(doc_year)
+                except (ValueError, TypeError):
+                    continue
+
+                # Check year range
+                year_diff = abs(doc_year_int - seed_year_int)
+
+                if year_diff <= max_years_range and doc_year != seed_year:
+                    # Calculate temporal score (newer = higher if prioritize_recent)
+                    if prioritize_recent:
+                        # Newer versions get higher scores
+                        temporal_score = 0.5 + (0.3 * (doc_year_int >= seed_year_int))
+                    else:
+                        # Equal weight to all versions
+                        temporal_score = 0.5
+
+                    # Penalize very old versions if not including superseded
+                    if not include_superseded and doc_year_int < seed_year_int - 10:
+                        continue
+
+                    temporal_docs.append((doc, temporal_score, doc_year_int))
+
+        # Sort by year (newest first if prioritize_recent)
+        if prioritize_recent:
+            temporal_docs.sort(key=lambda x: x[2], reverse=True)
+        else:
+            temporal_docs.sort(key=lambda x: x[2])
+
+        # Add temporal documents to pool
+        for doc, score, _ in temporal_docs[:10]:  # Limit to 10 versions
+            added = pool.add(
+                doc,
+                source='temporal_expansion',
+                seed_id=self._get_doc_id(seed_doc),
+                round_num=round_num,
+                score=score
+            )
+
+            if added:
+                added_count += 1
+
+        self.logger.debug(f"Temporal expansion: Added {added_count} temporal versions")
+
+        return added_count
+
+    def _hierarchical_expansion(
+        self,
+        seed_doc: Dict[str, Any],
+        pool: ResearchPool,
+        round_num: int
+    ) -> int:
+        """
+        Strategy 7: Hierarchical Expansion (Phase 6) - Legal Hierarchy
+
+        Follow Indonesian legal hierarchy:
+        1. UUD 1945 (Constitution) - Level 1
+        2. UU (Undang-Undang / Law) - Level 2
+        3. PP (Peraturan Pemerintah / Government Regulation) - Level 3
+        4. PERPRES (Peraturan Presiden / Presidential Regulation) - Level 4
+        5. Peraturan Menteri (Ministerial Regulation) - Level 5
+        6. Perda (Peraturan Daerah / Local Regulation) - Level 6
+
+        Expand both UP (implementing regs → parent law) and DOWN (law → implementing regs)
+
+        Args:
+            seed_doc: Document to expand from
+            pool: Research pool to add results
+            round_num: Current expansion round
+
+        Returns:
+            Number of documents added
+        """
+        added_count = 0
+
+        # Extract hierarchy level
+        seed_hierarchy_level = seed_doc.get('kg_hierarchy_level')
+        seed_reg_type = seed_doc.get('regulation_type')
+        seed_reg_number = seed_doc.get('regulation_number')
+        seed_year = seed_doc.get('year')
+
+        if not seed_hierarchy_level:
+            # Try to infer from regulation type
+            seed_hierarchy_level = self._infer_hierarchy_level(seed_reg_type)
+
+        if not seed_hierarchy_level or not seed_reg_type:
+            self.logger.debug(f"Seed doc {self._get_doc_id(seed_doc)} missing hierarchy data, skipping")
+            return 0
+
+        expand_up = self.hierarchical_config.get('expand_up', True)
+        expand_down = self.hierarchical_config.get('expand_down', True)
+        max_distance = self.hierarchical_config.get('max_hierarchy_distance', 2)
+
+        self.logger.debug(f"Hierarchical expansion for level {seed_hierarchy_level} ({seed_reg_type})")
+
+        # Find hierarchically related documents
+        for doc in self.data_loader.all_records:
+            doc_id = self._get_doc_id(doc)
+
+            if not doc_id or pool.contains(doc_id):
+                continue
+
+            doc_hierarchy_level = doc.get('kg_hierarchy_level')
+            doc_reg_type = doc.get('regulation_type')
+
+            if not doc_hierarchy_level:
+                doc_hierarchy_level = self._infer_hierarchy_level(doc_reg_type)
+
+            if not doc_hierarchy_level:
+                continue
+
+            # Calculate hierarchy distance
+            level_diff = doc_hierarchy_level - seed_hierarchy_level
+
+            # Check if within allowed distance
+            if abs(level_diff) > max_distance:
+                continue
+
+            # Expand UP: Find parent regulations (lower level number = higher in hierarchy)
+            if expand_up and level_diff < 0:
+                # This is a parent regulation
+                hierarchy_score = 0.6 + (0.1 * (max_distance - abs(level_diff)))
+
+                added = pool.add(
+                    doc,
+                    source='hierarchical_expansion',
+                    seed_id=self._get_doc_id(seed_doc),
+                    round_num=round_num,
+                    score=hierarchy_score
+                )
+
+                if added:
+                    added_count += 1
+
+            # Expand DOWN: Find implementing regulations (higher level number = lower in hierarchy)
+            elif expand_down and level_diff > 0:
+                # This is an implementing regulation
+                # Check if it might be implementing this specific regulation
+                # (heuristic: same topic, similar year range)
+
+                # Year proximity check
+                if seed_year and doc.get('year'):
+                    try:
+                        year_diff = abs(int(doc.get('year')) - int(seed_year))
+                        if year_diff > 10:  # Only expand to regs within 10 years
+                            continue
+                    except (ValueError, TypeError):
+                        pass
+
+                hierarchy_score = 0.5 + (0.1 * (max_distance - abs(level_diff)))
+
+                added = pool.add(
+                    doc,
+                    source='hierarchical_expansion',
+                    seed_id=self._get_doc_id(seed_doc),
+                    round_num=round_num,
+                    score=hierarchy_score
+                )
+
+                if added:
+                    added_count += 1
+
+        self.logger.debug(f"Hierarchical expansion: Added {added_count} hierarchically related docs")
+
+        return added_count
+
+    def _infer_hierarchy_level(self, reg_type: str) -> Optional[int]:
+        """
+        Infer hierarchy level from regulation type string
+
+        Args:
+            reg_type: Regulation type (UU, PP, PERPRES, etc.)
+
+        Returns:
+            Hierarchy level (1-6) or None
+        """
+        if not reg_type:
+            return None
+
+        reg_type_upper = reg_type.upper()
+
+        # Map regulation types to hierarchy levels
+        if 'UUD' in reg_type_upper or 'KONSTITUSI' in reg_type_upper:
+            return 1
+        elif 'UNDANG-UNDANG' in reg_type_upper or reg_type_upper == 'UU':
+            return 2
+        elif 'PERATURAN PEMERINTAH' in reg_type_upper or reg_type_upper == 'PP':
+            return 3
+        elif 'PERPRES' in reg_type_upper or 'PERATURAN PRESIDEN' in reg_type_upper:
+            return 4
+        elif 'PERMEN' in reg_type_upper or 'PERATURAN MENTERI' in reg_type_upper:
+            return 5
+        elif 'PERDA' in reg_type_upper or 'PERATURAN DAERAH' in reg_type_upper:
+            return 6
+        else:
+            return None
+
+    def _apply_smart_filtering(
+        self,
+        pool: ResearchPool,
+        initial_documents: List[Dict[str, Any]]
+    ) -> ResearchPool:
+        """
+        Apply smart filtering to reduce noise in expanded pool
+
+        Strategy:
+        1. Keep all initial retrieval documents (high quality)
+        2. Filter expanded documents by semantic similarity to top-10 initial docs
+        3. Apply diversity filtering to prevent over-representation
+        4. Limit pool size to max_pool_size
+
+        Args:
+            pool: Research pool with all documents
+            initial_documents: Original seed documents from initial retrieval
+
+        Returns:
+            Filtered research pool
+        """
+        if len(pool) <= self.filtering_config.get('max_pool_size', 500):
+            self.logger.info("Pool size within limit, skipping smart filtering")
+            return pool
+
+        self.logger.info(f"Applying smart filtering to pool of {len(pool)} documents")
+
+        semantic_threshold = self.filtering_config.get('semantic_threshold', 0.60)
+        max_pool_size = self.filtering_config.get('max_pool_size', 500)
+        diversity_weight = self.filtering_config.get('diversity_weight', 0.3)
+
+        # Get top-10 initial documents (reference set for filtering)
+        top_initial = sorted(
+            initial_documents,
+            key=lambda x: x.get('scores', {}).get('final', 0.0) if isinstance(x.get('scores'), dict) else x.get('score', 0.0),
+            reverse=True
+        )[:10]
+
+        # Calculate average embedding of top initial docs
+        top_embeddings = []
+        for doc in top_initial:
+            emb = doc.get('embedding')
+            if emb is not None:
+                if isinstance(emb, list):
+                    emb = np.array(emb)
+                top_embeddings.append(emb)
+
+        if not top_embeddings:
+            self.logger.warning("No embeddings found in top initial docs, skipping semantic filtering")
+            return pool
+
+        # Average embedding (centroid of top results)
+        avg_embedding = np.mean(top_embeddings, axis=0)
+        avg_norm = np.linalg.norm(avg_embedding)
+        if avg_norm == 0:
+            self.logger.warning("Zero average embedding, skipping semantic filtering")
+            return pool
+        avg_embedding_normalized = avg_embedding / avg_norm
+
+        # Filter documents
+        filtered_pool = ResearchPool(logger=self.logger)
+        regulation_counts = defaultdict(int)
+
+        # Always keep initial retrieval documents
+        for doc_id, doc in pool.documents.items():
+            prov = pool.provenance[doc_id]
+            if prov['source'] == 'initial_retrieval':
+                filtered_pool.add(
+                    doc,
+                    source=prov['source'],
+                    seed_id=prov.get('seed_id'),
+                    round_num=prov['round'],
+                    score=prov.get('score')
+                )
+                # Track regulation diversity
+                reg_key = f"{doc.get('regulation_type', 'UNK')}_{doc.get('regulation_number', 'UNK')}"
+                regulation_counts[reg_key] += 1
+
+        # Score and filter expanded documents
+        expanded_docs_scored = []
+
+        for doc_id, doc in pool.documents.items():
+            prov = pool.provenance[doc_id]
+
+            # Skip initial retrieval (already added)
+            if prov['source'] == 'initial_retrieval':
+                continue
+
+            # Calculate semantic similarity to top initial docs
+            doc_embedding = doc.get('embedding')
+            if doc_embedding is None:
+                # No embedding, use expansion score only
+                similarity = 0.0
+            else:
+                if isinstance(doc_embedding, list):
+                    doc_embedding = np.array(doc_embedding)
+
+                doc_norm = np.linalg.norm(doc_embedding)
+                if doc_norm == 0:
+                    similarity = 0.0
+                else:
+                    doc_embedding_normalized = doc_embedding / doc_norm
+                    similarity = float(np.dot(avg_embedding_normalized, doc_embedding_normalized))
+
+            # Get expansion score (quality score from expansion strategy)
+            expansion_score = prov.get('score', 0.0)
+            if expansion_score is None:
+                expansion_score = 0.0
+
+            # Combined score: weighted average of similarity and expansion score
+            combined_score = (1 - diversity_weight) * similarity + diversity_weight * expansion_score
+
+            # Calculate diversity penalty
+            reg_key = f"{doc.get('regulation_type', 'UNK')}_{doc.get('regulation_number', 'UNK')}"
+            diversity_penalty = min(regulation_counts.get(reg_key, 0) * 0.05, 0.3)  # Max 30% penalty
+
+            final_score = combined_score - diversity_penalty
+
+            expanded_docs_scored.append((doc, prov, similarity, final_score, reg_key))
+
+        # Sort by final score
+        expanded_docs_scored.sort(key=lambda x: x[3], reverse=True)
+
+        # Add top expanded docs up to max_pool_size
+        added_expanded = 0
+        max_expanded = max_pool_size - len(filtered_pool)
+
+        for doc, prov, similarity, final_score, reg_key in expanded_docs_scored:
+            # Check semantic threshold (only for semantic filtering)
+            if similarity < semantic_threshold and prov['source'] not in ['temporal_expansion', 'hierarchical_expansion', 'topical_expansion']:
+                continue
+
+            # Add to filtered pool
+            filtered_pool.add(
+                doc,
+                source=prov['source'],
+                seed_id=prov.get('seed_id'),
+                round_num=prov['round'],
+                score=final_score  # Use filtered score
+            )
+
+            regulation_counts[reg_key] += 1
+            added_expanded += 1
+
+            if added_expanded >= max_expanded:
+                break
+
+        self.logger.info(f"Smart filtering: Reduced pool from {len(pool)} to {len(filtered_pool)} docs "
+                        f"({len(filtered_pool) - len([p for p in pool.provenance.values() if p['source'] == 'initial_retrieval'])} expanded kept)")
+
+        return filtered_pool
+
+    def _topical_expansion(
+        self,
+        seed_doc: Dict[str, Any],
+        pool: ResearchPool,
+        round_num: int
+    ) -> int:
+        """
+        Strategy 8: Topical Expansion (Phase 7) - Legal Domain/Topic
+
+        Find regulations on the same legal topic/domain:
+        - Tax law (pajak)
+        - Labor law (ketenagakerjaan)
+        - Criminal law (pidana)
+        - Civil law (perdata)
+        - Administrative law (administrasi)
+        etc.
+
+        Uses kg_primary_domain field to find topic clusters
+
+        Args:
+            seed_doc: Document to expand from
+            pool: Research pool to add results
+            round_num: Current expansion round
+
+        Returns:
+            Number of documents added
+        """
+        added_count = 0
+
+        # Extract legal domain
+        seed_domain = seed_doc.get('kg_primary_domain')
+        seed_domain_confidence = seed_doc.get('kg_domain_confidence', 0.0)
+
+        if not seed_domain:
+            self.logger.debug(f"Seed doc {self._get_doc_id(seed_doc)} missing domain data, skipping")
+            return 0
+
+        domain_threshold = self.topical_config.get('domain_threshold', 0.7)
+        max_docs_per_topic = self.topical_config.get('max_docs_per_topic', 20)
+
+        # Skip if seed domain confidence is low
+        if seed_domain_confidence < domain_threshold:
+            self.logger.debug(f"Seed domain confidence too low ({seed_domain_confidence:.2f} < {domain_threshold})")
+            return 0
+
+        self.logger.debug(f"Topical expansion for domain '{seed_domain}' (confidence={seed_domain_confidence:.2f})")
+
+        # Find documents in same legal domain
+        topical_docs = []
+
+        for doc in self.data_loader.all_records:
+            doc_id = self._get_doc_id(doc)
+
+            if not doc_id or pool.contains(doc_id):
+                continue
+
+            doc_domain = doc.get('kg_primary_domain')
+            doc_domain_confidence = doc.get('kg_domain_confidence', 0.0)
+
+            # Match domain
+            if doc_domain == seed_domain and doc_domain_confidence >= domain_threshold:
+                # Score based on domain confidence
+                topical_score = 0.3 + (0.3 * doc_domain_confidence)
+
+                topical_docs.append((doc, topical_score))
+
+        # Sort by score descending
+        topical_docs.sort(key=lambda x: x[1], reverse=True)
+
+        # Add topical documents to pool (limit to max_docs_per_topic)
+        for doc, score in topical_docs[:max_docs_per_topic]:
+            added = pool.add(
+                doc,
+                source='topical_expansion',
+                seed_id=self._get_doc_id(seed_doc),
+                round_num=round_num,
+                score=score
+            )
+
+            if added:
+                added_count += 1
+
+        self.logger.debug(f"Topical expansion: Added {added_count} docs from domain '{seed_domain}'")
+
+        return added_count
 
     def get_config(self) -> Dict[str, Any]:
         """Get current configuration"""
