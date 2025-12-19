@@ -44,7 +44,7 @@ class HybridSearchEngine:
         use_cache: bool = True,
         cache_size: int = 1000,
         cache_ttl_seconds: int = 3600,
-        minimum_relevance_threshold: float = 0.15
+        minimum_relevance_threshold: float = 0.20  # Raised from 0.15 for stricter filtering
     ):
         """
         Initialize hybrid search engine with optional FAISS indexing and caching

@@ -427,24 +427,25 @@ QUERY_TEAM_COMPOSITIONS = {
 # HUMAN PRIORITIES
 # =============================================================================
 #
-# UPDATED 2025-12-19: Rebalanced to prioritize query relevance
+# UPDATED 2025-12-19 (Iteration 2): Further increased relevance priority
 #
-# Previous weights had authority+temporal dominating (38%) over relevance (30%),
-# causing irrelevant but "high quality" documents to rank higher than relevant ones.
+# Iteration 1 (65% relevance) improved results but relevant docs still ranked #4-17
+# Root cause: Score differences too small (0.727 vs 0.722 = 0.005 gap)
+# Solution: Increase relevance to 80%, reduce metadata to 20%
 #
-# New weights: Relevance (semantic+keyword) = 65%, Metadata = 35%
-# This ensures documents must be relevant to the query to rank high.
+# Previous: Relevance 65%, Metadata 35% → Cooperatives law ranked #1 for tax query
+# New: Relevance 80%, Metadata 20% → Tax laws should dominate
 #
 DEFAULT_HUMAN_PRIORITIES = {
-    # RELEVANCE SCORES (PRIMARY) - 65%
-    'semantic_match': 0.40,       # ↑ from 0.18 (embedding similarity)
-    'keyword_precision': 0.25,    # ↑ from 0.12 (TF-IDF match)
+    # RELEVANCE SCORES (PRIMARY) - 80%
+    'semantic_match': 0.50,       # ↑ from 0.40 (+25%) - embedding similarity is KING
+    'keyword_precision': 0.30,    # ↑ from 0.25 (+20%) - exact term matching critical
 
-    # METADATA SCORES (SECONDARY) - 35%
-    'knowledge_graph': 0.15,      # = (entity/relationship matching)
-    'authority_hierarchy': 0.10,  # ↓ from 0.20 (regulation authority level)
-    'temporal_relevance': 0.05,   # ↓ from 0.18 (document recency)
-    'legal_completeness': 0.05,   # ↓ from 0.09 (document completeness)
+    # METADATA SCORES (SECONDARY) - 20%
+    'knowledge_graph': 0.10,      # ↓ from 0.15 (-33%) - tie-breaker only
+    'authority_hierarchy': 0.05,  # ↓ from 0.10 (-50%) - minimal weight
+    'temporal_relevance': 0.03,   # ↓ from 0.05 (-40%) - rarely decisive
+    'legal_completeness': 0.02,   # ↓ from 0.05 (-60%) - rarely decisive
 }
 
 # =============================================================================
@@ -455,42 +456,42 @@ QUERY_PATTERNS = {
     'specific_article': {
         'indicators': ['pasal', 'ayat', 'huruf', 'angka', 'butir'],
         'priority_weights': {
-            'semantic_match': 0.35,       # Relevance primary
-            'keyword_precision': 0.30,    # Keywords critical for articles
-            'knowledge_graph': 0.15,      # Entity matching helps
-            'authority_hierarchy': 0.15,  # Some weight for official sources
-            'temporal_relevance': 0.05    # Less important for articles
+            'semantic_match': 0.45,       # ↑ Relevance dominant (80% total)
+            'keyword_precision': 0.35,    # ↑ Keywords critical for article search
+            'knowledge_graph': 0.10,      # ↓ Entity matching helps minimally
+            'authority_hierarchy': 0.07,  # ↓ Less weight for authority
+            'temporal_relevance': 0.03    # ↓ Minimal
         }
     },
     'procedural': {
         'indicators': ['prosedur', 'tata cara', 'persyaratan', 'cara', 'langkah'],
         'priority_weights': {
-            'semantic_match': 0.40,       # Relevance primary
-            'keyword_precision': 0.25,    # Keywords important
-            'knowledge_graph': 0.15,      # Procedure steps in KG
-            'legal_completeness': 0.10,   # Want complete procedures
-            'temporal_relevance': 0.05,   # Prefer recent procedures
-            'authority_hierarchy': 0.05   # Less critical
+            'semantic_match': 0.50,       # ↑ Relevance dominant (80% total)
+            'keyword_precision': 0.30,    # ↑ Keywords important
+            'knowledge_graph': 0.10,      # ↓ Procedure steps in KG
+            'legal_completeness': 0.05,   # ↓ Want complete procedures
+            'temporal_relevance': 0.03,   # ↓ Prefer recent
+            'authority_hierarchy': 0.02   # ↓ Minimal
         }
     },
     'definitional': {
         'indicators': ['definisi', 'pengertian', 'dimaksud dengan', 'adalah'],
         'priority_weights': {
-            'semantic_match': 0.40,       # Relevance primary
-            'keyword_precision': 0.25,    # Exact term matching important
-            'authority_hierarchy': 0.15,  # Official definitions matter
-            'knowledge_graph': 0.15,      # Concept relationships help
-            'temporal_relevance': 0.05    # Definitions rarely change
+            'semantic_match': 0.50,       # ↑ Relevance dominant (80% total)
+            'keyword_precision': 0.30,    # ↑ Exact term matching critical
+            'authority_hierarchy': 0.10,  # ↓ Official definitions matter somewhat
+            'knowledge_graph': 0.07,      # ↓ Concept relationships
+            'temporal_relevance': 0.03    # ↓ Definitions rarely change
         }
     },
     'sanctions': {
         'indicators': ['sanksi', 'pidana', 'denda', 'hukuman', 'larangan'],
         'priority_weights': {
-            'semantic_match': 0.40,       # Relevance primary
-            'keyword_precision': 0.25,    # Sanction keywords critical
-            'knowledge_graph': 0.15,      # Violation-sanction relationships
-            'authority_hierarchy': 0.10,  # Official sources matter
-            'temporal_relevance': 0.10    # Recent sanctions may differ
+            'semantic_match': 0.50,       # ↑ Relevance dominant (80% total)
+            'keyword_precision': 0.30,    # ↑ Sanction keywords critical
+            'knowledge_graph': 0.10,      # ↓ Violation-sanction relationships
+            'authority_hierarchy': 0.05,  # ↓ Official sources
+            'temporal_relevance': 0.05    # ↓ Recent sanctions may differ
         }
     },
     'general': {
