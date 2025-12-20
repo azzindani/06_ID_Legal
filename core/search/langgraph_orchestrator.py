@@ -3,6 +3,7 @@ LangGraph Orchestrator for RAG System - FIXED VERSION
 Proper state handling and error management
 """
 
+import time
 from typing import Dict, Any, List, TypedDict, Optional
 from langgraph.graph import StateGraph, END
 from utils.logger_utils import get_logger
