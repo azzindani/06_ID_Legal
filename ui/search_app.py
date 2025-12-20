@@ -389,13 +389,22 @@ def format_research_process_summary(result: Dict) -> str:
 
         # Show summary of phases
         lines = []
+        phase_map = {
+            'initial_scan': 'Pemindaian Awal',
+            'focused_review': 'Tinjauan Terfokus',
+            'deep_analysis': 'Analisis Mendalam',
+            'verification': 'Verifikasi',
+            'expert_review': 'Tinjauan Pakar'
+        }
+        
         for phase_name in phase_order:
             # Find any entries for this phase
             phase_entries = [v for k, v in phase_metadata.items() if v.get('phase') == phase_name]
             if not phase_entries: continue
             
             doc_count = sum(len(e.get('candidates', e.get('results', []))) for e in phase_entries)
-            output.append(f"- **{phase_name.replace('_', ' ').title()}:** {doc_count} dokumen ditemukan\n")
+            display_name = phase_map.get(phase_name, phase_name.replace('_', ' ').title())
+            output.append(f"- **{display_name}:** {doc_count} dokumen ditemukan\n")
 
         output.append(f"\n- **Total Peneliti:** {len(researchers)}\n")
         output.append(f"- **Total Dokumen Unik:** {total_docs}\n\n")
@@ -553,8 +562,11 @@ def search_documents(query: str, num_results: int = 10, progress=gr.Progress()) 
         summary = format_summary(result)
         all_docs = format_all_documents(result)
         df_docs = get_docs_dataframe_data(result)
-        # Enable show_content=True to make it more like "detail proses"
-        research = format_detailed_research_process(result, top_n_per_researcher=20, show_content=True)
+        
+        # Combine summary and detailed research process to match Gradio app's comprehensive look
+        research_summary = format_research_process_summary(result)
+        research_detail = format_detailed_research_process(result, top_n_per_researcher=20, show_content=True)
+        research = f"{research_summary}\n\n---\n\n{research_detail}"
 
         yield summary, all_docs, df_docs, research
 
@@ -785,16 +797,22 @@ def export_results(export_format: str) -> Tuple[str, Optional[str]]:
             <div><span class="meta-label">Fase:</span> {doc.get('_phase', 'N/A')}</div>
         </div>
         <div class="doc-content">
+            <div style='margin-bottom: 5px; font-weight: bold;'>Konten:</div>
             {record.get('content', '')[:1200]}...
         </div>
     </div>
 """)
             
             # Add Research Process to HTML
-            research_md = format_detailed_research_process(last_search_result, top_n_per_researcher=20, show_content=True)
+            # Prepend the high-level summary to the detailed process
+            research_sum = format_research_process_summary(last_search_result)
+            research_det = format_detailed_research_process(last_search_result, top_n_per_researcher=20, show_content=True)
+            research_md = f"{research_sum}\n\n---\n\n{research_det}"
+            
             # Convert simple markdown headers to HTML for the research process section
             import re
             research_html = research_md
+            research_html = re.sub(r'^## (.*)$', r'<h1 style="color: #1e3a5f; text-align: center; border-bottom: 3px solid #1e3a5f; padding-bottom: 15px; margin-top: 50px;">\1</h1>', research_html, flags=re.MULTILINE)
             research_html = re.sub(r'^### (.*)$', r'<h2 style="color: #1e3a5f; border-bottom: 2px solid #e0e0e0; padding-bottom: 10px; margin-top: 40px;">\1</h2>', research_html, flags=re.MULTILINE)
             research_html = re.sub(r'^#### (.*)$', r'<h3 style="color: #2c5282; margin-top: 25px;">\1</h3>', research_html, flags=re.MULTILINE)
             research_html = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', research_html)
@@ -804,7 +822,6 @@ def export_results(export_format: str) -> Tuple[str, Optional[str]]:
             
             lines.append(f"""
     <div class="research-section" style="margin-top: 50px; background: #fafafa; padding: 30px; border-radius: 8px; border: 1px solid #e0e0e0;">
-        <h1 style="text-align: center; color: #1e3a5f;">🔬 Detail Proses Penelitian</h1>
         {research_html}
     </div>
 """)
@@ -848,19 +865,22 @@ def export_results(export_format: str) -> Tuple[str, Optional[str]]:
                 # Content
                 content = record.get('content', '')
                 if content:
-                    preview = content[:500].replace('\n', ' ') + "..." if len(content) > 500 else content
-                    lines.append(f"**Konten:** {preview}\n\n")
+                    preview = content[:800].replace('\n', ' ') + "..." if len(content) > 800 else content
+                    lines.append(f"- **Konten:** {preview}\n\n")
 
                 lines.append(f"**Skor:** Final={scores.get('final', doc.get('final_score', 0)):.4f}, ")
-                lines.append(f"Semantic={scores.get('semantic', doc.get('semantic_score', 0)):.4f}, ")
+                lines.append(f"Semantik={scores.get('semantic', doc.get('semantic_score', 0)):.4f}, ")
                 lines.append(f"KG={scores.get('kg', doc.get('kg_score', 0)):.4f}\n\n")
 
                 lines.append("---\n\n")
             
             # Add Research Process to Markdown
             lines.append("# 🔬 Detail Proses Penelitian\n\n")
-            research_md = format_detailed_research_process(last_search_result, top_n_per_researcher=20, show_content=True)
-            lines.append(research_md)
+            research_sum = format_research_process_summary(last_search_result)
+            research_det = format_detailed_research_process(last_search_result, top_n_per_researcher=20, show_content=True)
+            lines.append(research_sum)
+            lines.append("\n\n---\n\n")
+            lines.append(research_det)
             lines.append("\n\n")
 
             content = "".join(lines)

@@ -56,10 +56,10 @@ def format_detailed_research_process(
         return '\n'.join(lines)
 
     # ============================================================================
-    # STEP 1: RESEARCH TEAM
+    # STEP 1: TIM PENELITI
     # ============================================================================
     lines.append("")
-    lines.append("### 👥 STEP 1: Research Team Assembly")
+    lines.append("### 👥 LANGKAH 1: Pembentukan Tim Peneliti")
     #lines.append("-" * 80)
 
     # Extract unique researchers
@@ -89,10 +89,10 @@ def format_detailed_research_process(
     lines.append("---")
 
     # ============================================================================
-    # STEP 2: INDIVIDUAL RESEARCHER FINDINGS
+    # STEP 2: TEMUAN PENELITI INDIVIDUAL
     # ============================================================================
     lines.append("")
-    lines.append("### 🔍 STEP 2: Individual Researcher Findings")
+    lines.append("### 🔍 LANGKAH 2: Temuan Peneliti Individual")
     #lines.append("-" * 80)
     #lines.append(f"Each researcher independently searches from their unique perspective.")
     #lines.append(f"Showing top {top_n_per_researcher} documents per researcher.")
@@ -170,7 +170,7 @@ def format_detailed_research_process(
                     reg_name = f"{reg_type} No. {reg_num} Tahun {year}"
 
                 lines.append(f"   {i}. {reg_name}")
-                lines.append(f"      About: {about[:100]}...")
+                lines.append(f"      Tentang: {about[:100]}...")
 
                 # Add article/chapter if available
                 location_parts = []
@@ -179,13 +179,13 @@ def format_detailed_research_process(
                 if article or article_number:
                     location_parts.append(f"{article or article_number}")
                 if location_parts:
-                    lines.append(f"      Location: {' | '.join(location_parts)}")
+                    lines.append(f"      Lokasi: {' | '.join(location_parts)}")
 
                 # Only show effective date if it exists and is not N/A
                 if effective_date and effective_date != 'N/A':
-                    lines.append(f"      Effective Date: {effective_date}")
+                    lines.append(f"      Tgl Penetapan: {effective_date}")
 
-                lines.append(f"      Scores: Final: {final_score:.3f} | Semantic: {semantic:.3f} | Keyword: {keyword:.3f} | KG: {kg:.3f}")
+                lines.append(f"      Skor: Final: {final_score:.3f} | Semantik: {semantic:.3f} | Keyword: {keyword:.3f} | KG: {kg:.3f}")
 
                 # Team consensus marker
                 if doc.get('team_consensus'):
@@ -202,10 +202,10 @@ def format_detailed_research_process(
         lines.append("---")
 
     # ============================================================================
-    # STEP 3: CONSENSUS BUILDING
+    # STEP 3: PEMBENTUKAN KONSENSUS
     # ============================================================================
     lines.append("")
-    lines.append("### 🤝 STEP 3: Team Consensus & Cross-Validation")
+    lines.append("### 🤝 LANGKAH 3: Konsensus Tim & Validasi Silang")
     #lines.append("-" * 80)
     #lines.append("Documents validated through team agreement and cross-validation.")
     #lines.append("")
@@ -214,13 +214,13 @@ def format_detailed_research_process(
         consensus_results = consensus_data.get('consensus_results', [])
         consensus_stats = consensus_data.get('statistics', {})
 
-        lines.append(f"**Documents After Consensus:** {len(consensus_results)}")
-        lines.append(f"**Consensus Threshold:** {consensus_stats.get('consensus_threshold', 0.6):.2f}")
-        lines.append(f"**Team Agreement Rate:** {consensus_stats.get('team_agreement_rate', 0):.2%}")
+        lines.append(f"**Dokumen Setelah Konsensus:** {len(consensus_results)}")
+        lines.append(f"**Ambang Batas Konsensus:** {consensus_stats.get('consensus_threshold', 0.6):.2f}")
+        lines.append(f"**Tingkat Kesepakatan Tim:** {consensus_stats.get('team_agreement_rate', 0):.2%}")
         lines.append("")
 
         # Show consensus documents
-        lines.append("**Documents That Passed Consensus:**")
+        lines.append("**Dokumen yang Lolos Konsensus:**")
         for i, doc in enumerate(consensus_results[:20], 1):
             record = doc.get('record', doc)
 
@@ -247,7 +247,7 @@ def format_detailed_research_process(
                 reg_name = f"{reg_type} No. {reg_num} Tahun {year}"
 
             lines.append(f"{i}. {reg_name}")
-            lines.append(f"   About: {about[:100]}...")
+            lines.append(f"   Tentang: {about[:100]}...")
 
             # Add article/chapter if available
             location_parts = []
@@ -256,14 +256,14 @@ def format_detailed_research_process(
             if article or article_number:
                 location_parts.append(f"{article or article_number}")
             if location_parts:
-                lines.append(f"   Location: {' > '.join(location_parts)}")
+                lines.append(f"   Lokasi: {' > '.join(location_parts)}")
 
             # Only show effective date if it exists and is not N/A
             if effective_date and effective_date != 'N/A':
-                lines.append(f"   Effective Date: {effective_date}")
+                lines.append(f"   Tgl Penetapan: {effective_date}")
 
-            lines.append(f"   Consensus Score: {consensus_score:.3f} | Agreement: {agreement:.2f}")
-            lines.append(f"   Found by {len(found_by)} researchers: {', '.join(found_by[:3])}{'...' if len(found_by) > 3 else ''}")
+            lines.append(f"   Skor Konsensus: {consensus_score:.3f} | Kesepakatan: {agreement:.2f}")
+            lines.append(f"   Ditemukan oleh {len(found_by)} peneliti: {', '.join(found_by[:3])}{'...' if len(found_by) > 3 else ''}")
             # Don't add separator between list items - they should be adjacent
     else:
         lines.append("⚠️  No consensus data available")
@@ -272,17 +272,17 @@ def format_detailed_research_process(
     lines.append("---")
 
     # ============================================================================
-    # STEP 4: RERANKING & FINAL SELECTION
+    # STEP 4: RERANKING & SELEKSI FINAL
     # ============================================================================
     lines.append("")
-    lines.append("### 🎯 STEP 4: Reranking & Final Selection")
+    lines.append("### 🎯 LANGKAH 4: Reranking & Seleksi Final")
     #lines.append("-" * 80)
     #lines.append("Final reranking using cross-encoder to select most relevant documents.")
     #lines.append("")
 
     if final_results:
-        lines.append(f"**Final Documents Selected:** {len(final_results)}")
-        lines.append("**These documents were sent to the LLM for answer generation**")
+        lines.append(f"**Dokumen Final yang Terpilih:** {len(final_results)}")
+        lines.append("**Dokumen-dokumen ini dikirim ke LLM untuk pembuatan jawaban**")
         lines.append("")
 
         for i, doc in enumerate(final_results, 1):
@@ -306,7 +306,7 @@ def format_detailed_research_process(
                 reg_name = f"{reg_type} No. {reg_num} Tahun {year}"
 
             lines.append(f"{i}. {reg_name}")
-            lines.append(f"   About: {about}")
+            lines.append(f"   Tentang: {about}")
 
             # Add article/chapter if available
             location_parts = []
@@ -315,17 +315,17 @@ def format_detailed_research_process(
             if article or article_number:
                 location_parts.append(f"{article or article_number}")
             if location_parts:
-                lines.append(f"   Location: {' | '.join(location_parts)}")
+                lines.append(f"   Lokasi: {' | '.join(location_parts)}")
 
             # Only show effective date if it exists and is not N/A
             if effective_date and effective_date != 'N/A':
-                lines.append(f"   Effective Date: {effective_date}")
+                lines.append(f"   Tgl Penetapan: {effective_date}")
 
-            lines.append(f"   Final Score: {score:.4f}")
+            lines.append(f"   Skor Final: {score:.4f}")
 
             if show_content:
                 content = doc.get('content', '')[:300]
-                lines.append(f"   Content: {content}...")
+                lines.append(f"   Konten: {content}...")
 
             # Don't add separator between list items - they should be adjacent
     else:
@@ -335,10 +335,10 @@ def format_detailed_research_process(
     #lines.append("")
 
     # ============================================================================
-    # STEP 5: SUMMARY STATISTICS
+    # STEP 5: RINGKASAN STATISTIK
     # ============================================================================
     lines.append("")
-    lines.append("### 📈 STEP 5: Summary Statistics")
+    lines.append("### 📈 LANGKAH 5: Ringkasan Statistik")
     #lines.append("-" * 80)
 
     # Calculate stats
@@ -346,20 +346,20 @@ def format_detailed_research_process(
     total_consensus = len(consensus_data.get('consensus_results', [])) if consensus_data else 0
     total_final = len(final_results)
 
-    lines.append(f"**Research Pipeline Flow:**")
-    lines.append(f"   1. Initial Retrieval: {total_retrieved} documents ({len(researcher_findings)} researchers)")
-    lines.append(f"   2. After Consensus: {total_consensus} documents")
-    lines.append(f"   3. After Reranking: {total_final} documents")
-    lines.append(f"   4. Reduction Rate: {((total_retrieved - total_final) / total_retrieved * 100) if total_retrieved > 0 else 0:.1f}%")
+    lines.append(f"**Alur Pipeline Penelitian:**")
+    lines.append(f"   1. Pengambilan Awal: {total_retrieved} dokumen ({len(researcher_findings)} peneliti)")
+    lines.append(f"   2. Setelah Konsensus: {total_consensus} dokumen")
+    lines.append(f"   3. Setelah Reranking: {total_final} dokumen")
+    lines.append(f"   4. Tingkat Reduksi: {((total_retrieved - total_final) / total_retrieved * 100) if total_retrieved > 0 else 0:.1f}%")
     lines.append("")
 
     # Per-researcher stats
-    lines.append(f"**Per-Researcher Contribution:**")
+    lines.append(f"**Kontribusi Per Peneliti:**")
     for researcher, findings in sorted(researcher_findings.items()):
         name = researcher_personas.get(researcher, {}).get('name', researcher)
         docs = findings['total_documents']
         percentage = (docs / total_retrieved * 100) if total_retrieved > 0 else 0
-        lines.append(f"   - {name}: {docs} documents ({percentage:.1f}%)")
+        lines.append(f"   - {name}: {docs} dokumen ({percentage:.1f}%)")
 
     lines.append("")
 
