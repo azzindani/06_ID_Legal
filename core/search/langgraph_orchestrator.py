@@ -54,7 +54,8 @@ class LangGraphRAGOrchestrator:
         config: Dict[str, Any]
     ):
         self.logger = get_logger("RAGOrchestrator")
-        
+        self.config = config  # Store config for access in nodes
+
         # Initialize components
         self.query_detector = QueryDetector()
         self.hybrid_search = HybridSearchEngine(
