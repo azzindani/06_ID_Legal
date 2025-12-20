@@ -579,6 +579,7 @@ def export_results(export_format: str) -> Tuple[str, Optional[str]]:
                 }
             }
 
+            for doc in all_docs:
                 record = doc.get('record', doc)
                 scores = doc.get('scores', {})
                 
