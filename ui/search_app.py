@@ -575,7 +575,8 @@ def search_documents(query: str, num_results: int = 10, progress=gr.Progress()) 
         checklist.append("✅ Konsensus Tim Tercapai")
         checklist.append("✅ Reranking Final Selesai")
         
-        research = f"{'\n'.join(checklist)}\n\n---\n\n{research_detail}"
+        checklist_str = '\n'.join(checklist)
+        research = f"{checklist_str}\n\n---\n\n{research_detail}"
 
         yield summary, all_docs, df_docs, research
 
@@ -821,7 +822,8 @@ def export_results(export_format: str) -> Tuple[str, Optional[str]]:
             
             # Using show_content=True for exports as it's a fixed report
             research_det = format_detailed_research_process(last_search_result, top_n_per_researcher=20, show_content=True)
-            research_md = f"{'\n'.join(checklist)}\n\n---\n\n{research_det}"
+            checklist_str = '\n'.join(checklist)
+            research_md = f"{checklist_str}\n\n---\n\n{research_det}"
             
             # Convert Markdown to HTML for the research process
             import re
@@ -884,12 +886,16 @@ def export_results(export_format: str) -> Tuple[str, Optional[str]]:
                 lines.append("---\n\n")
             
             # Add Research Process to Markdown
-            lines.append("# 🔬 Detail Proses Penelitian\n\n")
-            research_sum = format_research_process_summary(last_search_result)
+            checklist = ["### 📋 Proses yang Sudah Dilakukan\n"]
+            checklist.append("✅ Analisis Query Berhasil")
+            checklist.append("✅ Pemindaian Regulasi Selesai")
+            checklist.append("✅ Konsensus Tim Tercapai")
+            checklist.append("✅ Reranking Final Selesai")
+            
             research_det = format_detailed_research_process(last_search_result, top_n_per_researcher=20, show_content=True)
-            lines.append(research_sum)
-            lines.append("\n\n---\n\n")
-            lines.append(research_det)
+            checklist_str = '\n'.join(checklist)
+            lines.append(f"## 🔬 Detail Proses Penelitian\n\n")
+            lines.append(f"{checklist_str}\n\n---\n\n{research_det}")
             lines.append("\n\n")
 
             content = "".join(lines)
