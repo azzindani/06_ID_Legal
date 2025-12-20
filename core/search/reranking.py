@@ -263,10 +263,11 @@ class RerankerEngine:
             result = reranked[:top_k]
             
             # FIXED: Warn if we couldn't meet top_k (defensive logging)
+            # Use len(candidates) since consensus_results is not in scope here
             if len(result) < top_k:
                 self.logger.warning(
                     f"Could only return {len(result)}/{top_k} documents - "
-                    f"consensus provided only {len(consensus_results)} candidates. "
+                    f"reranker had only {len(candidates)} candidates. "
                     f"Consider lowering consensus_threshold in config."
                 )
             

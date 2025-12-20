@@ -112,21 +112,33 @@ class ConsensusBuilder:
             "threshold": f"{self.consensus_threshold:.0%}"
         })
         
-        # FIXED: If no results, apply fallback with progressively lower thresholds
-        if len(consensus_data['validated_results']) == 0:
-            self.logger.warning("NO RESULTS PASSED CONSENSUS!")
+        # FIXED: If we don't have enough results, apply fallback to get more
+        # Changed from "== 0" to "< required_docs" to ensure we always try to reach target
+        if len(consensus_data['validated_results']) < required_docs:
+            current_count = len(consensus_data['validated_results'])
+            self.logger.warning(
+                f"Insufficient results: {current_count}/{required_docs} - applying fallback to get more"
+            )
             self._log_consensus_debug(results_by_doc, team_composition)
 
             # FALLBACK: Try progressively lower thresholds
             fallback_thresholds = [0.5, 0.4, 0.3, 0.25, 0.0]
-            
-            # FIXED: Use final_top_k from config instead of hard-coded 3
-            required_docs = self.config.get('final_top_k', 3)
 
             for fallback_threshold in fallback_thresholds:
-                self.logger.info(f"Trying fallback threshold: {fallback_threshold:.0%}")
+                # Skip if we already have enough
+                if len(consensus_data['validated_results']) >= required_docs:
+                    break
+                    
+                self.logger.info(
+                    f"Trying fallback threshold: {fallback_threshold:.0%} "
+                    f"(currently have {len(consensus_data['validated_results'])}/{required_docs})"
+                )
 
                 for global_id, doc_results in results_by_doc.items():
+                    # Skip if we already have this document
+                    if any(r['global_id'] == global_id for r in consensus_data['validated_results']):
+                        continue
+
                     # Count how many team members found this document
                     personas_found = set()
                     for result in doc_results:
@@ -138,10 +150,6 @@ class ConsensusBuilder:
 
                     # Check if passes fallback threshold
                     if voting_ratio >= fallback_threshold or fallback_threshold == 0.0:
-                        # Already processed this document
-                        if any(r['global_id'] == global_id for r in consensus_data['validated_results']):
-                            continue
-
                         # Aggregate scores
                         score_aggregation = {
                             'final': [],
@@ -181,7 +189,11 @@ class ConsensusBuilder:
                         consensus_data['validated_results'].append(consensus_result)
                         consensus_data['consensus_scores'][global_id] = consensus_score
 
-                # FIXED: Stop if we have enough results (use config value, not hard-coded 3)
+                        # Stop adding docs from this threshold once we have enough
+                        if len(consensus_data['validated_results']) >= required_docs:
+                            break
+
+                # Log progress
                 if len(consensus_data['validated_results']) >= required_docs:
                     self.logger.info(f"Fallback succeeded with threshold {fallback_threshold:.0%}", {
                         "results": len(consensus_data['validated_results']),
@@ -189,37 +201,48 @@ class ConsensusBuilder:
                     })
                     break
 
-            # FIXED: Last resort - if still no results, take top-N by score
-            if len(consensus_data['validated_results']) == 0:
-                self.logger.error("FALLBACK FAILED - No results even with 0% threshold!")
-                self.logger.warning(f"LAST RESORT: Taking top {required_docs} documents by raw score")
+            # LAST RESORT: If still not enough, take top-N by score
+            if len(consensus_data['validated_results']) < required_docs:
+                shortage = required_docs - len(consensus_data['validated_results'])
+                self.logger.error(
+                    f"Fallback still insufficient: {len(consensus_data['validated_results'])}/{required_docs}"
+                )
+                self.logger.warning(f"LAST RESORT: Taking top {shortage} more documents by raw score")
                 
-                # Collect all unique documents with their best scores
-                all_docs_scores = []
+                # Get already selected IDs
+                selected_ids = {r['global_id'] for r in consensus_data['validated_results']}
+                
+                # Collect all remaining documents with their best scores
+                remaining_docs = []
                 for global_id, doc_results in results_by_doc.items():
-                    best_result = max(doc_results, key=lambda x: x['scores']['final'])
-                    all_docs_scores.append({
-                        'global_id': global_id,
-                        'record': best_result['record'],
-                        'consensus_score': best_result['scores']['final'],
-                        'voting_ratio': 0.0,
-                        'personas_agreed': [best_result['metadata'].get('persona', 'unknown')],
-                        'aggregated_scores': best_result['scores'],
-                        'score_variance': 0.0,
-                        'metadata': best_result['metadata'],
-                        'fallback_applied': True,
-                        'fallback_threshold': -1.0,  # Indicate emergency fallback
-                        'emergency_fallback': True
-                    })
+                    if global_id not in selected_ids:
+                        best_result = max(doc_results, key=lambda x: x['scores']['final'])
+                        remaining_docs.append({
+                            'global_id': global_id,
+                            'record': best_result['record'],
+                            'consensus_score': best_result['scores']['final'],
+                            'voting_ratio': 0.0,
+                            'personas_agreed': [best_result['metadata'].get('persona', 'unknown')],
+                            'aggregated_scores': best_result['scores'],
+                            'score_variance': 0.0,
+                            'metadata': best_result['metadata'],
+                            'fallback_applied': True,
+                            'fallback_threshold': -1.0,  # Indicate emergency fallback
+                            'emergency_fallback': True
+                        })
                 
-                # Sort by score and take top-N
-                all_docs_scores.sort(key=lambda x: x['consensus_score'], reverse=True)
-                consensus_data['validated_results'] = all_docs_scores[:required_docs]
+                # Sort by score and take top-N shortage
+                remaining_docs.sort(key=lambda x: x['consensus_score'], reverse=True)
+                emergency_docs = remaining_docs[:shortage]
                 
-                for result in consensus_data['validated_results']:
+                for result in emergency_docs:
+                    consensus_data['validated_results'].append(result)
                     consensus_data['consensus_scores'][result['global_id']] = result['consensus_score']
                 
-                self.logger.warning(f"Emergency fallback: Added {len(consensus_data['validated_results'])} documents")
+                self.logger.warning(
+                    f"Emergency fallback: Added {len(emergency_docs)} documents "
+                    f"(now have {len(consensus_data['validated_results'])})"
+                )
 
         # Sort by consensus score
         consensus_data['validated_results'].sort(
