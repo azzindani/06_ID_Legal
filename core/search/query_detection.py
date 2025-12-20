@@ -18,11 +18,14 @@ from config import (
     INDONESIAN_STOPWORDS
 )
 
-# Import comprehensive legal vocabulary from standalone file
-from config.legal_vocab import (
-    INDONESIAN_LEGAL_SYNONYMS,
-    LEGAL_DOMAINS
-)
+# Import comprehensive legal vocabulary
+# Note: config.py file exists in root, so we import the file directly
+import sys
+from pathlib import Path
+config_dir = Path(__file__).parent.parent / 'config'
+sys.path.insert(0, str(config_dir))
+from legal_vocab import INDONESIAN_LEGAL_SYNONYMS, LEGAL_DOMAINS
+sys.path.pop(0)
 
 
 class QueryDetector:
