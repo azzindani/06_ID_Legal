@@ -443,8 +443,24 @@ def search_documents(query: str, num_results: int = 10) -> Tuple[str, str, str]:
         logger.info(f"Searching for: {query}")
         start_time = time.time()
 
-        # Perform search
-        result = pipeline.query(query, stream=False)
+        # Perform search (retrieval only, no LLM generation)
+        # Use pipeline.search_only() to skip LLM generation
+        result = pipeline.search_only(query, top_k=num_results) if hasattr(pipeline, 'search_only') else pipeline.retrieve_documents(query, top_k=num_results)
+        
+        # If pipeline doesn't have search_only, manually call retrieval
+        if result is None or not isinstance(result, dict):
+            # Fallback: use retrieval components directly
+            result = {
+                'sources': pipeline.hybrid_search.search_with_persona(
+                    query=query,
+                    persona_name='generalist',
+                    phase_config={'candidates': num_results},
+                    priority_weights={},
+                    top_k=num_results
+                ),
+                'metadata': {'query': query, 'total_time': time.time() - start_time}
+            }
+        
         last_search_result = result
 
         # Format outputs
@@ -607,7 +623,8 @@ def export_results(export_format: str) -> Tuple[str, Optional[str]]:
 def create_search_demo():
     """Create the enhanced search engine Gradio interface"""
 
-    with gr.Blocks(css=SEARCH_CSS, title="Indonesian Legal Search Engine") as demo:
+    # Gradio 6: css moved to launch(), title remains here
+    with gr.Blocks(title="Indonesian Legal Search Engine") as demo:
         # Header
         gr.HTML("""
             <div class="header-title">🔍 Indonesian Legal Search Engine</div>
@@ -713,8 +730,8 @@ def create_search_demo():
                 export_preview = gr.Textbox(
                     label="Preview Export",
                     lines=15,
-                    max_lines=20,
-                    show_copy_button=True
+                    max_lines=20
+                    # show_copy_button removed for Gradio 6 compatibility
                 )
 
                 export_file = gr.File(
@@ -790,28 +807,36 @@ def create_search_demo():
 
 
 def launch_search_app(share: bool = False, server_port: int = 7861):
-    """Launch search engine app with pre-initialization"""
+    """Launch search engine app with pre-initialization (NO LLM - retrieval only)"""
     global pipeline
 
-    # Pre-initialize system
-    logger.info("Pre-initializing search system before UI launch...")
+    # Pre-initialize system WITHOUT LLM (retrieval only)
+    logger.info("Pre-initializing search system (retrieval only, no LLM)...")
 
     if pipeline is None:
-        logger.info(f"Initializing RAG pipeline with provider: {current_provider}")
-        pipeline = RAGPipeline({'llm_provider': current_provider})
-        if not pipeline.initialize():
+        logger.info("Initializing RAG pipeline for retrieval only (no LLM loaded)")
+        # Initialize with minimal config - retrieval components only
+        pipeline = RAGPipeline({
+            'llm_provider': 'none',  # Don't load LLM
+            'skip_llm': True  # Skip LLM initialization if supported
+        })
+        
+        # Initialize only retrieval components
+        if not pipeline.initialize_retrieval_only() if hasattr(pipeline, 'initialize_retrieval_only') else pipeline.initialize():
             logger.error("Failed to initialize pipeline")
             raise RuntimeError("Pipeline initialization failed")
-        logger.info("Pipeline initialized successfully")
+        logger.info("Pipeline initialized successfully (retrieval components only)")
 
     logger.info("Search system ready, launching UI...")
 
     # Create and launch demo
     demo = create_search_demo()
+    # Gradio 6: css parameter moved to launch()
     demo.launch(
         server_name="0.0.0.0",
         server_port=server_port,
-        share=share
+        share=share,
+        css=SEARCH_CSS  # Moved from Blocks() constructor
     )
 
 
