@@ -408,22 +408,30 @@ def format_summary(result: Dict) -> str:
 
     # Result Overview
     all_docs = _extract_all_documents_from_metadata(result)
-    sources = result.get('sources', result.get('citations', []))
     
     if all_docs:
-        top_doc = all_docs[0]
-        record = top_doc.get('record', top_doc)
-        output.append(f"### ⭐ Hasil Paling Relevan\n")
-        output.append(f"**{record.get('regulation_type', '')} No. {record.get('regulation_number', '')}/{record.get('year', '')}**\n")
-        output.append(f"_{record.get('about', '')}_\n\n")
+        # Show top N results in summary (up to 10 for readability)
+        show_count = min(10, len(all_docs))
+        output.append(f"### ⭐ Hasil Paling Relevan (Top {show_count})\n\n")
         
-        output.append(f"Ditemukan **{len(all_docs)}** dokumen regulasi yang relevan melalui **{len(result.get('phase_metadata', {}))}** fase penelitian agen.\n\n")
+        for i, doc in enumerate(all_docs[:show_count], 1):
+            record = doc.get('record', doc)
+            output.append(f"{i}. **{record.get('regulation_type', '')} No. {record.get('regulation_number', '')}/{record.get('year', '')}**\n")
+            output.append(f"   _{record.get('about', '')}_\n\n")
+        
+        total_found = len(all_docs)
+        if total_found > show_count:
+            output.append(f"*(Ditemukan total **{total_found}** kandidat dokumen. Lihat tab **Semua Dokumen** untuk daftar lengkap.)*\n\n")
+        else:
+            output.append(f"*(Ditemukan total **{total_found}** dokumen regulasi.)*\n\n")
+            
+        output.append(f"Analisis dilakukan melalui **{len(result.get('phase_metadata', {}))}** fase penelitian agen.\n\n")
 
     # Statistics
     output.append("---\n\n")
     output.append("### 📊 Statistik Sistem\n\n")
     output.append(f"- **Dokumen Dievaluasi:** {len(all_docs)}\n")
-    output.append(f"- **Konsensus Tim:** {result.get('consensus_data', {}).get('agreement_level', 0):.0%}\n")
+    output.append(f"- **Tingkat Konsensus:** {result.get('consensus_data', {}).get('agreement_level', 0):.0%}\n")
 
     total_time = metadata.get('total_time', metadata.get('processing_time', 0))
     if total_time:
@@ -432,9 +440,9 @@ def format_summary(result: Dict) -> str:
     return "".join(output)
 
 
-def search_documents(query: str, num_results: int = 10) -> Tuple[str, str, pd.DataFrame, str]:
+def search_documents(query: str, num_results: int = 10, progress=gr.Progress()) -> Tuple[str, str, pd.DataFrame, str]:
     """
-    Search for legal documents based on query.
+    Search for legal documents based on query with progress tracking.
     Returns: (summary, all_documents, df_data, research_process)
     """
     global pipeline, last_search_result
@@ -442,17 +450,46 @@ def search_documents(query: str, num_results: int = 10) -> Tuple[str, str, pd.Da
     if not query.strip():
         return "⚠️ Masukkan query pencarian.", "", pd.DataFrame(), ""
 
+    # Yield initial loading state
+    loading_md = "### 🔄 Sedang mencari... \nMohon tunggu sejenak, tim peneliti sedang menganalisis query Anda."
+    loading_df = pd.DataFrame([{"Status": "Mencari dokumen..."}])
+    yield loading_md, loading_md, loading_df, loading_md
+
     try:
         if pipeline is None:
+            progress(0.1, desc="Initializing system...")
             initialize_search_system()
 
         logger.info(f"Searching for: {query}")
         start_time = time.time()
-
-        # Perform search (retrieval only, no LLM generation)
-        result = pipeline.retrieve_documents(query, top_k=num_results)
+        
+        progress(0.2, desc="🔍 Analyzing query...")
+        
+        # Use streaming to track progress if possible
+        if hasattr(pipeline, 'orchestrator') and hasattr(pipeline.orchestrator, 'stream_run'):
+            # Manual streaming through orchestrator nodes
+            result = None
+            for state_update in pipeline.orchestrator.stream_run(query, top_k=num_results):
+                # The keys in state_update are the node names that just finished
+                if "query_detection" in state_update:
+                    progress(0.4, desc="🔬 Researching documents...")
+                elif "research" in state_update:
+                    progress(0.6, desc="🤝 Building consensus...")
+                elif "consensus" in state_update:
+                    progress(0.8, desc="🎯 Reranking results...")
+                elif "reranking" in state_update:
+                    result = state_update["reranking"]
+            
+            # If we didn't get a result from streaming, fall back to direct call
+            if not result:
+                result = pipeline.retrieve_documents(query, top_k=num_results)
+        else:
+            # Fallback for non-streaming orchestrator
+            progress(0.5, desc="🔎 Searching regulations...")
+            result = pipeline.retrieve_documents(query, top_k=num_results)
         
         last_search_result = result
+        progress(0.9, desc="✨ Formatting results...")
 
         # Format outputs
         summary = format_summary(result)
@@ -460,13 +497,13 @@ def search_documents(query: str, num_results: int = 10) -> Tuple[str, str, pd.Da
         df_docs = get_docs_dataframe_data(result)
         research = format_detailed_research_process(result, top_n_per_researcher=20, show_content=False)
 
-        return summary, all_docs, df_docs, research
+        yield summary, all_docs, df_docs, research
 
     except Exception as e:
         logger.error(f"Search error: {e}")
         import traceback
         traceback.print_exc()
-        return f"❌ Error: {str(e)}", "", pd.DataFrame(), ""
+        yield f"❌ Error: {str(e)}", "", pd.DataFrame(), ""
 
 
 def export_results(export_format: str) -> Tuple[str, Optional[str]]:
@@ -568,33 +605,63 @@ def export_results(export_format: str) -> Tuple[str, Optional[str]]:
 
         elif export_format == "HTML":
             # HTML export with simple styling
-            html_title = f"Search Results: {last_search_result.get('metadata', {}).get('query', 'Legal Search')}"
+            html_title = f"Laporan Hasil Pencarian Hukum: {last_search_result.get('metadata', {}).get('query', 'Pencarian Legal')}"
             
             lines = [f"""<!DOCTYPE html>
 <html>
 <head>
     <title>{html_title}</title>
     <style>
-        body {{ font-family: sans-serif; line-height: 1.6; max-width: 1000px; margin: 40px auto; padding: 0 20px; color: #333; }}
-        h1 {{ color: #1e3a5f; border-bottom: 2px solid #1e3a5f; padding-bottom: 10px; }}
-        h2 {{ color: #2c5282; margin-top: 30px; border-bottom: 1px solid #e0e0e0; padding-bottom: 5px; }}
-        .meta {{ background: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 20px; font-size: 0.9em; }}
-        .doc {{ background: #fff; border: 1px solid #e0e0e0; border-left: 5px solid #1e3a5f; padding: 20px; border-radius: 5px; margin-bottom: 20px; }}
-        .doc-title {{ font-weight: bold; font-size: 1.2em; color: #1e3a5f; margin-bottom: 10px; }}
-        .doc-meta {{ display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.9em; color: #666; margin-bottom: 15px; }}
-        .doc-score {{ font-weight: bold; color: #28a745; }}
-        .doc-content {{ background: #fdfdfd; padding: 10px; border: 1px dashed #ddd; font-style: italic; font-size: 0.95em; }}
-        .footer {{ text-align: center; margin-top: 50px; font-size: 0.8em; color: #999; }}
+        body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; max-width: 1000px; margin: 40px auto; padding: 0 20px; color: #333; }}
+        .header {{ background: #1e3a5f; color: white; padding: 30px; border-radius: 8px; margin-bottom: 30px; }}
+        h1 {{ margin: 0; font-size: 24px; }}
+        .summary-section {{ background: #f0f4f8; border-radius: 8px; padding: 25px; margin-bottom: 30px; border-left: 5px solid #2c5282; }}
+        h2 {{ color: #1e3a5f; border-bottom: 2px solid #e0e0e0; padding-bottom: 10px; margin-top: 0; }}
+        h3 {{ color: #2c5282; margin-top: 25px; }}
+        .meta-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-top: 15px; }}
+        .meta-item {{ font-size: 0.9em; }}
+        .meta-label {{ font-weight: bold; color: #555; }}
+        .doc-list {{ margin-top: 30px; }}
+        .doc {{ background: #fff; border: 1px solid #e0e0e0; border-left: 5px solid #1e3a5f; padding: 20px; border-radius: 5px; margin-bottom: 20px; transition: transform 0.2s; }}
+        .doc:hover {{ transform: translateX(5px); border-color: #2c5282; }}
+        .doc-header {{ display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }}
+        .doc-title {{ font-weight: bold; font-size: 1.2em; color: #1e3a5f; flex-grow: 1; }}
+        .doc-score {{ background: #e6fffa; color: #234e52; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 0.85em; white-space: nowrap; }}
+        .doc-meta {{ display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.9em; color: #666; margin-bottom: 15px; background: #fafafa; padding: 10px; border-radius: 4px; }}
+        .doc-content {{ background: #fdfdfd; padding: 12px; border: 1px dashed #ddd; font-style: italic; font-size: 0.95em; color: #444; }}
+        .footer {{ text-align: center; margin-top: 50px; padding: 20px; border-top: 1px solid #eee; font-size: 0.8em; color: #999; }}
+        .top-tag {{ background: #1e3a5f; color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.7em; margin-right: 8px; vertical-align: middle; }}
     </style>
 </head>
 <body>
-    <h1>{html_title}</h1>
-    <div class="meta">
-        <strong>Query:</strong> {last_search_result.get('metadata', {}).get('query', 'N/A')}<br>
-        <strong>Timestamp:</strong> {timestamp}<br>
-        <strong>Total Documents:</strong> {len(all_docs)}
+    <div class="header">
+        <h1>{html_title}</h1>
     </div>
+
+    <div class="summary-section">
+        <h2>📋 Ringkasan Hasil</h2>
+        <div class="meta-grid">
+            <div class="meta-item"><span class="meta-label">Total Dokumen:</span> {len(all_docs)}</div>
+            <div class="meta-item"><span class="meta-label">Tingkat Konsensus:</span> {last_search_result.get('consensus_data', {}).get('agreement_level', 0):.0%}</div>
+            <div class="meta-item"><span class="meta-label">Waktu Proses:</span> {last_search_result.get('metadata', {}).get('total_time', 0):.2f}s</div>
+            <div class="meta-item"><span class="meta-label">Metode:</span> RAG Research Agency</div>
+        </div>
+        
+        <h3>⭐ Hasil Utama</h3>
+        <ul style="padding-left: 20px;">
 """]
+            
+            # Add top 3 to the summary list
+            for i, doc in enumerate(all_docs[:3], 1):
+                record = doc.get('record', doc)
+                lines.append(f"            <li><strong>{record.get('regulation_type', 'N/A')} No. {record.get('regulation_number', 'N/A')}/{record.get('year', 'N/A')}</strong>: {record.get('about', 'N/A')}</li>\n")
+            
+            lines.append(f"""        </ul>
+    </div>
+
+    <div class="doc-list">
+        <h2>📚 Daftar Dokumen Lengkap</h2>
+""")
             
             for i, doc in enumerate(all_docs, 1):
                 record = doc.get('record', doc)
@@ -603,21 +670,26 @@ def export_results(export_format: str) -> Tuple[str, Optional[str]]:
                 
                 lines.append(f"""
     <div class="doc">
-        <div class="doc-title">{i}. {record.get('regulation_type', 'N/A')} No. {record.get('regulation_number', 'N/A')}/{record.get('year', 'N/A')}</div>
+        <div class="doc-header">
+            <div class="doc-title">{"<span class='top-tag'>TOP</span>" if i <= 3 else ""}{i}. {record.get('regulation_type', 'N/A')} No. {record.get('regulation_number', 'N/A')}/{record.get('year', 'N/A')}</div>
+            <div class="doc-score">Skor: {score:.4f}</div>
+        </div>
         <div class="doc-meta">
-            <div><strong>Tentang:</strong> {record.get('about', 'N/A')}</div>
-            <div><strong>Ditetapkan oleh:</strong> {record.get('enacting_body', 'N/A')}</div>
-            <div class="doc-score">Relevansi: {score:.4f}</div>
-            <div>Domain: {record.get('kg_primary_domain', 'N/A')}</div>
+            <div><span class="meta-label">Tentang:</span> {record.get('about', 'N/A')}</div>
+            <div><span class="meta-label">Lembaga:</span> {record.get('enacting_body', 'N/A')}</div>
+            <div><span class="meta-label">Domain:</span> {record.get('kg_primary_domain', 'N/A')}</div>
+            <div><span class="meta-label">Fase:</span> {doc.get('_phase', 'N/A')}</div>
         </div>
         <div class="doc-content">
-            {record.get('content', '')[:1000]}...
+            {record.get('content', '')[:1200]}...
         </div>
     </div>
 """)
             
             lines.append(f"""
-    <div class="footer">Generated by Indonesian Legal RAG System</div>
+    <div class="footer">
+        &copy; {datetime.now().year} Indonesian Legal RAG System - AI Research Powered
+    </div>
 </body>
 </html>
 """)
@@ -841,13 +913,15 @@ def create_search_demo():
         search_btn.click(
             fn=search_documents,
             inputs=[query_input, num_results],
-            outputs=[summary_output, docs_markdown_output, docs_df_output, research_output]
+            outputs=[summary_output, docs_markdown_output, docs_df_output, research_output],
+            show_progress="full"
         )
 
         query_input.submit(
             fn=search_documents,
             inputs=[query_input, num_results],
-            outputs=[summary_output, docs_markdown_output, docs_df_output, research_output]
+            outputs=[summary_output, docs_markdown_output, docs_df_output, research_output],
+            show_progress="full"
         )
 
         export_btn.click(
