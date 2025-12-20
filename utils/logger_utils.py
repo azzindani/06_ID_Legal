@@ -48,7 +48,7 @@ class CentralizedLogger:
         self.enable_file_logging = False
         self.log_dir = "logs"
         self.append = True
-        self.verbosity_mode = "minimal"  # minimal, normal, verbose
+        self.verbosity_mode = "normal"  # minimal, normal, verbose
         self._initialized = True
     
     def initialize(self, enable_file_logging: bool = True,
@@ -381,4 +381,5 @@ def log_session_end():
                     f.write(f"SESSION ENDED: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
                     f.write(f"{'='*100}\n\n")
         except Exception:
+
             pass
