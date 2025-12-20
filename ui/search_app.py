@@ -553,7 +553,8 @@ def search_documents(query: str, num_results: int = 10, progress=gr.Progress()) 
         summary = format_summary(result)
         all_docs = format_all_documents(result)
         df_docs = get_docs_dataframe_data(result)
-        research = format_detailed_research_process(result, top_n_per_researcher=20, show_content=False)
+        # Enable show_content=True to make it more like "detail proses"
+        research = format_detailed_research_process(result, top_n_per_researcher=20, show_content=True)
 
         yield summary, all_docs, df_docs, research
 
@@ -728,18 +729,36 @@ def export_results(export_format: str) -> Tuple[str, Optional[str]]:
         <ul style="padding-left: 20px;">
 """]
             
-            # Show top 10 in HTML summary list
-            for i, doc in enumerate(all_docs[:10], 1):
+            # Show top results in HTML summary list with full details
+            # This follows the format_summary style
+            final_results = last_search_result.get('final_results', [])
+            for i, doc in enumerate(final_results, 1):
                 record = doc.get('record', doc)
                 
                 chapter = record.get('chapter', record.get('bab', ''))
-                article = record.get('article', record.get('pasal', ''))
-                article_num = record.get('article_number', '')
-                location = " | ".join(filter(None, [chapter, article or article_num])) or "Dokumen Lengkap"
+                article = record.get('article', record.get('pasal', '')) or record.get('article_number', '')
+                location = " | ".join(filter(None, [chapter, article])) or "Dokumen Lengkap"
+                eff_date = record.get('effective_date', record.get('tanggal_penetapan', ''))
+                content = record.get('content', '')
+                preview = content[:300].replace('\n', ' ') + "..." if len(content) > 300 else content
                 
-                lines.append(f"            <li><strong>{record.get('regulation_type', 'N/A')} No. {record.get('regulation_number', 'N/A')}/{record.get('year', 'N/A')}</strong> ({location}): {record.get('about', 'N/A')}</li>\n")
+                lines.append(f"""
+                <li style='margin-bottom: 20px; border-bottom: 1px solid #edf2f7; padding-bottom: 10px;'>
+                    <div style='font-weight: bold; color: #2d3748; margin-bottom: 5px;'>{i}. {record.get('regulation_type', 'N/A')} No. {record.get('regulation_number', 'N/A')}/{record.get('year', 'N/A')}</div>
+                    <div style='font-size: 0.9em; margin-bottom: 3px;'>
+                        <strong>Lokasi:</strong> {location} | <strong>Tgl Penetapan:</strong> {eff_date or 'N/A'}
+                    </div>
+                    <div style='font-size: 0.9em; margin-bottom: 5px;'><strong>Tentang:</strong> {record.get('about', 'N/A')}</div>
+                    <div style='font-size: 0.85em; background: #fff; padding: 8px; border-radius: 4px; border-left: 3px solid #cbd5e0;'>
+                        <strong>Konten Preview:</strong> {preview}
+                    </div>
+                </li>""")
             
             lines.append(f"""        </ul>
+        
+        <div style='margin-top: 20px; font-size: 0.95em; border-top: 1px solid #e2e8f0; padding-top: 15px;'>
+            <strong>Metode Analisis:</strong> Penelitian dilakukan melalui {len(last_search_result.get('phase_metadata', {}))} fase penelitian agen.
+        </div>
     </div>
 
     <div class="doc-list">
@@ -771,6 +790,25 @@ def export_results(export_format: str) -> Tuple[str, Optional[str]]:
     </div>
 """)
             
+            # Add Research Process to HTML
+            research_md = format_detailed_research_process(last_search_result, top_n_per_researcher=20, show_content=True)
+            # Convert simple markdown headers to HTML for the research process section
+            import re
+            research_html = research_md
+            research_html = re.sub(r'^### (.*)$', r'<h2 style="color: #1e3a5f; border-bottom: 2px solid #e0e0e0; padding-bottom: 10px; margin-top: 40px;">\1</h2>', research_html, flags=re.MULTILINE)
+            research_html = re.sub(r'^#### (.*)$', r'<h3 style="color: #2c5282; margin-top: 25px;">\1</h3>', research_html, flags=re.MULTILINE)
+            research_html = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', research_html)
+            research_html = re.sub(r'_(.*?)_', r'<em>\1</em>', research_html)
+            research_html = re.sub(r'^(   - .*)$', r'<div style="margin-left: 20px;">\1</div>', research_html, flags=re.MULTILINE)
+            research_html = research_html.replace('\n', '<br/>')
+            
+            lines.append(f"""
+    <div class="research-section" style="margin-top: 50px; background: #fafafa; padding: 30px; border-radius: 8px; border: 1px solid #e0e0e0;">
+        <h1 style="text-align: center; color: #1e3a5f;">🔬 Detail Proses Penelitian</h1>
+        {research_html}
+    </div>
+""")
+            
             lines.append(f"""
     <div class="footer">
         &copy; {datetime.now().year} Indonesian Legal RAG System - AI Research Powered
@@ -786,7 +824,10 @@ def export_results(export_format: str) -> Tuple[str, Optional[str]]:
             lines.append(f"**Query:** `{last_search_result.get('metadata', {}).get('query', 'N/A')}`\n")
             lines.append(f"**Timestamp:** {timestamp}\n")
             lines.append(f"**Total Dokumen:** {len(all_docs)}\n\n")
-            lines.append("---\n\n")
+            
+            # Insert Ringkasan directly into Markdown export
+            lines.append(format_summary(last_search_result))
+            lines.append("\n\n---\n\n")
 
             # Documents
             lines.append("## Dokumen Ditemukan\n\n")
@@ -795,24 +836,32 @@ def export_results(export_format: str) -> Tuple[str, Optional[str]]:
                 scores = doc.get('scores', {})
                 
                 chapter = record.get('chapter', record.get('bab', ''))
-                article = record.get('article', record.get('pasal', ''))
-                article_num = record.get('article_number', '')
-                location = " | ".join(filter(None, [chapter, article or article_num])) or "Dokumen Lengkap"
+                article = record.get('article', record.get('pasal', '')) or record.get('article_number', '')
+                location = " | ".join(filter(None, [chapter, article])) or "Dokumen Lengkap"
                 effective_date = record.get('effective_date', record.get('tanggal_penetapan', 'N/A'))
 
                 lines.append(f"### {i}. {record.get('regulation_type', 'N/A')} No. {record.get('regulation_number', 'N/A')}/{record.get('year', 'N/A')}\n\n")
                 lines.append(f"- **Lokasi:** {location}\n")
                 lines.append(f"- **Tgl Penetapan:** {effective_date}\n")
                 lines.append(f"- **Tentang:** {record.get('about', 'N/A')}\n\n")
+                
+                # Content
+                content = record.get('content', '')
+                if content:
+                    preview = content[:500].replace('\n', ' ') + "..." if len(content) > 500 else content
+                    lines.append(f"**Konten:** {preview}\n\n")
+
                 lines.append(f"**Skor:** Final={scores.get('final', doc.get('final_score', 0)):.4f}, ")
                 lines.append(f"Semantic={scores.get('semantic', doc.get('semantic_score', 0)):.4f}, ")
                 lines.append(f"KG={scores.get('kg', doc.get('kg_score', 0)):.4f}\n\n")
 
-                content_preview = record.get('content', '')[:1000]
-                if content_preview:
-                    lines.append(f"**Konten:** {content_preview}...\n\n")
-
                 lines.append("---\n\n")
+            
+            # Add Research Process to Markdown
+            lines.append("# 🔬 Detail Proses Penelitian\n\n")
+            research_md = format_detailed_research_process(last_search_result, top_n_per_researcher=20, show_content=True)
+            lines.append(research_md)
+            lines.append("\n\n")
 
             content = "".join(lines)
             filename = f"search_results_{timestamp}.md"
