@@ -566,7 +566,8 @@ class RAGPipeline:
             # Run retrieval
             rag_result = self.orchestrator.run(
                 query=question,
-                conversation_history=conversation_history or []
+                conversation_history=conversation_history or [],
+                top_k=top_k
             )
 
             retrieval_time = time.time() - start_time

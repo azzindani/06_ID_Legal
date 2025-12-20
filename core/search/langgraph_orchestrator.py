@@ -312,7 +312,7 @@ class LangGraphRAGOrchestrator:
             final_results = rerank_data['reranked_results']
 
             # SAFETY: Ensure exactly final_top_k documents (defense in depth)
-            expected_top_k = self.config.get('final_top_k', 3)
+            expected_top_k = state.get('top_k') or self.config.get('final_top_k', 3)
             if len(final_results) > expected_top_k:
                 self.logger.warning(f"Reranker returned {len(final_results)} docs, trimming to {expected_top_k}")
                 final_results = final_results[:expected_top_k]
@@ -359,7 +359,8 @@ class LangGraphRAGOrchestrator:
     def run(
         self,
         query: str,
-        conversation_history: Optional[List[Dict[str, str]]] = None
+        conversation_history: Optional[List[Dict[str, str]]] = None,
+        top_k: Optional[int] = None
     ) -> Dict[str, Any]:
         """
         Run complete RAG workflow
@@ -379,6 +380,7 @@ class LangGraphRAGOrchestrator:
         initial_state: RAGState = {
             "query": query,
             "conversation_history": conversation_history or [],
+            "top_k": top_k,
             "metadata": {},
             "errors": []
         }
