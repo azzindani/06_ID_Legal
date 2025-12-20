@@ -375,127 +375,6 @@ class RAGPipeline:
                 else:
                     return no_results_response
 
-    def retrieve_documents(
-        self,
-        question: str,
-        top_k: int = 10,
-        conversation_history: Optional[List[Dict[str, str]]] = None
-    ) -> Dict[str, Any]:
-        """
-        Retrieve documents WITHOUT LLM generation (for search UI)
-        
-        Args:
-            question: User question
-            top_k: Number of documents to retrieve
-            conversation_history: Optional conversation context
-            
-        Returns:
-            Dictionary with sources, metadata, and phase_metadata
-        """
-        if not self._initialized:
-            return {
-                'success': False,
-                'error': 'Pipeline not initialized',
-                'sources': [],
-                'metadata': {}
-            }
-
-        self.logger.info("Retrieving documents (no LLM)", {"top_k": top_k})
-        start_time = time.time()
-
-        try:
-            # Run retrieval
-            rag_result = self.orchestrator.run(
-                query=question,
-                conversation_history=conversation_history or []
-            )
-
-            retrieval_time = time.time() - start_time
-            final_results = rag_result.get('final_results', [])[:top_k]
-
-            # Build phase metadata
-            phase_metadata = {}
-            research_data = rag_result.get('research_data', {})
-
-            if research_data:
-                phase_results = research_data.get('phase_results', {})
-                from config import RESEARCH_TEAM_PERSONAS
-
-                entry_idx = 0
-                for phase_name, results in phase_results.items():
-                    persona_groups = {}
-                    for result in results:
-                        persona = result.get('metadata', {}).get('persona', 'unknown')
-                        if persona not in persona_groups:
-                            persona_groups[persona] = []
-                        persona_groups[persona].append(result)
-
-                    for persona_name, persona_results_list in persona_groups.items():
-                        key = f"{entry_idx}_{phase_name}_{persona_name}"
-                        researcher_info = RESEARCH_TEAM_PERSONAS.get(persona_name, {})
-
-                        candidates = []
-                        for r in persona_results_list:
-                            candidates.append({
-                                'record': r.get('record', {}),
-                                'scores': r.get('scores', {}),
-                                'final_score': r.get('scores', {}).get('final', 0),
-                                '_phase': phase_name,
-                                '_researcher': persona_name
-                            })
-
-                        phase_metadata[key] = {
-                            'phase': phase_name,
-                            'researcher': persona_name,
-                            'researcher_name': researcher_info.get('name', persona_name),
-                            'candidates': candidates,
-                            'confidence': 1.0,
-                            'results': candidates
-                        }
-                        entry_idx += 1
-
-            # Format sources
-            sources = []
-            for r in final_results:
-                record = r.get('record', r)
-                scores = r.get('scores', {})
-                sources.append({
-                    'regulation_type': record.get('regulation_type', ''),
-                    'regulation_number': record.get('regulation_number', ''),
-                    'year': record.get('year', ''),
-                    'about': record.get('about', ''),
-                    'content': record.get('content', ''),
-                    'enacting_body': record.get('enacting_body', ''),
-                    'chapter': record.get('chapter', ''),
-                    'article': record.get('article', ''),
-                    'score': scores.get('final', 0),
-                    'scores': scores,
-                    'record': record,
-                    '_phase': r.get('_phase', ''),
-                    '_researcher': r.get('_researcher', '')
-                })
-
-            return {
-                'success': True,
-                'sources': sources,
-                'metadata': {
-                    'query': question,
-                    'retrieval_time': retrieval_time,
-                    'total_time': retrieval_time,
-                    'results_count': len(sources)
-                },
-                'phase_metadata': phase_metadata,
-                'consensus_data': rag_result.get('consensus_data', {})
-            }
-
-        except Exception as e:
-            self.logger.error("Retrieval failed", {"error": str(e)})
-            return {
-                'success': False,
-                'error': str(e),
-                'sources': [],
-                'metadata': {}
-            }
 
             # Step 2: Generate answer
             self.logger.info("Generating answer...")
@@ -653,6 +532,128 @@ class RAGPipeline:
                 'metadata': {
                     'total_time': time.time() - start_time
                 }
+            }
+
+    def retrieve_documents(
+        self,
+        question: str,
+        top_k: int = 10,
+        conversation_history: Optional[List[Dict[str, str]]] = None
+    ) -> Dict[str, Any]:
+        """
+        Retrieve documents WITHOUT LLM generation (for search UI)
+        
+        Args:
+            question: User question
+            top_k: Number of documents to retrieve
+            conversation_history: Optional conversation context
+            
+        Returns:
+            Dictionary with sources, metadata, and phase_metadata
+        """
+        if not self._initialized:
+            return {
+                'success': False,
+                'error': 'Pipeline not initialized',
+                'sources': [],
+                'metadata': {}
+            }
+
+        self.logger.info("Retrieving documents (no LLM)", {"top_k": top_k})
+        start_time = time.time()
+
+        try:
+            # Run retrieval
+            rag_result = self.orchestrator.run(
+                query=question,
+                conversation_history=conversation_history or []
+            )
+
+            retrieval_time = time.time() - start_time
+            final_results = rag_result.get('final_results', [])[:top_k]
+
+            # Build phase metadata
+            phase_metadata = {}
+            research_data = rag_result.get('research_data', {})
+
+            if research_data:
+                phase_results = research_data.get('phase_results', {})
+                from config import RESEARCH_TEAM_PERSONAS
+
+                entry_idx = 0
+                for phase_name, results in phase_results.items():
+                    persona_groups = {}
+                    for result in results:
+                        persona = result.get('metadata', {}).get('persona', 'unknown')
+                        if persona not in persona_groups:
+                            persona_groups[persona] = []
+                        persona_groups[persona].append(result)
+
+                    for persona_name, persona_results_list in persona_groups.items():
+                        key = f"{entry_idx}_{phase_name}_{persona_name}"
+                        researcher_info = RESEARCH_TEAM_PERSONAS.get(persona_name, {})
+
+                        candidates = []
+                        for r in persona_results_list:
+                            candidates.append({
+                                'record': r.get('record', {}),
+                                'scores': r.get('scores', {}),
+                                'final_score': r.get('scores', {}).get('final', 0),
+                                '_phase': phase_name,
+                                '_researcher': persona_name
+                            })
+
+                        phase_metadata[key] = {
+                            'phase': phase_name,
+                            'researcher': persona_name,
+                            'researcher_name': researcher_info.get('name', persona_name),
+                            'candidates': candidates,
+                            'confidence': 1.0,
+                            'results': candidates
+                        }
+                        entry_idx += 1
+
+            # Format sources
+            sources = []
+            for r in final_results:
+                record = r.get('record', r)
+                scores = r.get('scores', {})
+                sources.append({
+                    'regulation_type': record.get('regulation_type', ''),
+                    'regulation_number': record.get('regulation_number', ''),
+                    'year': record.get('year', ''),
+                    'about': record.get('about', ''),
+                    'content': record.get('content', ''),
+                    'enacting_body': record.get('enacting_body', ''),
+                    'chapter': record.get('chapter', ''),
+                    'article': record.get('article', ''),
+                    'score': scores.get('final', 0),
+                    'scores': scores,
+                    'record': record,
+                    '_phase': r.get('_phase', ''),
+                    '_researcher': r.get('_researcher', '')
+                })
+
+            return {
+                'success': True,
+                'sources': sources,
+                'metadata': {
+                    'query': question,
+                    'retrieval_time': retrieval_time,
+                    'total_time': retrieval_time,
+                    'results_count': len(sources)
+                },
+                'phase_metadata': phase_metadata,
+                'consensus_data': rag_result.get('consensus_data', {})
+            }
+
+        except Exception as e:
+            self.logger.error("Retrieval failed", {"error": str(e)})
+            return {
+                'success': False,
+                'error': str(e),
+                'sources': [],
+                'metadata': {}
             }
 
     def _generate_streaming(
