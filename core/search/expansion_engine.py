@@ -1374,6 +1374,87 @@ class IterativeExpansionEngine:
         else:
             return None
 
+    def _calculate_legal_quality(self, doc: Dict[str, Any], primary_domain: Optional[str] = None) -> float:
+        """
+        Calculate legal quality score from a legal professional perspective
+
+        Criteria (inspired by how lawyers evaluate regulations):
+        1. Hierarchy level (30%) - UU > PP > Perpres
+        2. Authority score (25%) - Official weight
+        3. Temporal relevance (20%) - Recent is better
+        4. Domain relevance (15%) - Matches query domain
+        5. Legal richness (10%) - Complete, well-structured
+
+        Args:
+            doc: Document to score
+            primary_domain: Primary legal domain from query (optional)
+
+        Returns:
+            Legal quality score (0.0-1.0)
+        """
+        score = 0.0
+
+        # 1. HIERARCHY LEVEL (30%) - Higher in hierarchy = higher quality
+        hierarchy_level = doc.get('kg_hierarchy_level', 5)
+        if hierarchy_level == 1:  # UUD (Constitution)
+            hierarchy_score = 1.0
+        elif hierarchy_level == 2:  # UU (Law)
+            hierarchy_score = 0.9
+        elif hierarchy_level == 3:  # PP (Government Regulation)
+            hierarchy_score = 0.7
+        elif hierarchy_level == 4:  # Perpres (Presidential Regulation)
+            hierarchy_score = 0.5
+        elif hierarchy_level == 5:  # Ministerial
+            hierarchy_score = 0.3
+        else:  # Local
+            hierarchy_score = 0.2
+
+        score += 0.30 * hierarchy_score
+
+        # 2. AUTHORITY SCORE (25%) - Official importance
+        authority = doc.get('kg_authority_score', 0.5)
+        score += 0.25 * authority
+
+        # 3. TEMPORAL RELEVANCE (20%) - Recent regulations preferred
+        temporal = doc.get('kg_temporal_score', 0.5)
+        years_old = doc.get('kg_years_old', 5)
+
+        # Bonus for very recent regulations
+        if years_old <= 3:
+            temporal_score = min(1.0, temporal + 0.2)
+        elif years_old <= 5:
+            temporal_score = temporal
+        else:
+            temporal_score = max(0.3, temporal - 0.1)
+
+        score += 0.20 * temporal_score
+
+        # 4. DOMAIN RELEVANCE (15%) - Matches query domain
+        if primary_domain:
+            doc_domain = doc.get('kg_primary_domain', '').lower()
+            domain_confidence = doc.get('kg_domain_confidence', 0.0)
+
+            if doc_domain == primary_domain:
+                domain_score = domain_confidence  # Full match with confidence
+            elif doc_domain and doc_domain != 'unknown':
+                domain_score = 0.3  # Related but different domain
+            else:
+                domain_score = 0.1  # No domain info
+
+            score += 0.15 * domain_score
+        else:
+            # No primary domain, use domain confidence only
+            score += 0.15 * doc.get('kg_domain_confidence', 0.5)
+
+        # 5. LEGAL RICHNESS (10%) - Complete, well-structured documents
+        legal_richness = doc.get('kg_legal_richness', 0.0)
+        completeness = doc.get('kg_completeness_score', 0.0)
+        richness_score = (legal_richness + completeness) / 2.0
+
+        score += 0.10 * richness_score
+
+        return min(1.0, max(0.0, score))
+
     def _apply_smart_filtering(
         self,
         pool: ResearchPool,
@@ -1382,11 +1463,21 @@ class IterativeExpansionEngine:
         """
         Apply smart filtering to reduce noise in expanded pool
 
+        Enhanced with legal quality metrics from a legal professional perspective:
+        - Hierarchy level (UU > PP > Perpres)
+        - Authority score
+        - Temporal relevance
+        - Domain confidence
+        - Legal richness
+
         Strategy:
         1. Keep all initial retrieval documents (high quality)
-        2. Filter expanded documents by semantic similarity to top-10 initial docs
-        3. Apply diversity filtering to prevent over-representation
-        4. Limit pool size to max_pool_size
+        2. Score expanded documents by:
+           - Semantic similarity (40%)
+           - Legal quality (40%)
+           - Expansion quality (20%)
+        3. Apply progressive filtering
+        4. Enforce hard limit
 
         Args:
             pool: Research pool with all documents
@@ -1399,15 +1490,27 @@ class IterativeExpansionEngine:
             self.logger.info("Pool size within limit, skipping smart filtering")
             return pool
 
-        self.logger.info(f"Applying smart filtering to pool of {len(pool)} documents")
+        self.logger.info(f"Applying legal-aware smart filtering to pool of {len(pool)} documents")
 
         # Safety: Track filtering start time
         filtering_start_time = time.time()
-        max_filtering_time = 60  # 1 minute max for filtering
+        max_filtering_time = self.filtering_config.get('timeout_seconds', 60)
 
         semantic_threshold = self.filtering_config.get('semantic_threshold', 0.60)
         max_pool_size = self.filtering_config.get('max_pool_size', 500)
-        diversity_weight = self.filtering_config.get('diversity_weight', 0.3)
+
+        # Extract primary domain from top initial docs for relevance filtering
+        primary_domains = []
+        for doc in initial_documents[:10]:
+            record = doc if 'record' not in doc else doc['record']
+            domain = record.get('kg_primary_domain', '').lower()
+            if domain and domain != 'unknown':
+                primary_domains.append(domain)
+
+        primary_domain = max(set(primary_domains), key=primary_domains.count) if primary_domains else None
+
+        if primary_domain:
+            self.logger.info(f"Primary legal domain detected: {primary_domain}")
 
         # Get top-10 initial documents (reference set for filtering)
         top_initial = sorted(
@@ -1456,7 +1559,7 @@ class IterativeExpansionEngine:
                 reg_key = f"{doc.get('regulation_type', 'UNK')}_{doc.get('regulation_number', 'UNK')}"
                 regulation_counts[reg_key] += 1
 
-        # Score and filter expanded documents
+        # Score and filter expanded documents with legal quality awareness
         expanded_docs_scored = []
 
         for doc_id, doc in pool.documents.items():
@@ -1466,10 +1569,9 @@ class IterativeExpansionEngine:
             if prov['source'] == 'initial_retrieval':
                 continue
 
-            # Calculate semantic similarity to top initial docs
+            # 1. SEMANTIC SIMILARITY (40% weight)
             doc_embedding = doc.get('embedding')
             if doc_embedding is None:
-                # No embedding, use expansion score only
                 similarity = 0.0
             else:
                 if isinstance(doc_embedding, list):
@@ -1482,13 +1584,16 @@ class IterativeExpansionEngine:
                     doc_embedding_normalized = doc_embedding / doc_norm
                     similarity = float(np.dot(avg_embedding_normalized, doc_embedding_normalized))
 
-            # Get expansion score (quality score from expansion strategy)
+            # 2. LEGAL QUALITY (40% weight) - Legal professional criteria
+            legal_quality = self._calculate_legal_quality(doc, primary_domain)
+
+            # 3. EXPANSION QUALITY (20% weight)
             expansion_score = prov.get('score', 0.0)
             if expansion_score is None:
                 expansion_score = 0.0
 
-            # Combined score: weighted average of similarity and expansion score
-            combined_score = (1 - diversity_weight) * similarity + diversity_weight * expansion_score
+            # Combined score: semantic (40%) + legal quality (40%) + expansion (20%)
+            combined_score = (0.4 * similarity) + (0.4 * legal_quality) + (0.2 * expansion_score)
 
             # Calculate diversity penalty
             reg_key = f"{doc.get('regulation_type', 'UNK')}_{doc.get('regulation_number', 'UNK')}"
@@ -1496,16 +1601,19 @@ class IterativeExpansionEngine:
 
             final_score = combined_score - diversity_penalty
 
-            expanded_docs_scored.append((doc, prov, similarity, final_score, reg_key))
+            expanded_docs_scored.append((doc, prov, similarity, legal_quality, final_score, reg_key))
 
-        # Sort by final score
-        expanded_docs_scored.sort(key=lambda x: x[3], reverse=True)
+        # Sort by final score (index 4)
+        expanded_docs_scored.sort(key=lambda x: x[4], reverse=True)
+
+        # Progressive filtering with legal quality threshold
+        min_legal_quality = 0.4  # Minimum acceptable legal quality
 
         # Add top expanded docs up to max_pool_size
         added_expanded = 0
         max_expanded = max_pool_size - len(filtered_pool)
 
-        for doc, prov, similarity, final_score, reg_key in expanded_docs_scored:
+        for doc, prov, similarity, legal_quality, final_score, reg_key in expanded_docs_scored:
             # Safety check: Timeout during filtering
             if time.time() - filtering_start_time > max_filtering_time:
                 self.logger.warning(f"Filtering timeout after {time.time() - filtering_start_time:.1f}s, stopping early")
@@ -1515,13 +1623,15 @@ class IterativeExpansionEngine:
             if added_expanded >= max_expanded:
                 break
 
-            # Relaxed semantic threshold for certain expansion types
-            # Temporal/hierarchical/topical get lower threshold (0.50) vs standard (0.60)
+            # QUALITY GATE 1: Minimum legal quality (reject low-quality documents)
+            if legal_quality < min_legal_quality:
+                continue
+
+            # QUALITY GATE 2: Semantic threshold (relaxed for certain expansion types)
             effective_threshold = semantic_threshold
             if prov['source'] in ['temporal_expansion', 'hierarchical_expansion', 'topical_expansion']:
-                effective_threshold = max(0.50, semantic_threshold - 0.10)
+                effective_threshold = max(0.45, semantic_threshold - 0.15)
 
-            # Check semantic threshold
             if similarity < effective_threshold:
                 continue
 
@@ -1537,8 +1647,17 @@ class IterativeExpansionEngine:
             regulation_counts[reg_key] += 1
             added_expanded += 1
 
-        self.logger.info(f"Smart filtering: Reduced pool from {len(pool)} to {len(filtered_pool)} docs "
-                        f"({len(filtered_pool) - len([p for p in pool.provenance.values() if p['source'] == 'initial_retrieval'])} expanded kept)")
+        # Calculate filtering statistics
+        initial_kept = len([p for p in filtered_pool.provenance.values() if p['source'] == 'initial_retrieval'])
+        expanded_kept = len(filtered_pool) - initial_kept
+        filtered_out = len(pool) - len(filtered_pool)
+        quality_rejected = sum(1 for _, _, _, lq, _, _ in expanded_docs_scored if lq < min_legal_quality)
+        semantic_rejected = len(expanded_docs_scored) - quality_rejected - expanded_kept
+
+        self.logger.info(f"Legal-aware filtering complete: {len(pool)} → {len(filtered_pool)} docs")
+        self.logger.info(f"  Initial docs kept: {initial_kept}")
+        self.logger.info(f"  Expanded docs kept: {expanded_kept}")
+        self.logger.info(f"  Filtered out: {filtered_out} (quality: {quality_rejected}, semantic: {semantic_rejected})")
 
         # Cleanup temporary objects to free CPU memory
         del top_embeddings, avg_embedding, avg_embedding_normalized
