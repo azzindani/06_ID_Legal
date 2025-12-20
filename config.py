@@ -15,10 +15,16 @@ try:
 except ImportError:
     pass
 
-from utils.logger_utils import get_logger
+# Lazy logger initialization to avoid circular import
+_logger = None
 
-# Initialize logger for config module
-logger = get_logger("Config")
+def _get_logger():
+    """Lazy logger initialization to avoid circular imports"""
+    global _logger
+    if _logger is None:
+        from utils.logger_utils import get_logger
+        _logger = get_logger("Config")
+    return _logger
 
 # =============================================================================
 # AUTO-DETECTION CONFIGURATION
@@ -28,14 +34,14 @@ logger = get_logger("Config")
 AUTO_DETECT_HARDWARE = os.getenv("AUTO_DETECT_HARDWARE", "true").lower() == "true"
 
 def _get_auto_config():
-    """Get auto-detected hardware configuration"""
+    """Get auto-detected hardware configuration (no logging to avoid circular import)"""
     if not AUTO_DETECT_HARDWARE:
         return {}
 
     try:
         from core.hardware_detection import detect_hardware
         config = detect_hardware()
-        logger.info(f"Auto-detected: VRAM={config.vram_available:.1f}GB, RAM={config.ram_available:.1f}GB")
+        # Note: No logging here to avoid circular import during module initialization
         return {
             'embedding_device': config.embedding_device,
             'reranker_device': config.reranker_device,
@@ -44,8 +50,8 @@ def _get_auto_config():
             'llm_load_in_8bit': config.llm_quantization == '8bit',
             'recommended_model': config.recommended_model,
         }
-    except Exception as e:
-        logger.debug(f"Hardware auto-detection skipped: {e}")
+    except Exception:
+        # Silent fail to avoid circular import during module initialization
         return {}
 
 # Get auto-detected settings (empty if disabled or unavailable)
@@ -734,7 +740,7 @@ Pedoman untuk jawaban akhir:
 
 def validate_config(config: Dict[str, Any]) -> Dict[str, Any]:
     """Validate configuration before use"""
-    logger.info("Starting configuration validation")
+    _get_logger().info("Starting configuration validation")
     
     issues = []
     warnings_list = []
@@ -743,30 +749,30 @@ def validate_config(config: Dict[str, Any]) -> Dict[str, Any]:
         # Basic settings validation
         if config.get('final_top_k', 0) < 1:
             issues.append("final_top_k must be >= 1")
-            logger.error("Invalid final_top_k", {"value": config.get('final_top_k')})
+            _get_logger().error("Invalid final_top_k", {"value": config.get('final_top_k')})
         
         if config.get('temperature', 0) < 0 or config.get('temperature', 2) > 2:
             issues.append("temperature must be between 0 and 2")
-            logger.error("Invalid temperature", {"value": config.get('temperature')})
+            _get_logger().error("Invalid temperature", {"value": config.get('temperature')})
         
         if config.get('max_new_tokens', 0) < 128:
             issues.append("max_new_tokens must be >= 128")
-            logger.error("Invalid max_new_tokens", {"value": config.get('max_new_tokens')})
+            _get_logger().error("Invalid max_new_tokens", {"value": config.get('max_new_tokens')})
         
         # Team settings validation
         if config.get('research_team_size', 0) < 1 or config.get('research_team_size', 0) > 5:
             issues.append("research_team_size must be between 1 and 5")
-            logger.error("Invalid research_team_size", {"value": config.get('research_team_size')})
+            _get_logger().error("Invalid research_team_size", {"value": config.get('research_team_size')})
         
         if config.get('consensus_threshold', 0) < 0.3 or config.get('consensus_threshold', 0) > 0.9:
             warnings_list.append("consensus_threshold outside recommended range (0.3-0.9)")
-            logger.warning("Consensus threshold outside range", {"value": config.get('consensus_threshold')})
+            _get_logger().warning("Consensus threshold outside range", {"value": config.get('consensus_threshold')})
         
         # Search phases validation
         search_phases = config.get('search_phases', {})
         if not search_phases:
             issues.append("search_phases configuration missing")
-            logger.error("Search phases missing")
+            _get_logger().error("Search phases missing")
         else:
             enabled_phases = 0
             for phase_name, phase_config in search_phases.items():
@@ -776,67 +782,67 @@ def validate_config(config: Dict[str, Any]) -> Dict[str, Any]:
                     candidates = phase_config.get('candidates', 0)
                     if candidates < 10:
                         issues.append(f"{phase_name}: candidates must be >= 10")
-                        logger.error(f"Invalid candidates in {phase_name}", {"candidates": candidates})
+                        _get_logger().error(f"Invalid candidates in {phase_name}", {"candidates": candidates})
                     elif candidates > 1000:
                         warnings_list.append(f"{phase_name}: high candidate count ({candidates}) may impact performance")
-                        logger.warning(f"High candidates in {phase_name}", {"candidates": candidates})
+                        _get_logger().warning(f"High candidates in {phase_name}", {"candidates": candidates})
                     
                     sem_threshold = phase_config.get('semantic_threshold', 0)
                     if sem_threshold < 0.1 or sem_threshold > 0.9:
                         warnings_list.append(f"{phase_name}: semantic_threshold outside normal range (0.1-0.9)")
-                        logger.warning(f"Semantic threshold outside range in {phase_name}", {"threshold": sem_threshold})
+                        _get_logger().warning(f"Semantic threshold outside range in {phase_name}", {"threshold": sem_threshold})
                     
                     key_threshold = phase_config.get('keyword_threshold', 0)
                     if key_threshold < 0.02 or key_threshold > 0.5:
                         warnings_list.append(f"{phase_name}: keyword_threshold outside normal range (0.02-0.5)")
-                        logger.warning(f"Keyword threshold outside range in {phase_name}", {"threshold": key_threshold})
+                        _get_logger().warning(f"Keyword threshold outside range in {phase_name}", {"threshold": key_threshold})
             
             if enabled_phases == 0:
                 issues.append("At least one search phase must be enabled")
-                logger.error("No search phases enabled")
+                _get_logger().error("No search phases enabled")
             else:
-                logger.info("Search phases validated", {"enabled_phases": enabled_phases})
+                _get_logger().info("Search phases validated", {"enabled_phases": enabled_phases})
         
         # LLM generation parameters validation
         if config.get('top_p', 1.0) < 0.1 or config.get('top_p', 1.0) > 1.0:
             issues.append("top_p must be between 0.1 and 1.0")
-            logger.error("Invalid top_p", {"value": config.get('top_p')})
+            _get_logger().error("Invalid top_p", {"value": config.get('top_p')})
         
         if config.get('top_k', 20) < 1 or config.get('top_k', 20) > 100:
             warnings_list.append("top_k outside recommended range (1-100)")
-            logger.warning("top_k outside range", {"value": config.get('top_k')})
+            _get_logger().warning("top_k outside range", {"value": config.get('top_k')})
         
         if config.get('min_p', 0.1) < 0.01 or config.get('min_p', 0.1) > 0.5:
             warnings_list.append("min_p outside recommended range (0.01-0.5)")
-            logger.warning("min_p outside range", {"value": config.get('min_p')})
+            _get_logger().warning("min_p outside range", {"value": config.get('min_p')})
         
         # Quality degradation parameters
         if config.get('initial_quality', 0.8) < 0.5 or config.get('initial_quality', 0.8) > 1.0:
             warnings_list.append("initial_quality outside recommended range (0.5-1.0)")
-            logger.warning("initial_quality outside range", {"value": config.get('initial_quality')})
+            _get_logger().warning("initial_quality outside range", {"value": config.get('initial_quality')})
         
         if config.get('quality_degradation', 0.15) < 0.05 or config.get('quality_degradation', 0.15) > 0.3:
             warnings_list.append("quality_degradation outside recommended range (0.05-0.3)")
-            logger.warning("quality_degradation outside range", {"value": config.get('quality_degradation')})
+            _get_logger().warning("quality_degradation outside range", {"value": config.get('quality_degradation')})
         
         if config.get('min_quality', 0.3) < 0.2 or config.get('min_quality', 0.3) > 0.5:
             warnings_list.append("min_quality outside recommended range (0.2-0.5)")
-            logger.warning("min_quality outside range", {"value": config.get('min_quality')})
+            _get_logger().warning("min_quality outside range", {"value": config.get('min_quality')})
         
         # Log final result
         if len(issues) == 0:
-            logger.success("Configuration validation passed", {
+            _get_logger().success("Configuration validation passed", {
                 "warnings": len(warnings_list)
             })
         else:
-            logger.error("Configuration validation failed", {
+            _get_logger().error("Configuration validation failed", {
                 "issues": len(issues),
                 "warnings": len(warnings_list)
             })
         
     except Exception as e:
         issues.append(f"Configuration validation error: {str(e)}")
-        logger.error("Validation exception", {
+        _get_logger().error("Validation exception", {
             "error": str(e),
             "error_type": type(e).__name__
         })
@@ -850,7 +856,7 @@ def validate_config(config: Dict[str, Any]) -> Dict[str, Any]:
 
 def apply_validated_config(config: Dict[str, Any]) -> Dict[str, Any]:
     """Apply configuration after validation"""
-    logger.info("Applying validated configuration")
+    _get_logger().info("Applying validated configuration")
     
     validation_result = validate_config(config)
     
@@ -861,15 +867,15 @@ def apply_validated_config(config: Dict[str, Any]) -> Dict[str, Any]:
             error_msg += "\n\nWarnings:\n"
             error_msg += "\n".join([f"! {warning}" for warning in validation_result['warnings']])
         
-        logger.error("Config application failed due to validation errors")
+        _get_logger().error("Config application failed due to validation errors")
         raise ValueError(error_msg)
     
     if validation_result['warnings']:
         for warning in validation_result['warnings']:
             warnings.warn(f"! {warning}")
-            logger.warning(warning)
+            _get_logger().warning(warning)
     
-    logger.success("Configuration applied successfully")
+    _get_logger().success("Configuration applied successfully")
     return config
 
 
@@ -887,9 +893,9 @@ def save_config(config: Dict[str, Any], filepath: str = "config_runtime.json"):
     try:
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(config, f, indent=2, ensure_ascii=False)
-        logger.success(f"Configuration saved to {filepath}")
+        _get_logger().success(f"Configuration saved to {filepath}")
     except Exception as e:
-        logger.error(f"Failed to save configuration: {e}")
+        _get_logger().error(f"Failed to save configuration: {e}")
 
 
 def load_config_from_file(filepath: str = "config_runtime.json") -> Dict[str, Any]:
@@ -898,10 +904,10 @@ def load_config_from_file(filepath: str = "config_runtime.json") -> Dict[str, An
     try:
         with open(filepath, 'r', encoding='utf-8') as f:
             config = json.load(f)
-        logger.success(f"Configuration loaded from {filepath}")
+        _get_logger().success(f"Configuration loaded from {filepath}")
         return apply_validated_config(config)
     except Exception as e:
-        logger.error(f"Failed to load configuration: {e}")
+        _get_logger().error(f"Failed to load configuration: {e}")
         return get_default_config()
 
 def print_threshold_progression():
