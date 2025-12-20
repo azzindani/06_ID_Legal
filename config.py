@@ -336,7 +336,10 @@ DEFAULT_EXPANSION_CONFIG = {
         'enabled': True,                 # ✅ ENABLED - Critical for legal hierarchy
         'expand_up': True,               # Find parent regulations (PP → UU)
         'expand_down': True,             # Find implementing regulations (UU → PP)
-        'max_hierarchy_distance': 2      # Max levels up/down (1=direct, 2=grandparent)
+        'max_hierarchy_distance': 1,     # Max levels up/down (1=direct parent/child only)
+        'max_docs_per_level': 15,        # Maximum documents per hierarchy level
+        'year_range': 5,                 # Only include regulations within ±5 years
+        'conservative_in_conversation': True  # Use stricter limits in conversational mode
     },
 
     # Strategy 8: Topical Expansion (Phase 7) - Legal domain/topic clustering
@@ -350,8 +353,17 @@ DEFAULT_EXPANSION_CONFIG = {
     'smart_filtering': {
         'enabled': True,                 # ✅ ENABLED - Filter expanded pool before reranking
         'semantic_threshold': 0.60,      # Min similarity to top-10 initial docs
-        'max_pool_size': 500,            # Maximum docs after filtering (down from 1000+)
-        'diversity_weight': 0.3          # Balance between relevance (0.7) and diversity (0.3)
+        'max_pool_size': 500,            # Maximum docs after filtering (hard limit)
+        'diversity_weight': 0.3,         # Balance between relevance (0.7) and diversity (0.3)
+        'timeout_seconds': 60            # Max time for filtering (prevent hangs)
+    },
+
+    # Conversational Mode Detection - Conservative expansion for multi-turn conversations
+    'conversational_mode': {
+        'enabled': True,                 # ✅ ENABLED - Detect and adapt to conversations
+        'conservative_expansion': True,  # Use stricter limits in conversations
+        'max_expansion_rounds': 1,       # Reduce rounds in conversations (vs 2 for single)
+        'max_pool_multiplier': 0.5       # Halve pool sizes in conversations
     }
 }
 

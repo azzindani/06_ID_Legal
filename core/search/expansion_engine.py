@@ -138,6 +138,14 @@ class IterativeExpansionEngine:
             'diversity_weight': 0.3  # Balance relevance vs diversity
         })
 
+        # Conversational mode config
+        self.conversational_config = config.get('conversational_mode', {
+            'enabled': True,
+            'conservative_expansion': True,
+            'max_expansion_rounds': 1,
+            'max_pool_multiplier': 0.5
+        })
+
         self.logger.info(f"ExpansionEngine initialized (enabled={self.enabled}, max_rounds={self.max_rounds}, "
                         f"metadata={self.metadata_config.get('enabled')}, "
                         f"kg={self.kg_config.get('enabled')}, "
@@ -146,7 +154,56 @@ class IterativeExpansionEngine:
                         f"hybrid={self.hybrid_config.get('enabled')}, "
                         f"temporal={self.temporal_config.get('enabled')}, "
                         f"hierarchical={self.hierarchical_config.get('enabled')}, "
-                        f"topical={self.topical_config.get('enabled')})")
+                        f"topical={self.topical_config.get('enabled')}, "
+                        f"conversational={self.conversational_config.get('enabled')})")
+
+    def _detect_conversational_mode(self, query: str, initial_documents: List[Dict[str, Any]]) -> bool:
+        """
+        Detect if this is a conversational query (follow-up question)
+
+        Indicators:
+        - Short query length (< 50 chars suggests follow-up)
+        - Pronouns/references (tersebut, ini, itu, dia)
+        - Follow-up indicators (lalu, kemudian, terus, dan, bagaimana)
+        - Few initial documents (< 20 suggests narrow/specific query)
+
+        Args:
+            query: User query
+            initial_documents: Initial retrieval results
+
+        Returns:
+            True if conversational mode detected
+        """
+        if not self.conversational_config.get('enabled', True):
+            return False
+
+        query_lower = query.lower()
+
+        # Check for conversational indicators
+        conversational_indicators = [
+            'tersebut', 'ini', 'itu', 'dia', 'mereka',  # Pronouns
+            'lalu', 'kemudian', 'terus', 'selanjutnya',  # Follow-up
+            'bagaimana dengan', 'apa yang', 'apakah',  # Questions
+            'dan', 'serta', 'juga'  # Conjunctions
+        ]
+
+        has_indicators = sum(1 for ind in conversational_indicators if ind in query_lower)
+
+        # Conversational if:
+        # 1. Short query (< 50 chars) AND has indicators
+        # 2. Multiple indicators (>= 2)
+        # 3. Very few initial results (< 15)
+        is_conversational = (
+            (len(query) < 50 and has_indicators >= 1) or
+            has_indicators >= 2 or
+            len(initial_documents) < 15
+        )
+
+        if is_conversational:
+            self.logger.info(f"Conversational mode detected (query_len={len(query)}, "
+                           f"indicators={has_indicators}, init_docs={len(initial_documents)})")
+
+        return is_conversational
 
     def expand(
         self,
@@ -170,6 +227,27 @@ class IterativeExpansionEngine:
                 pool.add(doc, source='initial_retrieval', round_num=0,
                         score=doc.get('scores', {}).get('final', 0.0))
             return pool
+
+        # Detect conversational mode and adjust settings
+        is_conversational = self._detect_conversational_mode(query, initial_documents)
+        self._is_conversational_mode = is_conversational  # Store for use in expansion strategies
+
+        if is_conversational and self.conversational_config.get('conservative_expansion', True):
+            # Use conservative settings for conversational mode
+            original_max_rounds = self.max_rounds
+            original_max_pool_size = self.max_pool_size
+            original_filtering_max = self.filtering_config.get('max_pool_size', 500)
+
+            # Reduce rounds and pool sizes
+            self.max_rounds = min(self.max_rounds, self.conversational_config.get('max_expansion_rounds', 1))
+            pool_multiplier = self.conversational_config.get('max_pool_multiplier', 0.5)
+            self.max_pool_size = int(self.max_pool_size * pool_multiplier)
+            self.filtering_config['max_pool_size'] = int(original_filtering_max * pool_multiplier)
+
+            self.logger.info(f"Conversational mode: Conservative expansion enabled "
+                           f"(rounds: {original_max_rounds}→{self.max_rounds}, "
+                           f"pool: {original_max_pool_size}→{self.max_pool_size}, "
+                           f"filter: {original_filtering_max}→{self.filtering_config['max_pool_size']})")
 
         self.logger.info(f"Starting expansion with {len(initial_documents)} seed documents")
 
@@ -1172,9 +1250,26 @@ class IterativeExpansionEngine:
 
         expand_up = self.hierarchical_config.get('expand_up', True)
         expand_down = self.hierarchical_config.get('expand_down', True)
-        max_distance = self.hierarchical_config.get('max_hierarchy_distance', 2)
+        max_distance = self.hierarchical_config.get('max_hierarchy_distance', 1)
+        max_docs_per_level = self.hierarchical_config.get('max_docs_per_level', 15)
+        year_range = self.hierarchical_config.get('year_range', 5)
 
-        self.logger.debug(f"Hierarchical expansion for level {seed_hierarchy_level} ({seed_reg_type})")
+        # Apply even stricter limits if conversational mode is active
+        if self.hierarchical_config.get('conservative_in_conversation', True):
+            if hasattr(self, '_is_conversational_mode') and self._is_conversational_mode:
+                max_docs_per_level = max(5, max_docs_per_level // 2)
+                year_range = max(3, year_range - 2)
+                self.logger.debug(f"Conversational mode: Using stricter hierarchical limits "
+                               f"(docs_per_level={max_docs_per_level}, year_range=±{year_range})")
+
+        self.logger.debug(f"Hierarchical expansion for level {seed_hierarchy_level} ({seed_reg_type}), "
+                         f"max_distance={max_distance}, max_per_level={max_docs_per_level}, year_range=±{year_range}")
+
+        # Track documents added per hierarchy level
+        level_counts = defaultdict(int)
+
+        # Collect candidates with scores
+        candidates = []
 
         # Find hierarchically related documents
         for doc in self.data_loader.all_records:
@@ -1185,6 +1280,7 @@ class IterativeExpansionEngine:
 
             doc_hierarchy_level = doc.get('kg_hierarchy_level')
             doc_reg_type = doc.get('regulation_type')
+            doc_year = doc.get('year')
 
             if not doc_hierarchy_level:
                 doc_hierarchy_level = self._infer_hierarchy_level(doc_reg_type)
@@ -1199,51 +1295,51 @@ class IterativeExpansionEngine:
             if abs(level_diff) > max_distance:
                 continue
 
+            # Year proximity check (apply to both UP and DOWN)
+            if seed_year and doc_year:
+                try:
+                    year_diff = abs(int(doc_year) - int(seed_year))
+                    if year_diff > year_range:
+                        continue
+                except (ValueError, TypeError):
+                    # Skip if year parsing fails
+                    continue
+
             # Expand UP: Find parent regulations (lower level number = higher in hierarchy)
             if expand_up and level_diff < 0:
                 # This is a parent regulation
                 hierarchy_score = 0.6 + (0.1 * (max_distance - abs(level_diff)))
-
-                added = pool.add(
-                    doc,
-                    source='hierarchical_expansion',
-                    seed_id=self._get_doc_id(seed_doc),
-                    round_num=round_num,
-                    score=hierarchy_score
-                )
-
-                if added:
-                    added_count += 1
+                candidates.append((doc, doc_hierarchy_level, hierarchy_score, 'up'))
 
             # Expand DOWN: Find implementing regulations (higher level number = lower in hierarchy)
             elif expand_down and level_diff > 0:
                 # This is an implementing regulation
-                # Check if it might be implementing this specific regulation
-                # (heuristic: same topic, similar year range)
-
-                # Year proximity check
-                if seed_year and doc.get('year'):
-                    try:
-                        year_diff = abs(int(doc.get('year')) - int(seed_year))
-                        if year_diff > 10:  # Only expand to regs within 10 years
-                            continue
-                    except (ValueError, TypeError):
-                        pass
-
                 hierarchy_score = 0.5 + (0.1 * (max_distance - abs(level_diff)))
+                candidates.append((doc, doc_hierarchy_level, hierarchy_score, 'down'))
 
-                added = pool.add(
-                    doc,
-                    source='hierarchical_expansion',
-                    seed_id=self._get_doc_id(seed_doc),
-                    round_num=round_num,
-                    score=hierarchy_score
-                )
+        # Sort candidates by score (highest first)
+        candidates.sort(key=lambda x: x[2], reverse=True)
 
-                if added:
-                    added_count += 1
+        # Add candidates respecting per-level limits
+        for doc, doc_level, hierarchy_score, direction in candidates:
+            # Check per-level limit
+            if level_counts[doc_level] >= max_docs_per_level:
+                continue
 
-        self.logger.debug(f"Hierarchical expansion: Added {added_count} hierarchically related docs")
+            added = pool.add(
+                doc,
+                source='hierarchical_expansion',
+                seed_id=self._get_doc_id(seed_doc),
+                round_num=round_num,
+                score=hierarchy_score
+            )
+
+            if added:
+                added_count += 1
+                level_counts[doc_level] += 1
+
+        self.logger.debug(f"Hierarchical expansion: Added {added_count} hierarchically related docs "
+                         f"(levels: {dict(level_counts)})")
 
         return added_count
 
@@ -1415,8 +1511,18 @@ class IterativeExpansionEngine:
                 self.logger.warning(f"Filtering timeout after {time.time() - filtering_start_time:.1f}s, stopping early")
                 break
 
-            # Check semantic threshold (only for semantic filtering)
-            if similarity < semantic_threshold and prov['source'] not in ['temporal_expansion', 'hierarchical_expansion', 'topical_expansion']:
+            # HARD LIMIT: Stop at max pool size
+            if added_expanded >= max_expanded:
+                break
+
+            # Relaxed semantic threshold for certain expansion types
+            # Temporal/hierarchical/topical get lower threshold (0.50) vs standard (0.60)
+            effective_threshold = semantic_threshold
+            if prov['source'] in ['temporal_expansion', 'hierarchical_expansion', 'topical_expansion']:
+                effective_threshold = max(0.50, semantic_threshold - 0.10)
+
+            # Check semantic threshold
+            if similarity < effective_threshold:
                 continue
 
             # Add to filtered pool
@@ -1430,9 +1536,6 @@ class IterativeExpansionEngine:
 
             regulation_counts[reg_key] += 1
             added_expanded += 1
-
-            if added_expanded >= max_expanded:
-                break
 
         self.logger.info(f"Smart filtering: Reduced pool from {len(pool)} to {len(filtered_pool)} docs "
                         f"({len(filtered_pool) - len([p for p in pool.provenance.values() if p['source'] == 'initial_retrieval'])} expanded kept)")

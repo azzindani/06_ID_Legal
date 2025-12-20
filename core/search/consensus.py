@@ -36,11 +36,13 @@ class ConsensusBuilder:
         """
         FIXED: Build consensus with more lenient filtering
         """
+        total_results_count = len(research_data.get('all_results', []))
+
         self.logger.info("Building consensus", {
-            "total_results": len(research_data.get('all_results', [])),
+            "total_results": total_results_count,
             "team_size": len(team_composition)
         })
-        
+
         consensus_data = {
             'validated_results': [],
             'consensus_scores': {},
@@ -49,15 +51,40 @@ class ConsensusBuilder:
             'devil_advocate_flags': [],
             'cross_validation_passed': []
         }
-        
+
         # Group results by document (global_id)
         results_by_doc = defaultdict(list)
         for result in research_data.get('all_results', []):
             global_id = result['record']['global_id']
             results_by_doc[global_id].append(result)
-        
+
+        unique_docs = len(results_by_doc)
+
+        # Adaptive threshold based on pool size
+        # Large pools (>1000 unique docs) suggest aggressive expansion - lower threshold
+        adaptive_threshold = self.consensus_threshold
+        original_threshold = self.consensus_threshold
+
+        if unique_docs > 10000:
+            adaptive_threshold = max(0.25, self.consensus_threshold * 0.4)
+            self.logger.warning(f"Very large pool detected ({unique_docs} docs), "
+                              f"lowering threshold: {original_threshold:.0%} → {adaptive_threshold:.0%}")
+        elif unique_docs > 5000:
+            adaptive_threshold = max(0.30, self.consensus_threshold * 0.5)
+            self.logger.info(f"Large pool detected ({unique_docs} docs), "
+                           f"lowering threshold: {original_threshold:.0%} → {adaptive_threshold:.0%}")
+        elif unique_docs > 1000:
+            adaptive_threshold = max(0.40, self.consensus_threshold * 0.7)
+            self.logger.info(f"Moderate pool detected ({unique_docs} docs), "
+                           f"lowering threshold: {original_threshold:.0%} → {adaptive_threshold:.0%}")
+
+        # Temporarily override consensus threshold
+        original_consensus_threshold = self.consensus_threshold
+        self.consensus_threshold = adaptive_threshold
+
         self.logger.debug("Results grouped by document", {
-            "unique_documents": len(results_by_doc)
+            "unique_documents": unique_docs,
+            "active_threshold": f"{self.consensus_threshold:.0%}"
         })
         
         # FIXED: Track filtering statistics
@@ -188,13 +215,17 @@ class ConsensusBuilder:
             team_composition
         )
         
+        # Restore original threshold
+        self.consensus_threshold = original_consensus_threshold
+
         self.logger.success("Consensus building completed", {
             "validated_results": len(consensus_data['validated_results']),
             "agreement_level": f"{consensus_data['agreement_level']:.2%}",
             "cross_validation_passed": len(consensus_data['cross_validation_passed']),
-            "devil_advocate_flags": len(consensus_data['devil_advocate_flags'])
+            "devil_advocate_flags": len(consensus_data['devil_advocate_flags']),
+            "adaptive_threshold_used": adaptive_threshold != original_threshold
         })
-        
+
         return consensus_data
     
     def _log_consensus_debug(self, results_by_doc: Dict, team_composition: List[str]):

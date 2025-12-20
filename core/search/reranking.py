@@ -59,7 +59,7 @@ class RerankerEngine:
             "candidates": len(consensus_results),
             "target_top_k": top_k
         })
-        
+
         if not consensus_results:
             self.logger.warning("No results to rerank")
             return {
@@ -69,6 +69,23 @@ class RerankerEngine:
                     'reranked_count': 0
                 }
             }
+
+        # SAFETY: Limit reranker input to prevent OOM and timeout
+        max_rerank_candidates = 1000  # Hard limit for reranker
+        original_count = len(consensus_results)
+
+        if len(consensus_results) > max_rerank_candidates:
+            self.logger.warning(f"Too many candidates ({len(consensus_results)}), "
+                              f"pre-filtering to top {max_rerank_candidates} by consensus score")
+
+            # Sort by consensus score and take top-N
+            consensus_results = sorted(
+                consensus_results,
+                key=lambda x: x.get('consensus_score', x.get('aggregated_scores', {}).get('final', 0.0)),
+                reverse=True
+            )[:max_rerank_candidates]
+
+            self.logger.info(f"Reduced candidates: {original_count} → {len(consensus_results)}")
         
         # Prepare candidates for reranking
         candidates = []
@@ -152,16 +169,41 @@ class RerankerEngine:
             # Prepare pairs for reranking
             pairs = [[query, candidate['text']] for candidate in candidates]
 
+            # Adjust batch size based on candidate count
+            # For large candidate sets, use smaller batches to avoid OOM
+            adaptive_batch_size = self.batch_size
+            if len(pairs) > 500:
+                adaptive_batch_size = max(1, self.batch_size // 2)
+            elif len(pairs) > 200:
+                adaptive_batch_size = max(2, int(self.batch_size * 0.75))
+
             self.logger.debug("Reranking with model", {
                 "pairs": len(pairs),
-                "batch_size": self.batch_size
+                "batch_size": adaptive_batch_size,
+                "original_batch_size": self.batch_size
             })
 
             # Process in batches to avoid CUDA OOM
             all_scores = []
+            use_individual_fallback = False  # Track if we need to switch to individual processing
+
             with torch.no_grad():
-                for i in range(0, len(pairs), self.batch_size):
-                    batch = pairs[i:i + self.batch_size]
+                for i in range(0, len(pairs), adaptive_batch_size):
+                    batch = pairs[i:i + adaptive_batch_size]
+
+                    # If we've already switched to individual processing, continue with it
+                    if use_individual_fallback:
+                        for pair in batch:
+                            try:
+                                score = self.reranker_model.compute_score([pair], normalize=True)
+                                if isinstance(score, (list, tuple)):
+                                    score = score[0]
+                                all_scores.append(float(score))
+                            except Exception as e:
+                                self.logger.warning(f"Individual scoring failed: {e}")
+                                all_scores.append(0.5)  # Default score
+                        continue
+
                     try:
                         batch_scores = self.reranker_model.compute_score(
                             batch,
@@ -174,7 +216,10 @@ class RerankerEngine:
                     except ValueError as ve:
                         # Fallback: process items one by one if batch fails (padding issue)
                         if "padding token" in str(ve).lower() or "batch size" in str(ve).lower():
-                            self.logger.warning(f"Batch processing failed, falling back to individual processing: {ve}")
+                            self.logger.warning(f"Batch processing failed, switching to individual processing: {ve}")
+                            use_individual_fallback = True  # Switch to individual for remaining batches
+
+                            # Process current batch individually
                             for pair in batch:
                                 try:
                                     score = self.reranker_model.compute_score([pair], normalize=True)
