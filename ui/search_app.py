@@ -226,13 +226,19 @@ def format_document_card(doc: Dict, index: int) -> str:
     content = record.get('content', '')
     content_preview = content[:400] + "..." if len(content) > 400 else content
 
+    # Location & Date
+    chapter = record.get('chapter', record.get('bab', ''))
+    article = record.get('article', record.get('pasal', '')) or record.get('article_number', '')
+    location = " | ".join(filter(None, [chapter, article])) or "Dokumen Lengkap"
+    eff_date = record.get('effective_date', record.get('tanggal_penetapan', 'N/A'))
+
     # Build card
     card = f"""
 ### 📄 {index}. {reg_type} No. {reg_num}/{year}
 
+**Lokasi:** {location}
+**Tgl Penetapan:** {eff_date}
 **Tentang:** {about}
-
-**Ditetapkan oleh:** {enacting_body}
 
 ---
 
@@ -247,6 +253,7 @@ def format_document_card(doc: Dict, index: int) -> str:
 | Authority | {authority_score:.4f} |
 | Temporal | {temporal_score:.4f} |
 | Completeness | {completeness_score:.4f} |
+
 
 """
 
@@ -330,18 +337,21 @@ def get_docs_dataframe_data(result: Dict) -> pd.DataFrame:
         record = doc.get('record', doc)
         scores = doc.get('scores', {})
         
+        chapter = record.get('chapter', record.get('bab', ''))
+        article = record.get('article', record.get('pasal', '')) or record.get('article_number', '')
+        location = " | ".join(filter(None, [chapter, article])) or "Lengkap"
+        
         rows.append({
             "No": i,
             "Jenis": record.get('regulation_type', ''),
             "Nomor": record.get('regulation_number', ''),
             "Tahun": record.get('year', ''),
+            "Lokasi": location,
+            "Tgl Penetapan": record.get('effective_date', record.get('tanggal_penetapan', 'N/A')),
             "Tentang": record.get('about', ''),
             "Skor Final": f"{scores.get('final', doc.get('final_score', 0)):.4f}",
-            "Semantic": f"{scores.get('semantic', 0):.4f}",
-            "Keyword": f"{scores.get('keyword', 0):.4f}",
-            "KG": f"{scores.get('kg', 0):.4f}",
             "Bidang": record.get('kg_primary_domain', ''),
-            "Fase": doc.get('_phase', '').replace('_', ' ').title()
+            "Konten": record.get('content', '')[:150] + "..." if record.get('content') else ""
         })
         
     return pd.DataFrame(rows)
@@ -406,15 +416,15 @@ def format_summary(result: Dict) -> str:
     output.append(f"**Query:** `{query_text}`\n")
     output.append(f"**Tipe Analisis:** {query_type.title()}\n\n")
 
-    # Result Overview
-    all_docs = _extract_all_documents_from_metadata(result)
+    # Result Overview - Use final_results as primary source for 'Summary'
+    # This ensures it respects the top_k limit correctly
+    final_results = result.get('final_results', [])
     
-    if all_docs:
-        # Show all results in summary (capped by pipeline's top_k)
-        show_count = len(all_docs)
+    if final_results:
+        show_count = len(final_results)
         output.append(f"### ⭐ Hasil Relevan ({show_count} dokumen)\n\n")
         
-        for i, doc in enumerate(all_docs, 1):
+        for i, doc in enumerate(final_results, 1):
             record = doc.get('record', doc)
             
             # Extract metadata
@@ -458,7 +468,7 @@ def format_summary(result: Dict) -> str:
     # Statistics
     output.append("---\n\n")
     output.append("### 📊 Statistik Sistem\n\n")
-    output.append(f"- **Dokumen Dievaluasi:** {len(all_docs)}\n")
+    output.append(f"- **Dokumen Dievaluasi:** {len(_extract_all_documents_from_metadata(result))}\n")
     output.append(f"- **Tingkat Konsensus:** {result.get('consensus_data', {}).get('agreement_level', 0):.0%}\n")
 
     total_time = metadata.get('total_time', metadata.get('processing_time', 0))
@@ -881,8 +891,8 @@ def create_search_demo():
                         with gr.Tabs():
                             with gr.TabItem("📊 Tabel Ikhtisar"):
                                 docs_df_output = gr.Dataframe(
-                                    headers=["No", "Jenis", "Nomor", "Tahun", "Tentang", "Skor Final", "Bidang"],
-                                    datatype=["number", "str", "str", "str", "str", "str", "str"],
+                                    headers=["No", "Jenis", "Nomor", "Tahun", "Lokasi", "Tgl Penetapan", "Tentang", "Skor Final", "Bidang", "Konten"],
+                                    datatype=["number", "str", "str", "str", "str", "str", "str", "str", "str", "str"],
                                     interactive=False,
                                     wrap=True
                                 )

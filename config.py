@@ -392,7 +392,7 @@ DEFAULT_CONFIG = {
     'min_p': float(os.getenv("MIN_P", "0.1")),
     'enable_cross_validation': os.getenv("ENABLE_CROSS_VALIDATION", "true").lower() == "true",
     'enable_devil_advocate': os.getenv("ENABLE_DEVIL_ADVOCATE", "true").lower() == "true",
-    'consensus_threshold': float(os.getenv("CONSENSUS_THRESHOLD", "0.6")),
+    'consensus_threshold': float(os.getenv("CONSENSUS_THRESHOLD", "0.4")),
     'thinking_mode': DEFAULT_THINKING_MODE,
     'enable_thinking_pipeline': ENABLE_THINKING_PIPELINE,
     'batch_size': BATCH_SIZE,
