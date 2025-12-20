@@ -816,13 +816,10 @@ def launch_search_app(share: bool = False, server_port: int = 7861):
     if pipeline is None:
         logger.info("Initializing RAG pipeline for retrieval only (no LLM loaded)")
         # Initialize with minimal config - retrieval components only
-        pipeline = RAGPipeline({
-            'llm_provider': 'none',  # Don't load LLM
-            'skip_llm': True  # Skip LLM initialization if supported
-        })
+        pipeline = RAGPipeline()
         
-        # Initialize only retrieval components
-        if not pipeline.initialize_retrieval_only() if hasattr(pipeline, 'initialize_retrieval_only') else pipeline.initialize():
+        # Use retrieval-only initialization (skips LLM loading)
+        if not pipeline.initialize_retrieval_only():
             logger.error("Failed to initialize pipeline")
             raise RuntimeError("Pipeline initialization failed")
         logger.info("Pipeline initialized successfully (retrieval components only)")
