@@ -319,6 +319,18 @@ class LangGraphRAGOrchestrator:
                 # Update rerank_data to reflect trimmed results
                 rerank_data['reranked_results'] = final_results
                 rerank_data['metadata']['reranked_count'] = len(final_results)
+            # FIXED: Validate and warn if we got fewer than expected
+            elif len(final_results) < expected_top_k:
+                self.logger.error(
+                    f"Pipeline returned {len(final_results)}/{expected_top_k} documents - "
+                    f"consensus may be too strict"
+                )
+                self.logger.info(
+                    "RECOMMENDATION: Lower consensus_threshold in config "
+                    "(current: {:.2f}) or check if search is finding relevant results".format(
+                        self.config.get('consensus_threshold', 0.6)
+                    )
+                )
 
             self.logger.success("Reranking completed", {
                 "final_count": len(final_results),

@@ -119,6 +119,9 @@ class ConsensusBuilder:
 
             # FALLBACK: Try progressively lower thresholds
             fallback_thresholds = [0.5, 0.4, 0.3, 0.25, 0.0]
+            
+            # FIXED: Use final_top_k from config instead of hard-coded 3
+            required_docs = self.config.get('final_top_k', 3)
 
             for fallback_threshold in fallback_thresholds:
                 self.logger.info(f"Trying fallback threshold: {fallback_threshold:.0%}")
@@ -178,15 +181,45 @@ class ConsensusBuilder:
                         consensus_data['validated_results'].append(consensus_result)
                         consensus_data['consensus_scores'][global_id] = consensus_score
 
-                # Stop if we have enough results
-                if len(consensus_data['validated_results']) >= 3:
+                # FIXED: Stop if we have enough results (use config value, not hard-coded 3)
+                if len(consensus_data['validated_results']) >= required_docs:
                     self.logger.info(f"Fallback succeeded with threshold {fallback_threshold:.0%}", {
-                        "results": len(consensus_data['validated_results'])
+                        "results": len(consensus_data['validated_results']),
+                        "required": required_docs
                     })
                     break
 
+            # FIXED: Last resort - if still no results, take top-N by score
             if len(consensus_data['validated_results']) == 0:
                 self.logger.error("FALLBACK FAILED - No results even with 0% threshold!")
+                self.logger.warning(f"LAST RESORT: Taking top {required_docs} documents by raw score")
+                
+                # Collect all unique documents with their best scores
+                all_docs_scores = []
+                for global_id, doc_results in results_by_doc.items():
+                    best_result = max(doc_results, key=lambda x: x['scores']['final'])
+                    all_docs_scores.append({
+                        'global_id': global_id,
+                        'record': best_result['record'],
+                        'consensus_score': best_result['scores']['final'],
+                        'voting_ratio': 0.0,
+                        'personas_agreed': [best_result['metadata'].get('persona', 'unknown')],
+                        'aggregated_scores': best_result['scores'],
+                        'score_variance': 0.0,
+                        'metadata': best_result['metadata'],
+                        'fallback_applied': True,
+                        'fallback_threshold': -1.0,  # Indicate emergency fallback
+                        'emergency_fallback': True
+                    })
+                
+                # Sort by score and take top-N
+                all_docs_scores.sort(key=lambda x: x['consensus_score'], reverse=True)
+                consensus_data['validated_results'] = all_docs_scores[:required_docs]
+                
+                for result in consensus_data['validated_results']:
+                    consensus_data['consensus_scores'][result['global_id']] = result['consensus_score']
+                
+                self.logger.warning(f"Emergency fallback: Added {len(consensus_data['validated_results'])} documents")
 
         # Sort by consensus score
         consensus_data['validated_results'].sort(
