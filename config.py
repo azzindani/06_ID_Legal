@@ -409,8 +409,8 @@ DEFAULT_CONFIG = {
 DEFAULT_SEARCH_PHASES = {
     'initial_scan': {
         'candidates': 400,
-        'semantic_threshold': 0.25,  # ↑ from 0.20 - stricter initial filtering
-        'keyword_threshold': 0.10,   # ↑ from 0.06 - require keyword relevance
+        'semantic_threshold': 0.15,  # ↓ from 0.25 - more permissive to capture relevant docs
+        'keyword_threshold': 0.05,   # ↓ from 0.10 - more permissive for keyword matching
         'description': 'Quick broad scan like human initial reading',
         'time_limit': 30,
         'focus_areas': ['regulation_type', 'enacting_body'],

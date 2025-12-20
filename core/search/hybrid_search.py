@@ -21,6 +21,14 @@ from config import RESEARCH_TEAM_PERSONAS, KG_WEIGHTS
 from .faiss_index_manager import FAISSIndexManager, choose_optimal_index_config, FAISS_AVAILABLE
 from .query_cache import QueryResultCache
 
+# PHASE 2 FIX: Try to import BM25 (optional dependency)
+try:
+    from rank_bm25 import BM25Okapi
+    BM25_AVAILABLE = True
+except ImportError:
+    BM25_AVAILABLE = False
+    BM25Okapi = None
+
 
 class HybridSearchEngine:
     """
@@ -96,11 +104,20 @@ class HybridSearchEngine:
             ttl_seconds=cache_ttl_seconds,
             enabled=use_cache
         )
+        
+        # PHASE 2 FIX: BM25 index for better keyword search
+        self.use_bm25 = BM25_AVAILABLE
+        self.bm25_index = None
+        if self.use_bm25:
+            self._initialize_bm25_index()
+        elif not BM25_AVAILABLE:
+            self.logger.warning("BM25 not available - install with: pip install rank-bm25")
 
         self.logger.info("HybridSearchEngine initialized", {
             "device": str(self.device),
             "use_faiss": self.use_faiss,
             "faiss_available": FAISS_AVAILABLE,
+            "use_bm25": self.use_bm25,
             "cache_enabled": use_cache,
             "cache_size": cache_size
         })
@@ -169,6 +186,35 @@ class HybridSearchEngine:
         except Exception as e:
             self.logger.error(f"Failed to initialize FAISS index: {e}")
             self.use_faiss = False
+    
+    def _initialize_bm25_index(self):
+        """
+        PHASE 2 FIX: Initialize BM25 index for better keyword search
+        BM25 handles term frequency and document length better than TF-IDF
+        """
+        try:
+            if BM25Okapi is None:
+                self.use_bm25 = False
+                return
+            
+            self.logger.info("Building BM25 index...")
+            
+            # Tokenize all documents (simple Indonesian tokenization)
+            tokenized_docs = []
+            for record in self.data_loader.all_records:
+                # Combine searchable text fields
+                text = f"{record.get('about', '')} {record.get('content', '')} {record.get('regulation_type', '')} {record.get('chapter', '')} {record.get('article', '')}".lower()
+                # Simple tokenization (split by whitespace)
+                tokens = text.split()
+                tokenized_docs.append(tokens)
+            
+            self.bm25_index = BM25Okapi(tokenized_docs)
+            
+            self.logger.info(f"BM25 index built with {len(tokenized_docs)} documents")
+            
+        except Exception as e:
+            self.logger.error(f"BM25 initialization failed: {e}")
+            self.use_bm25 = False
     
     def search_with_persona(
         self,
@@ -467,6 +513,11 @@ class HybridSearchEngine:
             accuracy_bonus = persona.get('accuracy_bonus', 0.0)
             final_score *= (1.0 + accuracy_bonus)
             
+            # PHASE 1 FIX: Add topic relevance boost
+            # Boost documents whose topic matches query keywords
+            topic_boost = self._calculate_topic_relevance_boost(record, query)
+            final_score = min(1.0, final_score + topic_boost)
+            
             # Ensure score is in valid range
             final_score = max(0.0, min(1.0, final_score))
             
@@ -604,6 +655,42 @@ class HybridSearchEngine:
             self.logger.error("Keyword search error", {"error": str(e)})
             return np.zeros(0), np.array([], dtype=np.int64)
     
+    def _keyword_search_bm25(self, query: str, top_k: int) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        PHASE 2 FIX: BM25 keyword search (better than TF-IDF for legal docs)
+        
+        BM25 advantages:
+        - Better term frequency handling
+        - Document length normalization
+        - Better for legal documents with varying lengths
+        """
+        try:
+            if not self.use_bm25 or self.bm25_index is None:
+                # Fallback to TF-IDF
+                return self._keyword_search_fixed(query, top_k)
+            
+            # Tokenize query
+            query_tokens = query.lower().split()
+            
+            # Get BM25 scores
+            bm25_scores = self.bm25_index.get_scores(query_tokens)
+            
+            # Normalize to [0, 1]
+            max_score = bm25_scores.max()
+            if max_score > 0:
+                bm25_scores = bm25_scores / max_score
+            
+            # Get top-k
+            top_indices = np.argsort(bm25_scores)[-top_k:][::-1]
+            top_scores = bm25_scores[top_indices]
+            
+            return top_scores, top_indices
+            
+        except Exception as e:
+            self.logger.error("BM25 search error", {"error": str(e)})
+            # Fallback to TF-IDF
+            return self._keyword_search_fixed(query, top_k)
+    
     def _calculate_kg_score(self, record: Dict[str, Any], query: str) -> float:
         """Calculate KG score - returns normalized 0-1 value"""
         
@@ -645,6 +732,50 @@ class HybridSearchEngine:
                 kg_score += 0.15 * KG_WEIGHTS['sanction_relevance']
 
         return min(1.0, kg_score)
+    
+    def _calculate_topic_relevance_boost(self, record: Dict[str, Any], query: str) -> float:
+        """
+        Calculate topic relevance boost to prioritize documents matching query topic
+        
+        PHASE 1 FIX: Boost documents whose 'about' field or content matches query keywords
+        Example: Query about "guru dosen tunjangan" should boost education laws
+        
+        Returns:
+            Boost value (0.0 - 0.3)
+        """
+        boost = 0.0
+        query_lower = query.lower()
+        about = record.get('about', '').lower()
+        content = record.get('content', '')[:500].lower()  # First 500 chars
+        
+        # Define topic keyword groups
+        education_keywords = ['guru', 'dosen', 'pendidik', 'pengajar', 'tenaga pendidik']
+        allowance_keywords = ['tunjangan', 'insentif', 'benefit', 'gaji', 'upah']
+        
+        # Check if query is about education/teachers
+        query_is_education = any(kw in query_lower for kw in education_keywords)
+        query_is_allowance = any(kw in query_lower for kw in allowance_keywords)
+        
+        # Boost if document 'about' matches topic
+        if query_is_education:
+            if any(kw in about for kw in education_keywords):
+                boost += 0.15  # Strong boost for topic match in title
+            elif any(kw in content for kw in education_keywords):
+                boost += 0.05  # Weaker boost for content match
+        
+        if query_is_allowance:
+            if any(kw in about for kw in allowance_keywords):
+                boost += 0.15
+            elif any(kw in content for kw in allowance_keywords):
+                boost += 0.05
+        
+        # Penalty for off-topic documents (budget docs for education queries)
+        if query_is_education or query_is_allowance:
+            offtopic_keywords = ['anggaran', 'biaya', 'standar biaya', 'apbn', 'apbd']
+            if any(kw in about for kw in offtopic_keywords) and not any(kw in about for kw in education_keywords + allowance_keywords):
+                boost -= 0.2  # Penalty for budget docs
+        
+        return max(0.0, min(0.3, boost))
 
     def metadata_first_search(
         self,

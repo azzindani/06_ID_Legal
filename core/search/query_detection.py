@@ -18,6 +18,12 @@ from config import (
     INDONESIAN_STOPWORDS
 )
 
+# Import comprehensive legal vocabulary from standalone file
+from config.legal_vocab import (
+    INDONESIAN_LEGAL_SYNONYMS,
+    LEGAL_DOMAINS
+)
+
 
 class QueryDetector:
     """
@@ -269,6 +275,75 @@ class QueryDetector:
         })
 
         return enhanced
+    
+    def expand_query_with_synonyms(self, query: str) -> List[str]:
+        """
+        Expand query with Indonesian legal synonyms for better keyword matching
+        
+        Args:
+            query: Original query string
+            
+        Returns:
+            List of query variations with synonyms (up to 5 variations)
+        """
+        query_lower = query.lower()
+        expanded_terms = [query]  # Original query first
+        
+        for term, synonyms in INDONESIAN_LEGAL_SYNONYMS.items():
+            if term in query_lower:
+                # Add variations with synonyms
+                for synonym in synonyms[1:]:  # Skip original term
+                    expanded_variant = query_lower.replace(term, synonym)
+                    if expanded_variant not in expanded_terms and expanded_variant != query_lower:
+                        expanded_terms.append(expanded_variant)
+                        if len(expanded_terms) >= 5:
+                            break
+            if len(expanded_terms) >= 5:
+                break
+        
+        self.logger.debug("Query expanded with synonyms", {
+            "original": query,
+            "variations": len(expanded_terms)
+        })
+        
+        return expanded_terms[:5]
+    
+    def classify_query_intent(self, query: str) -> str:
+        """
+        Classify query intent for intent-aware search strategy
+        
+        Intent Types:
+        - specific_regulation: Query mentions specific regulation number
+        - rights_benefits: Query about rights, allowances, benefits
+        - procedural: Query about procedures, requirements
+        - topic_search: General topic search
+        
+        Args:
+            query: Query string
+            
+        Returns:
+            Intent type string
+        """
+        query_lower = query.lower()
+        
+        # Specific regulation (highest priority)
+        if re.search(r'(uu|pp|perpres|permen|perda).*?\d+.*?tahun', query_lower):
+            return 'specific_regulation'
+        
+        # Rights/benefits intent
+        rights_keywords = ['hak', 'berhak', 'tunjangan', 'benefit', 'insentif', 'gaji', 'upah', 
+                          'penghasilan', 'kesejahteraan', 'jaminan']
+        if any(keyword in query_lower for keyword in rights_keywords):
+            return 'rights_benefits'
+        
+        # Procedural intent
+        procedural_keywords = ['bagaimana', 'cara', 'prosedur', 'syarat', 'ketentuan', 
+                               'tata cara', 'mekanisme', 'tahapan']
+        if any(keyword in query_lower for keyword in procedural_keywords):
+            return 'procedural'
+        
+        # Default: topic search
+        return 'topic_search'
 
 
 if __name__ == "__main__":
