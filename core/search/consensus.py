@@ -5,7 +5,7 @@ More lenient filtering with better debugging
 
 from typing import Dict, Any, List, Optional
 from collections import defaultdict, Counter
-from logger_utils import get_logger
+from utils.logger_utils import get_logger
 from config import RESEARCH_TEAM_PERSONAS
 
 
@@ -36,11 +36,13 @@ class ConsensusBuilder:
         """
         FIXED: Build consensus with more lenient filtering
         """
+        total_results_count = len(research_data.get('all_results', []))
+
         self.logger.info("Building consensus", {
-            "total_results": len(research_data.get('all_results', [])),
+            "total_results": total_results_count,
             "team_size": len(team_composition)
         })
-        
+
         consensus_data = {
             'validated_results': [],
             'consensus_scores': {},
@@ -49,15 +51,40 @@ class ConsensusBuilder:
             'devil_advocate_flags': [],
             'cross_validation_passed': []
         }
-        
+
         # Group results by document (global_id)
         results_by_doc = defaultdict(list)
         for result in research_data.get('all_results', []):
             global_id = result['record']['global_id']
             results_by_doc[global_id].append(result)
-        
+
+        unique_docs = len(results_by_doc)
+
+        # Adaptive threshold based on pool size
+        # Large pools (>1000 unique docs) suggest aggressive expansion - lower threshold
+        adaptive_threshold = self.consensus_threshold
+        original_threshold = self.consensus_threshold
+
+        if unique_docs > 10000:
+            adaptive_threshold = max(0.25, self.consensus_threshold * 0.4)
+            self.logger.warning(f"Very large pool detected ({unique_docs} docs), "
+                              f"lowering threshold: {original_threshold:.0%} → {adaptive_threshold:.0%}")
+        elif unique_docs > 5000:
+            adaptive_threshold = max(0.30, self.consensus_threshold * 0.5)
+            self.logger.info(f"Large pool detected ({unique_docs} docs), "
+                           f"lowering threshold: {original_threshold:.0%} → {adaptive_threshold:.0%}")
+        elif unique_docs > 1000:
+            adaptive_threshold = max(0.40, self.consensus_threshold * 0.7)
+            self.logger.info(f"Moderate pool detected ({unique_docs} docs), "
+                           f"lowering threshold: {original_threshold:.0%} → {adaptive_threshold:.0%}")
+
+        # Temporarily override consensus threshold
+        original_consensus_threshold = self.consensus_threshold
+        self.consensus_threshold = adaptive_threshold
+
         self.logger.debug("Results grouped by document", {
-            "unique_documents": len(results_by_doc)
+            "unique_documents": unique_docs,
+            "active_threshold": f"{self.consensus_threshold:.0%}"
         })
         
         # FIXED: Track filtering statistics
@@ -166,7 +193,20 @@ class ConsensusBuilder:
             key=lambda x: x['consensus_score'],
             reverse=True
         )
-        
+
+        # LEGAL QUALITY POST-FILTER: Keep only high-quality documents
+        # From a legal professional perspective: prioritize authoritative, recent, domain-relevant docs
+        if len(consensus_data['validated_results']) > 100:
+            filtered_results = self._apply_legal_quality_filter(
+                consensus_data['validated_results'],
+                max_results=100
+            )
+            filtered_count = len(consensus_data['validated_results']) - len(filtered_results)
+            if filtered_count > 0:
+                self.logger.info(f"Legal quality filter: Removed {filtered_count} low-quality docs, "
+                               f"kept top {len(filtered_results)}")
+                consensus_data['validated_results'] = filtered_results
+
         # Cross-validation
         if self.enable_cross_validation:
             self.logger.info("Performing cross-validation")
@@ -188,13 +228,17 @@ class ConsensusBuilder:
             team_composition
         )
         
+        # Restore original threshold
+        self.consensus_threshold = original_consensus_threshold
+
         self.logger.success("Consensus building completed", {
             "validated_results": len(consensus_data['validated_results']),
             "agreement_level": f"{consensus_data['agreement_level']:.2%}",
             "cross_validation_passed": len(consensus_data['cross_validation_passed']),
-            "devil_advocate_flags": len(consensus_data['devil_advocate_flags'])
+            "devil_advocate_flags": len(consensus_data['devil_advocate_flags']),
+            "adaptive_threshold_used": adaptive_threshold != original_threshold
         })
-        
+
         return consensus_data
     
     def _log_consensus_debug(self, results_by_doc: Dict, team_composition: List[str]):
@@ -330,6 +374,85 @@ class ConsensusBuilder:
         
         return consensus_result
     
+    def _apply_legal_quality_filter(
+        self,
+        validated_results: List[Dict[str, Any]],
+        max_results: int = 100
+    ) -> List[Dict[str, Any]]:
+        """
+        Apply legal quality filter to consensus results
+
+        From a legal professional perspective:
+        - Prioritize higher hierarchy (UU over PP over Perpres)
+        - Prefer recent regulations
+        - Favor authoritative sources
+        - Match legal domain if clear
+
+        Args:
+            validated_results: Results from consensus
+            max_results: Maximum results to keep
+
+        Returns:
+            Filtered results (top quality only)
+        """
+        # Score each result by legal quality
+        scored_results = []
+
+        for result in validated_results:
+            record = result['record']
+
+            # Legal quality components
+            hierarchy_level = record.get('kg_hierarchy_level', 5)
+            authority = record.get('kg_authority_score', 0.5)
+            temporal = record.get('kg_temporal_score', 0.5)
+            years_old = record.get('kg_years_old', 5)
+            legal_richness = record.get('kg_legal_richness', 0.0)
+            completeness = record.get('kg_completeness_score', 0.0)
+
+            # Calculate legal quality score (same formula as expansion engine)
+            if hierarchy_level == 1:
+                hierarchy_score = 1.0
+            elif hierarchy_level == 2:
+                hierarchy_score = 0.9
+            elif hierarchy_level == 3:
+                hierarchy_score = 0.7
+            elif hierarchy_level == 4:
+                hierarchy_score = 0.5
+            elif hierarchy_level == 5:
+                hierarchy_score = 0.3
+            else:
+                hierarchy_score = 0.2
+
+            # Temporal bonus for recent
+            if years_old <= 3:
+                temporal_score = min(1.0, temporal + 0.2)
+            elif years_old <= 5:
+                temporal_score = temporal
+            else:
+                temporal_score = max(0.3, temporal - 0.1)
+
+            # Richness
+            richness_score = (legal_richness + completeness) / 2.0
+
+            # Legal quality = hierarchy (30%) + authority (25%) + temporal (20%) + richness (25%)
+            legal_quality = (
+                0.30 * hierarchy_score +
+                0.25 * authority +
+                0.20 * temporal_score +
+                0.25 * richness_score
+            )
+
+            # Combined with consensus score (70% consensus, 30% legal quality)
+            combined_score = 0.70 * result['consensus_score'] + 0.30 * legal_quality
+
+            scored_results.append((result, legal_quality, combined_score))
+
+        # Sort by combined score
+        scored_results.sort(key=lambda x: x[2], reverse=True)
+
+        # Return top results
+        return [r[0] for r in scored_results[:max_results]]
+
     def _calculate_score_variance(self, scores: List[float]) -> float:
         """Calculate variance in scores"""
         if len(scores) <= 1:

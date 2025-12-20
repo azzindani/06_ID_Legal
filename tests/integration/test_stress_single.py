@@ -34,16 +34,17 @@ from datetime import datetime
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from logger_utils import get_logger, initialize_logging
+from utils.logger_utils import get_logger, initialize_logging
 from utils.research_transparency import format_detailed_research_process, format_researcher_summary
+from config import LOG_DIR, ENABLE_FILE_LOGGING, LOG_VERBOSITY
 
 
 # Maximum stress test configuration
 STRESS_CONFIG_MAX = {
-    'final_top_k': 20,                    # Maximum documents to return
+    'final_top_k': 50,                    # Maximum documents to return
     'max_rounds': 5,                       # Maximum search rounds
     'research_team_size': 5,               # All 5 personas
-    'max_new_tokens': 8192,                # Maximum generation tokens
+    'max_new_tokens': 32768,                # Maximum generation tokens
     'temperature': 0.7,
     'top_p': 1.0,
     'top_k': 100,                          # Maximum top_k
@@ -57,7 +58,7 @@ STRESS_CONFIG_MAX = {
 # Maximum search phases - all enabled with high candidates
 STRESS_SEARCH_PHASES = {
     'initial_scan': {
-        'candidates': 800,                 # High but not 1000 to avoid OOM
+        'candidates': 2000,                 # High but not 1000 to avoid OOM
         'semantic_threshold': 0.15,        # Lower threshold = more results
         'keyword_threshold': 0.04,
         'description': 'Maximum broad scan',
@@ -66,7 +67,7 @@ STRESS_SEARCH_PHASES = {
         'enabled': True
     },
     'focused_review': {
-        'candidates': 400,
+        'candidates': 1500,
         'semantic_threshold': 0.25,
         'keyword_threshold': 0.08,
         'description': 'Maximum focused review',
@@ -75,7 +76,7 @@ STRESS_SEARCH_PHASES = {
         'enabled': True
     },
     'deep_analysis': {
-        'candidates': 200,
+        'candidates': 1000,
         'semantic_threshold': 0.35,
         'keyword_threshold': 0.12,
         'description': 'Maximum deep analysis',
@@ -84,7 +85,7 @@ STRESS_SEARCH_PHASES = {
         'enabled': True
     },
     'verification': {
-        'candidates': 100,
+        'candidates': 500,
         'semantic_threshold': 0.45,
         'keyword_threshold': 0.16,
         'description': 'Maximum verification',
@@ -93,7 +94,7 @@ STRESS_SEARCH_PHASES = {
         'enabled': True
     },
     'expert_review': {
-        'candidates': 80,
+        'candidates': 100,
         'semantic_threshold': 0.40,
         'keyword_threshold': 0.14,
         'description': 'Expert review phase - ENABLED for stress test',
@@ -122,7 +123,13 @@ class StressTester:
     """Single query stress test with maximum settings"""
 
     def __init__(self, quick_mode: bool = False, verbose: bool = False, memory_profile: bool = False, thinking_mode: str = 'low'):
-        initialize_logging()
+        # Initialize logging with verbosity from config (can be overridden by verbose flag)
+        verbosity = 'verbose' if verbose else LOG_VERBOSITY
+        initialize_logging(
+            enable_file_logging=ENABLE_FILE_LOGGING,
+            log_dir=LOG_DIR,
+            verbosity_mode=verbosity
+        )
         self.logger = get_logger("StressTest")
         self.quick_mode = quick_mode
         self.verbose = verbose
@@ -644,3 +651,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+

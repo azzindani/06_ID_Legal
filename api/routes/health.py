@@ -4,7 +4,7 @@ Health Check Routes
 Endpoints for system health monitoring.
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from pydantic import BaseModel
 from typing import Dict, Any
 import time
@@ -25,18 +25,33 @@ class ReadyResponse(BaseModel):
 
 
 @router.get("/health", response_model=HealthResponse)
-async def health_check():
+async def health_check(request: Request):
     """
     Basic health check endpoint
 
     Returns system status and component health.
+
+    FIXED: Uses dependency injection instead of global state import.
     """
-    from ..server import pipeline, conversation_manager
+    from ..server import get_pipeline, get_conversation_manager
+
+    # Try to get components from app state (dependency injection)
+    try:
+        pipeline = get_pipeline(request)
+        pipeline_status = "healthy"
+    except RuntimeError:
+        pipeline_status = "not_initialized"
+
+    try:
+        manager = get_conversation_manager(request)
+        conversation_status = "healthy"
+    except RuntimeError:
+        conversation_status = "not_initialized"
 
     components = {
         "api": "healthy",
-        "pipeline": "healthy" if pipeline else "not_initialized",
-        "conversation": "healthy" if conversation_manager else "not_initialized"
+        "pipeline": pipeline_status,
+        "conversation": conversation_status
     }
 
     return HealthResponse(
@@ -48,24 +63,27 @@ async def health_check():
 
 
 @router.get("/ready", response_model=ReadyResponse)
-async def readiness_check():
+async def readiness_check(request: Request):
     """
     Readiness check for load balancers
 
     Returns whether the service is ready to accept requests.
-    """
-    from ..server import pipeline
 
-    if pipeline is None:
+    FIXED: Uses dependency injection instead of global state import.
+    """
+    from ..server import get_pipeline
+
+    try:
+        pipeline = get_pipeline(request)
+        return ReadyResponse(
+            ready=True,
+            message="Service is ready"
+        )
+    except RuntimeError:
         return ReadyResponse(
             ready=False,
             message="Pipeline not initialized"
         )
-
-    return ReadyResponse(
-        ready=True,
-        message="Service is ready"
-    )
 
 
 @router.get("/live")

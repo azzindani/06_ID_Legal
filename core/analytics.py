@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from collections import defaultdict
 import json
 import os
-from logger_utils import get_logger
+from utils.logger_utils import get_logger
 
 
 class AnalyticsDashboard:

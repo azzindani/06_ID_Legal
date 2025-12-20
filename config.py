@@ -15,10 +15,16 @@ try:
 except ImportError:
     pass
 
-from logger_utils import get_logger
+# Lazy logger initialization to avoid circular import
+_logger = None
 
-# Initialize logger for config module
-logger = get_logger("Config")
+def _get_logger():
+    """Lazy logger initialization to avoid circular imports"""
+    global _logger
+    if _logger is None:
+        from utils.logger_utils import get_logger
+        _logger = get_logger("Config")
+    return _logger
 
 # =============================================================================
 # AUTO-DETECTION CONFIGURATION
@@ -28,14 +34,14 @@ logger = get_logger("Config")
 AUTO_DETECT_HARDWARE = os.getenv("AUTO_DETECT_HARDWARE", "true").lower() == "true"
 
 def _get_auto_config():
-    """Get auto-detected hardware configuration"""
+    """Get auto-detected hardware configuration (no logging to avoid circular import)"""
     if not AUTO_DETECT_HARDWARE:
         return {}
 
     try:
-        from hardware_detection import detect_hardware
+        from core.hardware_detection import detect_hardware
         config = detect_hardware()
-        logger.info(f"Auto-detected: VRAM={config.vram_available:.1f}GB, RAM={config.ram_available:.1f}GB")
+        # Note: No logging here to avoid circular import during module initialization
         return {
             'embedding_device': config.embedding_device,
             'reranker_device': config.reranker_device,
@@ -44,8 +50,8 @@ def _get_auto_config():
             'llm_load_in_8bit': config.llm_quantization == '8bit',
             'recommended_model': config.recommended_model,
         }
-    except Exception as e:
-        logger.debug(f"Hardware auto-detection skipped: {e}")
+    except Exception:
+        # Silent fail to avoid circular import during module initialization
         return {}
 
 # Get auto-detected settings (empty if disabled or unavailable)
@@ -180,7 +186,7 @@ CONTEXT_SUMMARY_THRESHOLD = int(os.getenv("CONTEXT_SUMMARY_THRESHOLD", "4096"))
 MEMORY_MAX_HISTORY_TURNS = int(os.getenv("MEMORY_MAX_HISTORY_TURNS", "100"))  # Total turns stored
 MEMORY_MAX_CONTEXT_TURNS = int(os.getenv("MEMORY_MAX_CONTEXT_TURNS", "30"))    # Turns passed to LLM
 MEMORY_MIN_CONTEXT_TURNS = int(os.getenv("MEMORY_MIN_CONTEXT_TURNS", "10"))    # Minimum context
-MEMORY_MAX_TOKENS = int(os.getenv("MEMORY_MAX_TOKENS", "16000"))               # Max tokens for context
+MEMORY_MAX_TOKENS = int(os.getenv("MEMORY_MAX_TOKENS", "128000"))               # Max tokens for context
 
 # Intelligent summarization settings
 MEMORY_ENABLE_SUMMARIZATION = os.getenv("MEMORY_ENABLE_SUMMARIZATION", "true").lower() == "true"
@@ -201,6 +207,23 @@ ENABLE_FILE_LOGGING = os.getenv("ENABLE_FILE_LOGGING", "true").lower() == "true"
 CACHE_DIR = os.getenv("CACHE_DIR", ".cache")
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", "32"))
 MAX_MEMORY_MB = int(os.getenv("MAX_MEMORY_MB", "15000"))
+
+# =============================================================================
+# LOGGING VERBOSITY CONFIGURATION
+# =============================================================================
+
+# Logging verbosity mode:
+# - 'minimal': Only critical messages (ERROR, WARNING, SUCCESS, key INFO) - DEFAULT
+# - 'normal': Standard logging (all INFO + above)
+# - 'verbose': Full debug logging (all DEBUG + INFO + above)
+LOG_VERBOSITY = os.getenv("LOG_VERBOSITY", "minimal")
+
+# Determines which logs are printed to console (file always gets everything)
+VERBOSE_CONSOLE_LOGGING = {
+    'minimal': False,   # Only critical messages to console
+    'normal': True,     # Standard logging to console
+    'verbose': True     # All logs to console including DEBUG
+}.get(LOG_VERBOSITY, False)
 
 # Create necessary directories
 Path(LOG_DIR).mkdir(parents=True, exist_ok=True)
@@ -237,6 +260,120 @@ THINKING_MODE_CONFIG = {
 ENABLE_THINKING_PIPELINE = os.getenv("ENABLE_THINKING_PIPELINE", "true").lower() == "true"
 
 # =============================================================================
+# ITERATIVE EXPANSION CONFIGURATION (Phases 1-4)
+# =============================================================================
+#
+# Detective-style document expansion beyond initial scoring
+# Phase 1: Metadata expansion (same regulation context)
+# Phase 2: KG & Citation expansion (entity networks, citation traversal)
+# Phase 3: Semantic clustering (embedding space neighbors)
+# Phase 4: Hybrid adaptive (query-type-specific strategy selection)
+#
+
+DEFAULT_EXPANSION_CONFIG = {
+    # Master switch
+    'enable_expansion': True,  # ✅ ENABLED by default for testing and production
+
+    # Expansion limits
+    'max_expansion_rounds': 2,        # Number of expansion iterations
+    'max_pool_size': 10000,            # Stop if pool exceeds this
+    'min_docs_per_round': 5,          # Stop if round adds fewer than this
+
+    # Seed selection
+    'seeds_per_round': 10,            # Top-K seeds for expansion per round
+    'seed_score_threshold': 0.50,     # Only expand from high-scoring docs
+
+    # Strategy 1: Metadata Expansion (Phase 1)
+    'metadata_expansion': {
+        'enabled': True,
+        'max_docs_per_regulation': 50,  # Limit docs from same regulation
+        'include_preamble': True,        # Include regulation preambles
+        'include_attachments': True       # Include regulation attachments
+    },
+
+    # Strategy 2: KG Expansion (Phase 2) - Entity co-occurrence & citation following
+    'kg_expansion': {
+        'enabled': True,                 # ✅ ENABLED by default
+        'max_entity_docs': 20,
+        'entity_score_threshold': 0.3,
+        'follow_citations': True,
+        'citation_max_hops': 2
+    },
+
+    # Strategy 3: Citation Network Traversal (Phase 2) - Multi-hop citation expansion
+    'citation_expansion': {
+        'enabled': True,                 # ✅ ENABLED by default
+        'max_hops': 2,
+        'bidirectional': True
+    },
+
+    # Strategy 4: Semantic Clustering (Phase 3) - Embedding space neighbors
+    'semantic_expansion': {
+        'enabled': True,                 # ✅ ENABLED by default
+        'cluster_radius': 0.15,          # Distance threshold for clustering
+        'min_cluster_size': 3,           # Minimum docs in cluster
+        'max_neighbors': 30,             # Max similar docs per seed
+        'similarity_threshold': 0.70     # Cosine similarity threshold
+    },
+
+    # Strategy 5: Hybrid Adaptive (Phase 4) - Query-type-specific strategy selection
+    'hybrid_expansion': {
+        'enabled': True,                 # ✅ ENABLED by default
+        'adaptive_strategy': True,       # Enable adaptive strategy selection
+        'query_type_detection': True,    # Auto-detect query type
+        'strategy_weights': {
+            'metadata': 0.4,
+            'kg': 0.3,
+            'citation': 0.2,
+            'semantic': 0.1
+        }
+    },
+
+    # Strategy 6: Temporal Expansion (Phase 5) - Legal amendments/versions
+    'temporal_expansion': {
+        'enabled': True,                 # ✅ ENABLED - Critical for Indonesian law
+        'max_years_range': 30,           # Look back 30 years for amendments
+        'prioritize_recent': True,       # Newest versions rank higher
+        'include_superseded': True       # Include old versions for context
+    },
+
+    # Strategy 7: Hierarchical Expansion (Phase 6) - Legal hierarchy (UU → PP → Perpres)
+    'hierarchical_expansion': {
+        'enabled': True,                 # ✅ ENABLED - Critical for legal hierarchy
+        'expand_up': True,               # Find parent regulations (PP → UU)
+        'expand_down': True,             # Find implementing regulations (UU → PP)
+        'max_hierarchy_distance': 1,     # Max levels up/down (1=direct parent/child only)
+        'max_docs_per_level': 15,        # Maximum documents per hierarchy level
+        'year_range': 5,                 # Only include regulations within ±5 years
+        'conservative_in_conversation': True  # Use stricter limits in conversational mode
+    },
+
+    # Strategy 8: Topical Expansion (Phase 7) - Legal domain/topic clustering
+    'topical_expansion': {
+        'enabled': True,                 # ✅ ENABLED - Important for legal topic clustering
+        'max_docs_per_topic': 20,        # Limit docs from same legal domain
+        'domain_threshold': 0.7          # Minimum domain confidence (high confidence only)
+    },
+
+    # Smart Filtering - Reduce noise after expansion
+    'smart_filtering': {
+        'enabled': True,                 # ✅ ENABLED - Filter expanded pool before reranking
+        'semantic_threshold': 0.60,      # Min similarity to top-10 initial docs
+        'max_pool_size': 500,            # Maximum docs after filtering (hard limit)
+        'diversity_weight': 0.3,         # Balance between relevance (0.7) and diversity (0.3)
+        'timeout_seconds': 60            # Max time for filtering (prevent hangs)
+    },
+
+    # Conversational Mode Detection - Conservative expansion for multi-turn conversations
+    'conversational_mode': {
+        'enabled': True,                 # ✅ ENABLED - Detect and adapt to conversations
+        'conservative_expansion': True,  # Use stricter limits in conversations
+        'max_expansion_rounds': 1,       # Reduce rounds in conversations (vs 2 for single)
+        'max_pool_multiplier': 0.5       # Halve pool sizes in conversations
+    }
+}
+
+# =============================================================================
 # DEFAULT SYSTEM CONFIGURATION
 # =============================================================================
 
@@ -259,7 +396,10 @@ DEFAULT_CONFIG = {
     'thinking_mode': DEFAULT_THINKING_MODE,
     'enable_thinking_pipeline': ENABLE_THINKING_PIPELINE,
     'batch_size': BATCH_SIZE,
-    'cache_dir': CACHE_DIR
+    'cache_dir': CACHE_DIR,
+
+    # Expansion configuration (can be overridden)
+    'expansion_config': DEFAULT_EXPANSION_CONFIG.copy()
 }
 
 # =============================================================================
@@ -269,8 +409,8 @@ DEFAULT_CONFIG = {
 DEFAULT_SEARCH_PHASES = {
     'initial_scan': {
         'candidates': 400,
-        'semantic_threshold': 0.20,
-        'keyword_threshold': 0.06,
+        'semantic_threshold': 0.25,  # ↑ from 0.20 - stricter initial filtering
+        'keyword_threshold': 0.10,   # ↑ from 0.06 - require keyword relevance
         'description': 'Quick broad scan like human initial reading',
         'time_limit': 30,
         'focus_areas': ['regulation_type', 'enacting_body'],
@@ -278,8 +418,8 @@ DEFAULT_SEARCH_PHASES = {
     },
     'focused_review': {
         'candidates': 150,
-        'semantic_threshold': 0.35,
-        'keyword_threshold': 0.12,
+        'semantic_threshold': 0.35,  # = (unchanged, already good)
+        'keyword_threshold': 0.12,   # = (unchanged, already good)
         'description': 'Focused review of promising candidates',
         'time_limit': 45,
         'focus_areas': ['content', 'chapter', 'article'],
@@ -287,8 +427,8 @@ DEFAULT_SEARCH_PHASES = {
     },
     'deep_analysis': {
         'candidates': 60,
-        'semantic_threshold': 0.45,
-        'keyword_threshold': 0.18,
+        'semantic_threshold': 0.45,  # = (unchanged, already strict)
+        'keyword_threshold': 0.18,   # = (unchanged, already strict)
         'description': 'Deep contextual analysis like careful reading',
         'time_limit': 60,
         'focus_areas': ['kg_entities', 'cross_references'],
@@ -296,8 +436,8 @@ DEFAULT_SEARCH_PHASES = {
     },
     'verification': {
         'candidates': 30,
-        'semantic_threshold': 0.55,
-        'keyword_threshold': 0.22,
+        'semantic_threshold': 0.55,  # = (unchanged, very strict)
+        'keyword_threshold': 0.22,   # = (unchanged, very strict)
         'description': 'Final verification and cross-checking',
         'time_limit': 30,
         'focus_areas': ['authority_score', 'temporal_score'],
@@ -305,8 +445,8 @@ DEFAULT_SEARCH_PHASES = {
     },
     'expert_review': {
         'candidates': 45,
-        'semantic_threshold': 0.50,
-        'keyword_threshold': 0.20,
+        'semantic_threshold': 0.50,  # = (unchanged, strict)
+        'keyword_threshold': 0.20,   # = (unchanged, strict)
         'description': 'Expert specialist review for complex cases',
         'time_limit': 40,
         'focus_areas': ['legal_richness', 'completeness_score'],
@@ -426,15 +566,26 @@ QUERY_TEAM_COMPOSITIONS = {
 # =============================================================================
 # HUMAN PRIORITIES
 # =============================================================================
-
+#
+# UPDATED 2025-12-19 (Iteration 2): Further increased relevance priority
+#
+# Iteration 1 (65% relevance) improved results but relevant docs still ranked #4-17
+# Root cause: Score differences too small (0.727 vs 0.722 = 0.005 gap)
+# Solution: Increase relevance to 80%, reduce metadata to 20%
+#
+# Previous: Relevance 65%, Metadata 35% → Cooperatives law ranked #1 for tax query
+# New: Relevance 80%, Metadata 20% → Tax laws should dominate
+#
 DEFAULT_HUMAN_PRIORITIES = {
-    'authority_hierarchy': 0.20,
-    'temporal_relevance': 0.18,
-    'semantic_match': 0.18,
-    'knowledge_graph': 0.15,
-    'keyword_precision': 0.12,
-    'legal_completeness': 0.09,
-    'cross_validation': 0.08
+    # RELEVANCE SCORES (PRIMARY) - 80%
+    'semantic_match': 0.50,       # ↑ from 0.40 (+25%) - embedding similarity is KING
+    'keyword_precision': 0.30,    # ↑ from 0.25 (+20%) - exact term matching critical
+
+    # METADATA SCORES (SECONDARY) - 20%
+    'knowledge_graph': 0.10,      # ↓ from 0.15 (-33%) - tie-breaker only
+    'authority_hierarchy': 0.05,  # ↓ from 0.10 (-50%) - minimal weight
+    'temporal_relevance': 0.03,   # ↓ from 0.05 (-40%) - rarely decisive
+    'legal_completeness': 0.02,   # ↓ from 0.05 (-60%) - rarely decisive
 }
 
 # =============================================================================
@@ -445,41 +596,42 @@ QUERY_PATTERNS = {
     'specific_article': {
         'indicators': ['pasal', 'ayat', 'huruf', 'angka', 'butir'],
         'priority_weights': {
-            'authority_hierarchy': 0.30,
-            'semantic_match': 0.25,
-            'knowledge_graph': 0.20,
-            'keyword_precision': 0.15,
-            'temporal_relevance': 0.10
+            'semantic_match': 0.45,       # ↑ Relevance dominant (80% total)
+            'keyword_precision': 0.35,    # ↑ Keywords critical for article search
+            'knowledge_graph': 0.10,      # ↓ Entity matching helps minimally
+            'authority_hierarchy': 0.07,  # ↓ Less weight for authority
+            'temporal_relevance': 0.03    # ↓ Minimal
         }
     },
     'procedural': {
         'indicators': ['prosedur', 'tata cara', 'persyaratan', 'cara', 'langkah'],
         'priority_weights': {
-            'semantic_match': 0.25,
-            'knowledge_graph': 0.20,
-            'legal_completeness': 0.20,
-            'temporal_relevance': 0.20,
-            'authority_hierarchy': 0.15
+            'semantic_match': 0.50,       # ↑ Relevance dominant (80% total)
+            'keyword_precision': 0.30,    # ↑ Keywords important
+            'knowledge_graph': 0.10,      # ↓ Procedure steps in KG
+            'legal_completeness': 0.05,   # ↓ Want complete procedures
+            'temporal_relevance': 0.03,   # ↓ Prefer recent
+            'authority_hierarchy': 0.02   # ↓ Minimal
         }
     },
     'definitional': {
         'indicators': ['definisi', 'pengertian', 'dimaksud dengan', 'adalah'],
         'priority_weights': {
-            'authority_hierarchy': 0.35,
-            'semantic_match': 0.25,
-            'knowledge_graph': 0.15,
-            'keyword_precision': 0.15,
-            'temporal_relevance': 0.10
+            'semantic_match': 0.50,       # ↑ Relevance dominant (80% total)
+            'keyword_precision': 0.30,    # ↑ Exact term matching critical
+            'authority_hierarchy': 0.10,  # ↓ Official definitions matter somewhat
+            'knowledge_graph': 0.07,      # ↓ Concept relationships
+            'temporal_relevance': 0.03    # ↓ Definitions rarely change
         }
     },
     'sanctions': {
         'indicators': ['sanksi', 'pidana', 'denda', 'hukuman', 'larangan'],
         'priority_weights': {
-            'authority_hierarchy': 0.30,
-            'knowledge_graph': 0.25,
-            'keyword_precision': 0.20,
-            'temporal_relevance': 0.15,
-            'semantic_match': 0.10
+            'semantic_match': 0.50,       # ↑ Relevance dominant (80% total)
+            'keyword_precision': 0.30,    # ↑ Sanction keywords critical
+            'knowledge_graph': 0.10,      # ↓ Violation-sanction relationships
+            'authority_hierarchy': 0.05,  # ↓ Official sources
+            'temporal_relevance': 0.05    # ↓ Recent sanctions may differ
         }
     },
     'general': {
@@ -588,7 +740,7 @@ Pedoman untuk jawaban akhir:
 
 def validate_config(config: Dict[str, Any]) -> Dict[str, Any]:
     """Validate configuration before use"""
-    logger.info("Starting configuration validation")
+    _get_logger().info("Starting configuration validation")
     
     issues = []
     warnings_list = []
@@ -597,30 +749,30 @@ def validate_config(config: Dict[str, Any]) -> Dict[str, Any]:
         # Basic settings validation
         if config.get('final_top_k', 0) < 1:
             issues.append("final_top_k must be >= 1")
-            logger.error("Invalid final_top_k", {"value": config.get('final_top_k')})
+            _get_logger().error("Invalid final_top_k", {"value": config.get('final_top_k')})
         
         if config.get('temperature', 0) < 0 or config.get('temperature', 2) > 2:
             issues.append("temperature must be between 0 and 2")
-            logger.error("Invalid temperature", {"value": config.get('temperature')})
+            _get_logger().error("Invalid temperature", {"value": config.get('temperature')})
         
         if config.get('max_new_tokens', 0) < 128:
             issues.append("max_new_tokens must be >= 128")
-            logger.error("Invalid max_new_tokens", {"value": config.get('max_new_tokens')})
+            _get_logger().error("Invalid max_new_tokens", {"value": config.get('max_new_tokens')})
         
         # Team settings validation
         if config.get('research_team_size', 0) < 1 or config.get('research_team_size', 0) > 5:
             issues.append("research_team_size must be between 1 and 5")
-            logger.error("Invalid research_team_size", {"value": config.get('research_team_size')})
+            _get_logger().error("Invalid research_team_size", {"value": config.get('research_team_size')})
         
         if config.get('consensus_threshold', 0) < 0.3 or config.get('consensus_threshold', 0) > 0.9:
             warnings_list.append("consensus_threshold outside recommended range (0.3-0.9)")
-            logger.warning("Consensus threshold outside range", {"value": config.get('consensus_threshold')})
+            _get_logger().warning("Consensus threshold outside range", {"value": config.get('consensus_threshold')})
         
         # Search phases validation
         search_phases = config.get('search_phases', {})
         if not search_phases:
             issues.append("search_phases configuration missing")
-            logger.error("Search phases missing")
+            _get_logger().error("Search phases missing")
         else:
             enabled_phases = 0
             for phase_name, phase_config in search_phases.items():
@@ -630,67 +782,67 @@ def validate_config(config: Dict[str, Any]) -> Dict[str, Any]:
                     candidates = phase_config.get('candidates', 0)
                     if candidates < 10:
                         issues.append(f"{phase_name}: candidates must be >= 10")
-                        logger.error(f"Invalid candidates in {phase_name}", {"candidates": candidates})
+                        _get_logger().error(f"Invalid candidates in {phase_name}", {"candidates": candidates})
                     elif candidates > 1000:
                         warnings_list.append(f"{phase_name}: high candidate count ({candidates}) may impact performance")
-                        logger.warning(f"High candidates in {phase_name}", {"candidates": candidates})
+                        _get_logger().warning(f"High candidates in {phase_name}", {"candidates": candidates})
                     
                     sem_threshold = phase_config.get('semantic_threshold', 0)
                     if sem_threshold < 0.1 or sem_threshold > 0.9:
                         warnings_list.append(f"{phase_name}: semantic_threshold outside normal range (0.1-0.9)")
-                        logger.warning(f"Semantic threshold outside range in {phase_name}", {"threshold": sem_threshold})
+                        _get_logger().warning(f"Semantic threshold outside range in {phase_name}", {"threshold": sem_threshold})
                     
                     key_threshold = phase_config.get('keyword_threshold', 0)
                     if key_threshold < 0.02 or key_threshold > 0.5:
                         warnings_list.append(f"{phase_name}: keyword_threshold outside normal range (0.02-0.5)")
-                        logger.warning(f"Keyword threshold outside range in {phase_name}", {"threshold": key_threshold})
+                        _get_logger().warning(f"Keyword threshold outside range in {phase_name}", {"threshold": key_threshold})
             
             if enabled_phases == 0:
                 issues.append("At least one search phase must be enabled")
-                logger.error("No search phases enabled")
+                _get_logger().error("No search phases enabled")
             else:
-                logger.info("Search phases validated", {"enabled_phases": enabled_phases})
+                _get_logger().info("Search phases validated", {"enabled_phases": enabled_phases})
         
         # LLM generation parameters validation
         if config.get('top_p', 1.0) < 0.1 or config.get('top_p', 1.0) > 1.0:
             issues.append("top_p must be between 0.1 and 1.0")
-            logger.error("Invalid top_p", {"value": config.get('top_p')})
+            _get_logger().error("Invalid top_p", {"value": config.get('top_p')})
         
         if config.get('top_k', 20) < 1 or config.get('top_k', 20) > 100:
             warnings_list.append("top_k outside recommended range (1-100)")
-            logger.warning("top_k outside range", {"value": config.get('top_k')})
+            _get_logger().warning("top_k outside range", {"value": config.get('top_k')})
         
         if config.get('min_p', 0.1) < 0.01 or config.get('min_p', 0.1) > 0.5:
             warnings_list.append("min_p outside recommended range (0.01-0.5)")
-            logger.warning("min_p outside range", {"value": config.get('min_p')})
+            _get_logger().warning("min_p outside range", {"value": config.get('min_p')})
         
         # Quality degradation parameters
         if config.get('initial_quality', 0.8) < 0.5 or config.get('initial_quality', 0.8) > 1.0:
             warnings_list.append("initial_quality outside recommended range (0.5-1.0)")
-            logger.warning("initial_quality outside range", {"value": config.get('initial_quality')})
+            _get_logger().warning("initial_quality outside range", {"value": config.get('initial_quality')})
         
         if config.get('quality_degradation', 0.15) < 0.05 or config.get('quality_degradation', 0.15) > 0.3:
             warnings_list.append("quality_degradation outside recommended range (0.05-0.3)")
-            logger.warning("quality_degradation outside range", {"value": config.get('quality_degradation')})
+            _get_logger().warning("quality_degradation outside range", {"value": config.get('quality_degradation')})
         
         if config.get('min_quality', 0.3) < 0.2 or config.get('min_quality', 0.3) > 0.5:
             warnings_list.append("min_quality outside recommended range (0.2-0.5)")
-            logger.warning("min_quality outside range", {"value": config.get('min_quality')})
+            _get_logger().warning("min_quality outside range", {"value": config.get('min_quality')})
         
         # Log final result
         if len(issues) == 0:
-            logger.success("Configuration validation passed", {
+            _get_logger().success("Configuration validation passed", {
                 "warnings": len(warnings_list)
             })
         else:
-            logger.error("Configuration validation failed", {
+            _get_logger().error("Configuration validation failed", {
                 "issues": len(issues),
                 "warnings": len(warnings_list)
             })
         
     except Exception as e:
         issues.append(f"Configuration validation error: {str(e)}")
-        logger.error("Validation exception", {
+        _get_logger().error("Validation exception", {
             "error": str(e),
             "error_type": type(e).__name__
         })
@@ -704,7 +856,7 @@ def validate_config(config: Dict[str, Any]) -> Dict[str, Any]:
 
 def apply_validated_config(config: Dict[str, Any]) -> Dict[str, Any]:
     """Apply configuration after validation"""
-    logger.info("Applying validated configuration")
+    _get_logger().info("Applying validated configuration")
     
     validation_result = validate_config(config)
     
@@ -715,15 +867,15 @@ def apply_validated_config(config: Dict[str, Any]) -> Dict[str, Any]:
             error_msg += "\n\nWarnings:\n"
             error_msg += "\n".join([f"! {warning}" for warning in validation_result['warnings']])
         
-        logger.error("Config application failed due to validation errors")
+        _get_logger().error("Config application failed due to validation errors")
         raise ValueError(error_msg)
     
     if validation_result['warnings']:
         for warning in validation_result['warnings']:
             warnings.warn(f"! {warning}")
-            logger.warning(warning)
+            _get_logger().warning(warning)
     
-    logger.success("Configuration applied successfully")
+    _get_logger().success("Configuration applied successfully")
     return config
 
 
@@ -741,9 +893,9 @@ def save_config(config: Dict[str, Any], filepath: str = "config_runtime.json"):
     try:
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(config, f, indent=2, ensure_ascii=False)
-        logger.success(f"Configuration saved to {filepath}")
+        _get_logger().success(f"Configuration saved to {filepath}")
     except Exception as e:
-        logger.error(f"Failed to save configuration: {e}")
+        _get_logger().error(f"Failed to save configuration: {e}")
 
 
 def load_config_from_file(filepath: str = "config_runtime.json") -> Dict[str, Any]:
@@ -752,10 +904,10 @@ def load_config_from_file(filepath: str = "config_runtime.json") -> Dict[str, An
     try:
         with open(filepath, 'r', encoding='utf-8') as f:
             config = json.load(f)
-        logger.success(f"Configuration loaded from {filepath}")
+        _get_logger().success(f"Configuration loaded from {filepath}")
         return apply_validated_config(config)
     except Exception as e:
-        logger.error(f"Failed to load configuration: {e}")
+        _get_logger().error(f"Failed to load configuration: {e}")
         return get_default_config()
 
 def print_threshold_progression():
@@ -817,4 +969,5 @@ def get_adaptive_thresholds(query_complexity: float) -> dict:
             phases[phase_name]['semantic_threshold'] *= complexity_factor
             phases[phase_name]['keyword_threshold'] *= complexity_factor
     
+
     return phases

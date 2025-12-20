@@ -16,6 +16,12 @@ import sys
 import os
 import subprocess
 
+# Add project root to path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from config import LOG_DIR, ENABLE_FILE_LOGGING, LOG_VERBOSITY
+from utils.logger_utils import initialize_logging
+
 
 def get_available_gpu_memory():
     """Get available GPU memory in GB"""
@@ -73,6 +79,13 @@ def determine_safe_settings(gpu_mem_gb):
 
 
 def main():
+    # Initialize logging
+    initialize_logging(
+        enable_file_logging=ENABLE_FILE_LOGGING,
+        log_dir=LOG_DIR,
+        verbosity_mode=LOG_VERBOSITY
+    )
+
     print("=" * 60)
     print("SAFE TEST RUNNER - AUTOMATIC MEMORY MANAGEMENT")
     print("=" * 60)

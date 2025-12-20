@@ -8,7 +8,7 @@ File: ui/services/system_service.py
 """
 
 from typing import Dict, Any, Optional, Tuple
-from logger_utils import get_logger
+from utils.logger_utils import get_logger
 
 logger = get_logger(__name__)
 

@@ -28,7 +28,7 @@ from config import (
     LLM_PROVIDER, EMBEDDING_DEVICE, LLM_DEVICE,
     RESEARCH_TEAM_PERSONAS
 )
-from logger_utils import get_logger
+from utils.logger_utils import get_logger
 from utils.formatting import _extract_all_documents_from_metadata
 
 logger = get_logger(__name__)
@@ -39,6 +39,8 @@ current_provider: str = LLM_PROVIDER
 last_search_result: Optional[Dict] = None
 
 # Custom CSS for search interface
+# NOTE: This CSS is currently used via gr.Blocks(css=SEARCH_CSS)
+# If upgrading to Gradio 6.x, the css parameter is removed and this will need refactoring
 SEARCH_CSS = """
 /* Base responsive sizing */
 html { font-size: 16px; }

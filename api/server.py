@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from pipeline import RAGPipeline
 from conversation import ConversationManager
-from logger_utils import get_logger
+from utils.logger_utils import get_logger
 
 logger = get_logger(__name__)
 
@@ -61,11 +61,17 @@ def create_app() -> FastAPI:
         lifespan=lifespan
     )
 
-    # CORS middleware
+    # CORS middleware - SECURITY FIX: Whitelist specific origins instead of "*"
+    # NOTE: allow_origins=["*"] with allow_credentials=True is a security anti-pattern
+    # that enables CSRF attacks. We now use a whitelist of trusted origins.
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
+        allow_origins=[
+            "http://localhost:7860",  # Gradio UI default port
+            "http://localhost:3000",   # Common development frontend port
+            os.getenv("FRONTEND_URL", "http://localhost:8000")  # Production frontend from environment
+        ],
+        allow_credentials=True,  # Now safe with origin whitelist
         allow_methods=["*"],
         allow_headers=["*"],
     )

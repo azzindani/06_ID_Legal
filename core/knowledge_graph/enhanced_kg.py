@@ -14,7 +14,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from config import KG_WEIGHTS, REGULATION_TYPE_PATTERNS, YEAR_SEPARATORS
-from logger_utils import get_logger
+from utils.logger_utils import get_logger
 
 logger = get_logger(__name__)
 
@@ -37,56 +37,10 @@ class EnhancedKnowledgeGraph:
         self._cache_hits = 0
         self._cache_misses = 0
 
-    def extract_entities_from_text(self, text):
-        """Enhanced entity extraction for ANY Indonesian regulation"""
-        if not text or pd.isna(text):
-            return []
-
-        try:
-            text_lower = str(text).lower()
-            entities = []
-
-            # Pattern 1: Standard format - "Type No. X Tahun YYYY"
-            for reg_type, patterns in REGULATION_TYPE_PATTERNS.items():
-                for pattern in patterns:
-                    # Build flexible regex pattern
-                    # Matches: "PP No. 41 Tahun 2009", "pp no 41 tahun 2009", "PP 41/2009", etc.
-                    regex_pattern = (
-                        rf'{re.escape(pattern)}\s*'  # Regulation type
-                        r'(?:nomor|no\.?|num\.?)?\s*'  # Optional "nomor"/"no"
-                        r'(\d+)\s*'  # Number
-                        r'(?:' + '|'.join([re.escape(sep) for sep in YEAR_SEPARATORS]) + r')?\s*'  # Separator
-                        r'(\d{4})?'  # Optional year
-                    )
-
-                    matches = re.finditer(regex_pattern, text_lower, re.IGNORECASE)
-                    for match in matches:
-                        number = match.group(1)
-                        year = match.group(2) if match.group(2) else ''
-
-                        # Create normalized entity
-                        entity_text = f"{pattern} {number}"
-                        if year:
-                            entity_text += f" tahun {year}"
-
-                        entities.append((entity_text, 'regulation_reference'))
-
-            # Pattern 2: Pasal (Article) references
-            pasal_pattern = r'pasal\s*(\d+)(?:\s*ayat\s*\((\d+)\))?(?:\s*huruf\s*([a-z]))?'
-            matches = re.finditer(pasal_pattern, text_lower)
-            for match in matches:
-                entities.append((match.group(0), 'article_reference'))
-
-            # Pattern 3: Bab (Chapter) references
-            bab_pattern = r'bab\s+([IVX]+|\d+)'
-            matches = re.finditer(bab_pattern, text_lower)
-            for match in matches:
-                entities.append((match.group(0), 'chapter_reference'))
-
-            return entities
-        except Exception as e:
-            print(f"Error in entity extraction: {e}")
-            return []
+    # REMOVED: extract_entities_from_text() method (50 lines of dead code)
+    # - Never called anywhere in the codebase (0 usage found)
+    # - Functionality now centralized in KnowledgeGraphCore.extract_all_entities_with_confidence()
+    # - See kg_core.py for the comprehensive entity extraction implementation
 
     def get_parsed_kg_data(self, doc_id, data_type='entities'):
         """Parse KG JSON data on demand WITH CACHING"""

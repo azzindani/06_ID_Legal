@@ -50,7 +50,8 @@ from datetime import datetime
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from logger_utils import get_logger, initialize_logging
+from config import LOG_DIR, ENABLE_FILE_LOGGING, LOG_VERBOSITY
+from utils.logger_utils import get_logger, initialize_logging
 from pipeline import RAGPipeline
 from conversation import (
     MemoryManager,
@@ -77,7 +78,11 @@ class ConversationalTester:
     """
 
     def __init__(self, verbose: bool = False, thinking_mode: str = 'low'):
-        initialize_logging()
+        initialize_logging(
+        enable_file_logging=ENABLE_FILE_LOGGING,
+        log_dir=LOG_DIR,
+        verbosity_mode=LOG_VERBOSITY
+    )
         self.logger = get_logger("ConversationalTest")
         self.verbose = verbose
         self.thinking_mode = thinking_mode

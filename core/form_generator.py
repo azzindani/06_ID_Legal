@@ -8,7 +8,7 @@ File: core/form_generator.py
 
 from typing import Dict, Any, List, Optional
 from datetime import datetime
-from logger_utils import get_logger
+from utils.logger_utils import get_logger
 
 
 class FormGenerator:

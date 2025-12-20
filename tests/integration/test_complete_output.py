@@ -15,6 +15,7 @@ You'll see complete RAG output with real-time streaming!
 """
 
 import sys
+from config import LOG_DIR, ENABLE_FILE_LOGGING, LOG_VERBOSITY
 import os
 import time
 import json
@@ -23,7 +24,7 @@ from typing import Optional, Dict, Any, List
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from logger_utils import get_logger, initialize_logging
+from utils.logger_utils import get_logger, initialize_logging
 from pipeline import RAGPipeline
 from utils.formatting import _extract_all_documents_from_metadata
 from utils.research_transparency import format_detailed_research_process
@@ -33,7 +34,11 @@ class CompleteOutputTester:
     """Tests comprehensive RAG output with streaming and full metadata"""
 
     def __init__(self, thinking_mode: str = 'low'):
-        initialize_logging()
+        initialize_logging(
+        enable_file_logging=ENABLE_FILE_LOGGING,
+        log_dir=LOG_DIR,
+        verbosity_mode=LOG_VERBOSITY
+    )
         self.logger = get_logger("CompleteOutputTest")
         self.pipeline: Optional[RAGPipeline] = None
         self.results: List[Dict[str, Any]] = []

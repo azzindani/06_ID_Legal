@@ -5,7 +5,7 @@ Proper state handling and error management
 
 from typing import Dict, Any, List, TypedDict, Optional
 from langgraph.graph import StateGraph, END
-from logger_utils import get_logger
+from utils.logger_utils import get_logger
 
 from .query_detection import QueryDetector
 from .hybrid_search import HybridSearchEngine
@@ -54,7 +54,8 @@ class LangGraphRAGOrchestrator:
         config: Dict[str, Any]
     ):
         self.logger = get_logger("RAGOrchestrator")
-        
+        self.config = config  # Store config for access in nodes
+
         # Initialize components
         self.query_detector = QueryDetector()
         self.hybrid_search = HybridSearchEngine(
@@ -307,20 +308,30 @@ class LangGraphRAGOrchestrator:
                 query=query,
                 consensus_results=consensus_data['validated_results']
             )
-            
+
             final_results = rerank_data['reranked_results']
-            
+
+            # SAFETY: Ensure exactly final_top_k documents (defense in depth)
+            expected_top_k = self.config.get('final_top_k', 3)
+            if len(final_results) > expected_top_k:
+                self.logger.warning(f"Reranker returned {len(final_results)} docs, trimming to {expected_top_k}")
+                final_results = final_results[:expected_top_k]
+                # Update rerank_data to reflect trimmed results
+                rerank_data['reranked_results'] = final_results
+                rerank_data['metadata']['reranked_count'] = len(final_results)
+
             self.logger.success("Reranking completed", {
-                "final_count": len(final_results)
+                "final_count": len(final_results),
+                "expected_top_k": expected_top_k
             })
-            
+
             new_metadata = {
                 "reranking": {
                     "final_count": len(final_results),
                     "avg_score": sum(r['final_score'] for r in final_results) / len(final_results) if final_results else 0
                 }
             }
-            
+
             return {
                 "rerank_data": rerank_data,
                 "final_results": final_results,

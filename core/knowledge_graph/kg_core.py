@@ -11,7 +11,7 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from logger_utils import get_logger
+from utils.logger_utils import get_logger
 
 logger = get_logger(__name__)
 
@@ -208,6 +208,124 @@ class KnowledgeGraphCore:
             return 'Kepmen'
 
         return 'Unknown'
+
+    def extract_all_entities_with_confidence(self, text: str) -> Dict[str, Any]:
+        """
+        Comprehensive entity extraction with confidence scoring.
+
+        Centralizes ALL entity extraction logic from:
+        - query_detection._extract_entities()
+        - advanced_query_analyzer._extract_key_phrases()
+        - enhanced_kg.extract_entities_from_text()
+        - kg_core.extract_entities()
+
+        Args:
+            text: Input text to analyze
+
+        Returns:
+            Dictionary with entity types and confidence scores:
+            {
+                'regulation_references': [{'text': str, 'confidence': float, 'type': str, 'number': str, 'year': str}, ...],
+                'article_references': [{'text': str, 'confidence': float, 'article': str, 'ayat': str, 'huruf': str}, ...],
+                'chapter_references': [{'text': str, 'confidence': float, 'chapter': str}, ...],
+                'quoted_phrases': [str, ...],
+                'keywords': [str, ...],
+                'domain_terms': [{'domain': str, 'confidence': float}, ...],
+                'legal_terms': [str, ...],
+                'institutions': [str, ...]
+            }
+        """
+        result = {
+            'regulation_references': [],
+            'article_references': [],
+            'chapter_references': [],
+            'quoted_phrases': [],
+            'keywords': [],
+            'domain_terms': [],
+            'legal_terms': [],
+            'institutions': []
+        }
+
+        text_lower = text.lower()
+
+        # 1. Extract regulation references with confidence (use existing method)
+        reg_refs = self.extract_regulation_references_with_confidence(text)
+        result['regulation_references'] = reg_refs
+
+        # 2. Extract article/pasal references with confidence
+        # Pattern: Pasal X ayat (Y) huruf z
+        article_patterns = [
+            (r'pasal\s+(\d+[a-z]?)(?:\s+ayat\s+\((\d+)\))?(?:\s+huruf\s+([a-z]))?(?:\s+angka\s+(\d+))?', 1.0),
+            (r'pasal\s+(\d+[a-z]?)', 0.8),  # Just pasal number
+            (r'ayat\s+\((\d+)\)', 0.5),  # Just ayat number
+        ]
+
+        for pattern, confidence in article_patterns:
+            for match in re.finditer(pattern, text_lower):
+                full_match = match.group(0)
+                groups = match.groups()
+
+                # Skip if already captured with higher confidence
+                if any(full_match in ref['text'] for ref in result['article_references']
+                       if ref['confidence'] > confidence):
+                    continue
+
+                result['article_references'].append({
+                    'text': full_match,
+                    'confidence': confidence,
+                    'article': groups[0] if len(groups) > 0 and groups[0] else None,
+                    'ayat': groups[1] if len(groups) > 1 and groups[1] else None,
+                    'huruf': groups[2] if len(groups) > 2 and groups[2] else None,
+                    'angka': groups[3] if len(groups) > 3 and groups[3] else None,
+                })
+
+        # 3. Extract chapter/bab references
+        bab_pattern = r'bab\s+([IVX]+|\d+)(?:\s+(?:tentang\s+)?(.+?)(?:[\.\n]|$))?'
+        for match in re.finditer(bab_pattern, text_lower):
+            result['chapter_references'].append({
+                'text': match.group(0).strip(),
+                'confidence': 0.9,
+                'chapter': match.group(1),
+                'title': match.group(2).strip() if match.group(2) else None
+            })
+
+        # 4. Extract quoted phrases (high confidence - user explicitly quoted)
+        quoted = re.findall(r'"([^"]+)"', text)
+        result['quoted_phrases'] = list(set(quoted))
+
+        # 5. Extract keywords (non-stopwords, length > 2)
+        # Indonesian stopwords subset
+        stopwords = {'yang', 'dan', 'di', 'ke', 'dari', 'ini', 'itu', 'dengan',
+                     'untuk', 'pada', 'adalah', 'oleh', 'dalam', 'atau', 'ada',
+                     'akan', 'dapat', 'telah', 'seperti', 'juga', 'sudah', 'masih',
+                     'tentang', 'tersebut', 'harus', 'bisa', 'lebih', 'bagaimana'}
+
+        words = re.findall(r'\b\w+\b', text_lower)
+        result['keywords'] = [w for w in words if w not in stopwords and len(w) > 2]
+
+        # 6. Detect legal domain terms with confidence
+        for domain, keywords in self.domain_mappings.items():
+            matches = sum(1 for kw in keywords if kw in text_lower)
+            if matches > 0:
+                confidence = min(1.0, matches * 0.2)  # 0.2 per keyword match
+                result['domain_terms'].append({
+                    'domain': domain,
+                    'confidence': confidence,
+                    'matches': matches
+                })
+
+        # 7. Extract legal terms using existing patterns
+        legal_entities = self.extract_entities(text)
+        result['legal_terms'] = legal_entities.get('legal_term', [])
+        result['institutions'] = legal_entities.get('institution', [])
+
+        logger.debug(f"Extracted entities: {len(result['regulation_references'])} regs, "
+                    f"{len(result['article_references'])} articles, "
+                    f"{len(result['chapter_references'])} chapters, "
+                    f"{len(result['quoted_phrases'])} quoted, "
+                    f"{len(result['keywords'])} keywords")
+
+        return result
 
     def calculate_entity_score(
         self,

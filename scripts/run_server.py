@@ -11,6 +11,9 @@ import argparse
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from config import LOG_DIR, ENABLE_FILE_LOGGING, LOG_VERBOSITY
+from utils.logger_utils import initialize_logging
+
 
 def main():
     parser = argparse.ArgumentParser(description="Run FastAPI server")
@@ -19,6 +22,13 @@ def main():
     parser.add_argument("--workers", type=int, default=1, help="Number of workers")
     parser.add_argument("--reload", action="store_true", help="Enable auto-reload")
     args = parser.parse_args()
+
+    # Initialize logging
+    initialize_logging(
+        enable_file_logging=ENABLE_FILE_LOGGING,
+        log_dir=LOG_DIR,
+        verbosity_mode=LOG_VERBOSITY
+    )
 
     import uvicorn
 

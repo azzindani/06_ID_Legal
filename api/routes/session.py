@@ -7,7 +7,8 @@ Endpoints for conversation session management.
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, validator
 from typing import List, Dict, Any, Optional
-import re
+
+from ..validators import validate_session_id
 
 router = APIRouter()
 
@@ -16,14 +17,9 @@ class SessionCreateRequest(BaseModel):
     session_id: Optional[str] = Field(None, max_length=100, description="Custom session ID")
 
     @validator('session_id')
-    def validate_session_id(cls, v):
-        """Validate session ID format"""
-        if v is None:
-            return v
-        # Session ID should be alphanumeric with hyphens/underscores only
-        if not re.match(r'^[a-zA-Z0-9_-]+$', v):
-            raise ValueError("Session ID must contain only alphanumeric characters, hyphens, and underscores")
-        return v
+    def validate_session_id_field(cls, v):
+        """Validate session ID using shared validator"""
+        return validate_session_id(v)
 
 
 class SessionResponse(BaseModel):

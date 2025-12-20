@@ -8,6 +8,8 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, validator
 from typing import List, Dict, Any, Optional
 
+from ..validators import validate_query
+
 router = APIRouter()
 
 
@@ -18,19 +20,9 @@ class SearchRequest(BaseModel):
     keyword_weight: float = Field(0.3, ge=0, le=1, description="Keyword search weight")
 
     @validator('query')
-    def validate_query(cls, v):
-        """Enhanced validation for query input"""
-        # Strip whitespace
-        v = v.strip()
-        if len(v) == 0:
-            raise ValueError("Query cannot be empty or only whitespace")
-        # Check for suspicious patterns (basic XSS prevention)
-        dangerous_patterns = ['<script', 'javascript:', 'onerror=']
-        v_lower = v.lower()
-        for pattern in dangerous_patterns:
-            if pattern in v_lower:
-                raise ValueError("Query contains potentially dangerous content")
-        return v
+    def validate_query_field(cls, v):
+        """Validate query using shared validator"""
+        return validate_query(v)
 
 
 class SearchResult(BaseModel):

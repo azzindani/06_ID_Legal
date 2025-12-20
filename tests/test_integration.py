@@ -172,7 +172,7 @@ class TestHardwareDetection:
 
     def test_hardware_detection(self):
         """Test hardware detection returns valid config"""
-        from hardware_detection import detect_hardware
+        from core.hardware_detection import detect_hardware
 
         config = detect_hardware()
 
@@ -183,7 +183,7 @@ class TestHardwareDetection:
 
     def test_ram_detection(self):
         """Test RAM detection returns reasonable value"""
-        from hardware_detection import get_ram_info
+        from core.hardware_detection import get_ram_info
 
         ram_gb = get_ram_info()
 
@@ -192,7 +192,7 @@ class TestHardwareDetection:
 
     def test_apply_hardware_config(self):
         """Test applying hardware configuration"""
-        from hardware_detection import apply_hardware_config, detect_hardware
+        from core.hardware_detection import apply_hardware_config, detect_hardware
 
         config = detect_hardware()
         settings = apply_hardware_config(config)

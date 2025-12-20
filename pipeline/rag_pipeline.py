@@ -12,7 +12,7 @@ File: pipeline/rag_pipeline.py
 
 import time
 from typing import Dict, Any, List, Optional, Generator
-from logger_utils import get_logger
+from utils.logger_utils import get_logger
 from config import (
     get_default_config,
     DEFAULT_SEARCH_PHASES,
@@ -100,7 +100,7 @@ class RAGPipeline:
                 progress_callback("Loading models", 1, total_steps)
 
             self.logger.info("Step 1/5: Loading models...")
-            from model_manager import load_models
+            from core.model_manager import load_models
             self.embedding_model, self.reranker_model = load_models()
 
             if self.embedding_model is None or self.reranker_model is None:
@@ -250,7 +250,7 @@ class RAGPipeline:
 
             if not final_results:
                 self.logger.warning("No results retrieved")
-                return {
+                no_results_response = {
                     'success': True,
                     'answer': 'Maaf, tidak ditemukan dokumen yang relevan untuk pertanyaan Anda.',
                     'sources': [],
@@ -260,6 +260,27 @@ class RAGPipeline:
                         'results_count': 0
                     }
                 }
+
+                # Handle streaming case
+                if stream:
+                    def no_results_generator():
+                        # Yield answer as tokens
+                        answer = no_results_response['answer']
+                        for char in answer:
+                            yield {
+                                'type': 'token',
+                                'token': char,
+                                'done': False
+                            }
+                        # Yield complete
+                        yield {
+                            'type': 'complete',
+                            'done': True,
+                            **no_results_response
+                        }
+                    return no_results_generator()
+                else:
+                    return no_results_response
 
             # Step 2: Generate answer
             self.logger.info("Generating answer...")

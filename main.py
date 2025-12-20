@@ -13,10 +13,10 @@ import argparse
 import sys
 from typing import Optional
 
-from config import Config
+from config import Config, LOG_DIR, ENABLE_FILE_LOGGING, LOG_VERBOSITY
 from pipeline import RAGPipeline
 from conversation import ConversationManager, MarkdownExporter, JSONExporter, HTMLExporter
-from logger_utils import get_logger
+from utils.logger_utils import get_logger, initialize_logging
 
 logger = get_logger(__name__)
 
@@ -355,6 +355,14 @@ def list_sessions(manager: ConversationManager):
 def main():
     """Main entry point"""
     args = parse_arguments()
+
+    # Initialize logging with verbosity override from --verbose flag
+    verbosity = 'verbose' if args.verbose else LOG_VERBOSITY
+    initialize_logging(
+        enable_file_logging=ENABLE_FILE_LOGGING,
+        log_dir=LOG_DIR,
+        verbosity_mode=verbosity
+    )
 
     try:
         # Handle list sessions

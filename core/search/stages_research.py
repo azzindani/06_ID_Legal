@@ -5,9 +5,17 @@ Proper threshold degradation and adaptive search with correct return values
 
 from typing import Dict, Any, List
 from collections import defaultdict
-from logger_utils import get_logger
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from utils.logger_utils import get_logger
 from config import DEFAULT_SEARCH_PHASES
 from core.search.hybrid_search import HybridSearchEngine
+
+# Phase 1: Expansion support (optional, lazy import)
+try:
+    from core.search.expansion_engine import IterativeExpansionEngine
+    EXPANSION_AVAILABLE = True
+except ImportError:
+    EXPANSION_AVAILABLE = False
 
 
 class StagesResearchEngine:
@@ -19,20 +27,81 @@ class StagesResearchEngine:
         self.hybrid_search = hybrid_search
         self.config = config
         self.logger = get_logger("StagesResearch")
-        
+
         self.search_phases = config.get('search_phases', DEFAULT_SEARCH_PHASES)
         self.max_rounds = config.get('max_rounds', 5)
         self.initial_quality = config.get('initial_quality', 0.95)
         self.quality_degradation = config.get('quality_degradation', 0.1)
         self.min_quality = config.get('min_quality', 0.5)
-        
+
+        # Phase 1: Expansion engine (if enabled)
+        expansion_config = config.get('expansion_config', {'enable_expansion': False})
+        self.expansion_enabled = expansion_config.get('enable_expansion', False) and EXPANSION_AVAILABLE
+
+        if self.expansion_enabled:
+            self.expansion_engine = IterativeExpansionEngine(
+                data_loader=hybrid_search.data_loader,
+                config=expansion_config
+            )
+            self.logger.info("Expansion engine enabled", expansion_config)
+        else:
+            self.expansion_engine = None
+            if expansion_config.get('enable_expansion', False) and not EXPANSION_AVAILABLE:
+                self.logger.warning("Expansion requested but not available (missing dependencies)")
+
         self.logger.info("StagesResearchEngine initialized", {
             "max_rounds": self.max_rounds,
             "initial_quality": self.initial_quality,
             "degradation_rate": self.quality_degradation,
-            "min_quality": self.min_quality
+            "min_quality": self.min_quality,
+            "expansion_enabled": self.expansion_enabled
         })
-    
+
+    def _execute_persona_search(
+        self,
+        query: str,
+        persona_name: str,
+        phase_config: Dict[str, Any],
+        priority_weights: Dict[str, float],
+        round_number: int,
+        quality_multiplier: float,
+        phase_name: str
+    ) -> Dict[str, Any]:
+        """
+        Execute search for a single persona (for parallel execution)
+
+        Returns:
+            Dict with 'persona_name', 'results', 'error' (if any)
+        """
+        try:
+            persona_results = self.hybrid_search.search_with_persona(
+                query=query,
+                persona_name=persona_name,
+                phase_config=phase_config,
+                priority_weights=priority_weights,
+                top_k=50,
+                round_number=round_number,
+                quality_multiplier=quality_multiplier
+            )
+
+            return {
+                'persona_name': persona_name,
+                'results': persona_results,
+                'error': None
+            }
+
+        except Exception as e:
+            self.logger.error(f"Persona search error", {
+                "persona": persona_name,
+                "phase": phase_name,
+                "error": str(e)
+            })
+            return {
+                'persona_name': persona_name,
+                'results': [],
+                'error': str(e)
+            }
+
     def conduct_research(
         self,
         query: str,
@@ -117,8 +186,8 @@ class StagesResearchEngine:
             
             if total_results >= min_results_threshold:
                 high_quality_count = sum(
-                    1 for r in research_data['all_results'] 
-                    if r['scores']['final'] >= 0.6
+                    1 for r in research_data['all_results']
+                    if r.get('scores', {}).get('final', 0.0) >= 0.6
                 )
                 
                 if high_quality_count >= min_results_threshold:
@@ -146,10 +215,67 @@ class StagesResearchEngine:
                 break
             
             round_num += 1
-        
+
+        # PHASE 1: ITERATIVE EXPANSION (if enabled)
+        if self.expansion_enabled and self.expansion_engine:
+            self.logger.info("Starting iterative expansion from initial results")
+
+            # Use all_results as seeds for expansion
+            initial_docs = research_data['all_results']
+
+            if initial_docs:
+                # Expand documents
+                pool = self.expansion_engine.expand(initial_docs, query)
+
+                # Replace all_results with expanded pool
+                # Use higher max_per_source to preserve documents for high final_top_k values
+                expanded_docs = pool.get_ranked_documents(
+                    diversity_filter=True,
+                    max_per_source=100  # Allow more docs per regulation
+                )
+
+                self.logger.info(f"Expansion complete: {len(initial_docs)} → {len(expanded_docs)} documents")
+
+                # Wrap expanded documents in HybridSearch result format for consistency
+                wrapped_expanded_docs = []
+                for idx, doc in enumerate(expanded_docs):
+                    # Check if already wrapped (from initial_retrieval)
+                    if 'record' in doc:
+                        wrapped_expanded_docs.append(doc)
+                    else:
+                        # Wrap raw document in HybridSearch format
+                        wrapped_doc = {
+                            'index': idx,
+                            'record': doc,
+                            'scores': {
+                                'final': 0.0,  # Expanded docs get 0 score (will be reranked)
+                                'semantic': 0.0,
+                                'keyword': 0.0,
+                                'kg': 0.0,
+                                'authority': 0.0,
+                                'temporal': 0.0,
+                                'completeness': 0.0
+                            },
+                            'metadata': {
+                                'persona': 'expansion',
+                                'phase': 'expansion',
+                                'global_id': doc.get('global_id') or doc.get('metadata', {}).get('global_id'),
+                                'regulation_type': doc.get('regulation_type') or doc.get('metadata', {}).get('regulation_type'),
+                                'regulation_number': doc.get('regulation_number') or doc.get('metadata', {}).get('regulation_number'),
+                                'year': doc.get('year') or doc.get('metadata', {}).get('year')
+                            }
+                        }
+                        wrapped_expanded_docs.append(wrapped_doc)
+
+                # Update research_data with wrapped expanded results
+                research_data['all_results'] = wrapped_expanded_docs
+                research_data['expansion_stats'] = pool.get_stats()
+            else:
+                self.logger.warning("No initial results to expand from")
+
         # Sort results
         research_data['all_results'].sort(
-            key=lambda x: x['scores']['final'],
+            key=lambda x: x.get('scores', {}).get('final', 0.0),  # Safe access for expanded docs
             reverse=True
         )
         
@@ -157,11 +283,18 @@ class StagesResearchEngine:
         research_data['phase_results'] = dict(research_data['phase_results'])
         research_data['persona_results'] = dict(research_data['persona_results'])
         
+        # Get top score safely (handle expanded documents without scores)
+        top_score = "N/A"
+        if research_data['all_results']:
+            first_doc = research_data['all_results'][0]
+            if 'scores' in first_doc and isinstance(first_doc['scores'], dict):
+                top_score = f"{first_doc['scores'].get('final', 0.0):.4f}"
+
         self.logger.success("Multi-stage research completed", {
             "rounds": research_data['rounds_executed'],
             "unique_results": len(research_data['all_results']),
             "total_evaluated": research_data['total_candidates_evaluated'],
-            "top_score": f"{research_data['all_results'][0]['scores']['final']:.4f}" if research_data['all_results'] else "N/A"
+            "top_score": top_score
         })
         
         return research_data
@@ -199,35 +332,44 @@ class StagesResearchEngine:
                 continue
             
             self.logger.debug(f"Executing phase: {phase_name} (round {round_number})")
-            
+
             phase_results = []
-            
-            # Each team member searches
-            for persona_name in team_composition:
-                try:
-                    persona_results = self.hybrid_search.search_with_persona(
+
+            # PERFORMANCE: Parallelize persona searches using ThreadPoolExecutor
+            # Each persona search is independent and can run concurrently
+            # Expected speedup: ~Nx for N personas (typically 3-5 personas)
+            max_workers = min(len(team_composition), 8)  # Cap at 8 concurrent threads
+
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                # Submit all persona searches concurrently
+                future_to_persona = {
+                    executor.submit(
+                        self._execute_persona_search,
                         query=query,
                         persona_name=persona_name,
                         phase_config=phase_config,
                         priority_weights=priority_weights,
-                        top_k=50,
                         round_number=round_number,
-                        quality_multiplier=quality_multiplier
-                    )
-                    
-                    phase_results.extend(persona_results)
-                    
+                        quality_multiplier=quality_multiplier,
+                        phase_name=phase_name
+                    ): persona_name
+                    for persona_name in team_composition
+                }
+
+                # Collect results as they complete
+                for future in as_completed(future_to_persona):
+                    persona_result = future.result()
+                    persona_name = persona_result['persona_name']
+                    results = persona_result['results']
+
+                    # Add results to phase
+                    phase_results.extend(results)
+
+                    # Update persona breakdown
                     if persona_name not in round_results['persona_breakdown']:
                         round_results['persona_breakdown'][persona_name] = 0
-                    round_results['persona_breakdown'][persona_name] += len(persona_results)
-                    
-                except Exception as e:
-                    self.logger.error(f"Persona search error", {
-                        "persona": persona_name,
-                        "phase": phase_name,
-                        "error": str(e)
-                    })
-            
+                    round_results['persona_breakdown'][persona_name] += len(results)
+
             round_results['phase_breakdown'][phase_name] = len(phase_results)
             round_results['results'].extend(phase_results)
             round_results['candidates_evaluated'] += len(phase_results)
@@ -236,12 +378,15 @@ class StagesResearchEngine:
         unique_results = {}
         for result in round_results['results']:
             global_id = result['record']['global_id']
-            if global_id not in unique_results or result['scores']['final'] > unique_results[global_id]['scores']['final']:
+            # Safely compare scores (handle expanded documents without scores)
+            result_score = result.get('scores', {}).get('final', 0.0)
+            existing_score = unique_results.get(global_id, {}).get('scores', {}).get('final', 0.0)
+            if global_id not in unique_results or result_score > existing_score:
                 unique_results[global_id] = result
-        
+
         round_results['results'] = sorted(
             unique_results.values(),
-            key=lambda x: x['scores']['final'],
+            key=lambda x: x.get('scores', {}).get('final', 0.0),
             reverse=True
         )
         
@@ -270,14 +415,24 @@ class StagesResearchEngine:
         
         # Score statistics
         if research_data['all_results']:
-            scores = [r['scores']['final'] for r in research_data['all_results']]
-            summary['score_statistics'] = {
-                'min': min(scores),
-                'max': max(scores),
-                'mean': sum(scores) / len(scores),
-                'median': sorted(scores)[len(scores)//2],
-                'top_10_mean': sum(sorted(scores, reverse=True)[:10]) / min(10, len(scores))
-            }
+            # Safely extract scores (handle both scored and unscored documents from expansion)
+            scores = []
+            for r in research_data['all_results']:
+                if 'scores' in r and isinstance(r['scores'], dict):
+                    score = r['scores'].get('final', 0.0)
+                else:
+                    # Expanded documents may not have scores
+                    score = 0.0
+                scores.append(score)
+
+            if scores:
+                summary['score_statistics'] = {
+                    'min': min(scores),
+                    'max': max(scores),
+                    'mean': sum(scores) / len(scores),
+                    'median': sorted(scores)[len(scores)//2],
+                    'top_10_mean': sum(sorted(scores, reverse=True)[:10]) / min(10, len(scores))
+                }
 
         return summary
 

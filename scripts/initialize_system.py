@@ -11,9 +11,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import (
     EMBEDDING_MODEL, RERANKER_MODEL, LLM_MODEL,
-    DATASET_NAME, EMBEDDING_DEVICE, LLM_DEVICE
+    DATASET_NAME, EMBEDDING_DEVICE, LLM_DEVICE,
+    LOG_DIR, ENABLE_FILE_LOGGING, LOG_VERBOSITY
 )
-from logger_utils import get_logger, initialize_logging
+from utils.logger_utils import get_logger, initialize_logging
 
 logger = get_logger("Initialize")
 
@@ -111,7 +112,11 @@ def initialize_pipeline():
 
 def main():
     """Main initialization function"""
-    initialize_logging()
+    initialize_logging(
+        enable_file_logging=ENABLE_FILE_LOGGING,
+        log_dir=LOG_DIR,
+        verbosity_mode=LOG_VERBOSITY
+    )
     logger.info("=" * 60)
     logger.info("Indonesian Legal RAG System - Initialization")
     logger.info("=" * 60)

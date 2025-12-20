@@ -18,7 +18,7 @@ torch = pytest.importorskip("torch")
 # Add parent directory to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
-from logger_utils import get_logger, initialize_logging, log_session_end
+from utils.logger_utils import get_logger, initialize_logging, log_session_end
 from config import (
     DATASET_NAME,
     get_default_config,
@@ -26,7 +26,7 @@ from config import (
     EMBEDDING_DIM
 )
 from loader.dataloader import EnhancedKGDatasetLoader
-from model_manager import get_model_manager
+from core.model_manager import get_model_manager
 from core.search.query_detection import QueryDetector
 from core.search.hybrid_search import HybridSearchEngine
 from core.search.stages_research import StagesResearchEngine
