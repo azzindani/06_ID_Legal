@@ -18,8 +18,9 @@ from config import (
     INDONESIAN_STOPWORDS
 )
 
-# Import comprehensive legal vocabulary from same directory
-from .legal_vocab import INDONESIAN_LEGAL_SYNONYMS, LEGAL_DOMAINS
+# Import comprehensive legal vocabulary from parent core directory
+# legal_vocab.py is in core/, query_detection.py is in core/search/
+from ..legal_vocab import INDONESIAN_LEGAL_SYNONYMS, LEGAL_DOMAINS
 
 
 class QueryDetector:
