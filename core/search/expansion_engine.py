@@ -24,6 +24,7 @@ from utils.memory_utils import cleanup_memory, aggressive_cleanup
 from .research_pool import ResearchPool
 import numpy as np
 import gc
+import time
 
 # Optional GPU support
 try:
@@ -184,8 +185,25 @@ class IterativeExpansionEngine:
 
             pool.add(doc, source='initial_retrieval', round_num=0, score=score)
 
+        # Safety: Track expansion start time and set timeout
+        expansion_start_time = time.time()
+        max_expansion_time = 300  # 5 minutes max
+
+        # Safety: Track processed seed IDs to prevent re-processing loops
+        processed_seed_ids = set()
+
+        # Safety: Track stalled rounds (no progress)
+        stalled_rounds = 0
+        max_stalled_rounds = 2
+
         # Expansion rounds
         for round_num in range(1, self.max_rounds + 1):
+            # Safety check: Timeout
+            elapsed_time = time.time() - expansion_start_time
+            if elapsed_time > max_expansion_time:
+                self.logger.warning(f"Expansion timeout after {elapsed_time:.1f}s, stopping")
+                break
+
             self.logger.info(f"Expansion round {round_num}/{self.max_rounds}")
 
             # Select seeds for this round
@@ -210,7 +228,21 @@ class IterativeExpansionEngine:
                 self.logger.info(f"No seeds available for round {round_num}, stopping expansion")
                 break
 
-            self.logger.info(f"Round {round_num}: Expanding from {len(seeds)} seeds")
+            # Safety check: Filter out already-processed seeds to prevent loops
+            current_seed_ids = {self._get_doc_id(s) for s in seeds if self._get_doc_id(s)}
+            new_seed_ids = current_seed_ids - processed_seed_ids
+
+            if not new_seed_ids:
+                self.logger.warning(f"Round {round_num}: All seeds already processed, stopping to prevent loop")
+                break
+
+            # Update processed seeds
+            processed_seed_ids.update(new_seed_ids)
+
+            # Filter seeds to only new ones
+            seeds = [s for s in seeds if self._get_doc_id(s) in new_seed_ids]
+
+            self.logger.info(f"Round {round_num}: Expanding from {len(seeds)} seeds ({len(new_seed_ids)} new)")
 
             # Apply expansion strategies
             added_count = 0
@@ -264,6 +296,16 @@ class IterativeExpansionEngine:
                     added_count += count
 
             self.logger.info(f"Round {round_num}: Added {added_count} new documents (pool size: {len(pool)})")
+
+            # Safety check: Detect stalled rounds (no progress)
+            if added_count == 0:
+                stalled_rounds += 1
+                self.logger.warning(f"Stalled round {stalled_rounds}/{max_stalled_rounds} (no docs added)")
+                if stalled_rounds >= max_stalled_rounds:
+                    self.logger.warning(f"Stopping: {stalled_rounds} consecutive rounds with no progress")
+                    break
+            else:
+                stalled_rounds = 0  # Reset on progress
 
             # Periodic memory cleanup after each round to prevent memory buildup
             if round_num % 1 == 0:  # Every round
@@ -1263,6 +1305,10 @@ class IterativeExpansionEngine:
 
         self.logger.info(f"Applying smart filtering to pool of {len(pool)} documents")
 
+        # Safety: Track filtering start time
+        filtering_start_time = time.time()
+        max_filtering_time = 60  # 1 minute max for filtering
+
         semantic_threshold = self.filtering_config.get('semantic_threshold', 0.60)
         max_pool_size = self.filtering_config.get('max_pool_size', 500)
         diversity_weight = self.filtering_config.get('diversity_weight', 0.3)
@@ -1364,6 +1410,11 @@ class IterativeExpansionEngine:
         max_expanded = max_pool_size - len(filtered_pool)
 
         for doc, prov, similarity, final_score, reg_key in expanded_docs_scored:
+            # Safety check: Timeout during filtering
+            if time.time() - filtering_start_time > max_filtering_time:
+                self.logger.warning(f"Filtering timeout after {time.time() - filtering_start_time:.1f}s, stopping early")
+                break
+
             # Check semantic threshold (only for semantic filtering)
             if similarity < semantic_threshold and prov['source'] not in ['temporal_expansion', 'hierarchical_expansion', 'topical_expansion']:
                 continue
