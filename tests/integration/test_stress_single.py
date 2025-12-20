@@ -41,7 +41,7 @@ from config import LOG_DIR, ENABLE_FILE_LOGGING, LOG_VERBOSITY
 
 # Maximum stress test configuration
 STRESS_CONFIG_MAX = {
-    'final_top_k': 30,                    # Maximum documents to return
+    'final_top_k': 50,                    # Maximum documents to return
     'max_rounds': 5,                       # Maximum search rounds
     'research_team_size': 5,               # All 5 personas
     'max_new_tokens': 32768,                # Maximum generation tokens
