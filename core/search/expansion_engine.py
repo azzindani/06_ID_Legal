@@ -20,6 +20,7 @@ Usage:
 from typing import Dict, Any, List, Optional, Tuple
 from collections import defaultdict
 from utils.logger_utils import get_logger
+from utils.memory_utils import cleanup_memory, aggressive_cleanup
 from .research_pool import ResearchPool
 import numpy as np
 import gc
@@ -264,9 +265,9 @@ class IterativeExpansionEngine:
 
             self.logger.info(f"Round {round_num}: Added {added_count} new documents (pool size: {len(pool)})")
 
-            # Periodic GPU cleanup after each round to prevent memory buildup
+            # Periodic memory cleanup after each round to prevent memory buildup
             if round_num % 1 == 0:  # Every round
-                self._cleanup_gpu_memory()
+                cleanup_memory(aggressive=False, reason=f"expansion round {round_num}")
 
             # Check stop conditions
             if added_count < self.min_docs_per_round:
@@ -286,16 +287,13 @@ class IterativeExpansionEngine:
             del pool
             pool = filtered_pool
 
-            # Force garbage collection to free CPU memory
-            gc.collect()
-
-            # GPU memory cleanup (if available)
-            self._cleanup_gpu_memory()
+            # Aggressive cleanup after filtering large pool
+            aggressive_cleanup(f"after filtering ({old_pool_size} -> {len(pool)} docs)")
 
             self.logger.info(f"Memory cleanup: Released {old_pool_size - len(pool)} documents from memory")
 
-        # Final GPU cleanup after expansion
-        self._cleanup_gpu_memory()
+        # Final aggressive cleanup after expansion completes
+        aggressive_cleanup("expansion complete")
 
         # Log final statistics
         stats = pool.get_stats()
@@ -304,44 +302,6 @@ class IterativeExpansionEngine:
                         f"sources: {stats['sources']}")
 
         return pool
-
-    def _cleanup_gpu_memory(self):
-        """
-        Clean up GPU memory after expansion operations
-
-        This is critical for:
-        - Freeing cached embeddings on GPU
-        - Clearing CUDA cache fragmentation
-        - Preventing GPU OOM errors during long sessions
-        - Releasing memory from similarity calculations
-        """
-        if not TORCH_AVAILABLE:
-            return
-
-        try:
-            if torch.cuda.is_available():
-                # Get memory stats before cleanup
-                allocated_before = torch.cuda.memory_allocated() / 1024**2  # MB
-                cached_before = torch.cuda.memory_reserved() / 1024**2  # MB
-
-                # Empty CUDA cache
-                torch.cuda.empty_cache()
-
-                # Force garbage collection on GPU tensors
-                gc.collect()
-
-                # Get memory stats after cleanup
-                allocated_after = torch.cuda.memory_allocated() / 1024**2  # MB
-                cached_after = torch.cuda.memory_reserved() / 1024**2  # MB
-
-                freed_allocated = allocated_before - allocated_after
-                freed_cached = cached_before - cached_after
-
-                if freed_allocated > 0 or freed_cached > 0:
-                    self.logger.info(f"GPU cleanup: Freed {freed_allocated:.1f}MB allocated, {freed_cached:.1f}MB cached "
-                                   f"(Now: {allocated_after:.1f}MB allocated, {cached_after:.1f}MB cached)")
-        except Exception as e:
-            self.logger.debug(f"GPU cleanup warning: {e}")
 
     def _get_doc_id(self, doc: Dict[str, Any]) -> Optional[str]:
         """
@@ -1429,10 +1389,9 @@ class IterativeExpansionEngine:
         # Cleanup temporary objects to free CPU memory
         del top_embeddings, avg_embedding, avg_embedding_normalized
         del expanded_docs_scored, regulation_counts
-        gc.collect()
 
-        # GPU cleanup after intensive similarity calculations
-        self._cleanup_gpu_memory()
+        # Aggressive cleanup after intensive similarity calculations
+        aggressive_cleanup("smart filtering complete")
 
         return filtered_pool
 

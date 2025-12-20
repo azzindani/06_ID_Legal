@@ -8,6 +8,7 @@ File: core/generation/generation_engine.py
 from typing import Dict, Any, List, Optional, Generator
 import time
 from utils.logger_utils import get_logger
+from utils.memory_utils import cleanup_after_retrieval, prepare_for_llm, log_memory_state
 from .llm_engine import LLMEngine
 from .prompt_builder import PromptBuilder
 from .citation_formatter import CitationFormatter
@@ -85,6 +86,11 @@ class GenerationEngine:
             "stream": stream,
             "thinking_mode": thinking_mode
         })
+
+        # CRITICAL: Cleanup memory from retrieval/expansion before generation
+        # This prevents OOM errors when running LLM after large expansion
+        cleanup_after_retrieval(len(retrieved_results))
+        log_memory_state("After retrieval cleanup")
 
         start_time = time.time()
 

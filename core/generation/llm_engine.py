@@ -11,6 +11,7 @@ from typing import Dict, Any, List, Optional, Generator
 import time
 from threading import Thread
 from utils.logger_utils import get_logger
+from utils.memory_utils import cleanup_before_generation, get_memory_stats, log_memory_state
 from config import (
     LLM_MODEL,
     MAX_LENGTH,
@@ -187,14 +188,10 @@ class LLMEngine:
             "max_new_tokens": max_new_tokens or self.max_new_tokens
         })
 
-        # CRITICAL: Clear GPU cache BEFORE generation to prevent OOM
-        # Especially important for long prompts (thinking modes)
-        import gc
-        gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            torch.cuda.synchronize()
-            self.logger.debug("Cleared GPU cache before generation")
+        # CRITICAL: Aggressive memory cleanup BEFORE generation to prevent OOM
+        # This is especially important after expansion which can consume significant memory
+        cleanup_before_generation("LLM generation")
+        log_memory_state("Pre-generation")
 
         start_time = time.time()
 
@@ -290,13 +287,10 @@ class LLMEngine:
             del inputs
             del outputs
             del generated_ids
-            # Force garbage collection to free memory NOW, not later
-            import gc
-            gc.collect()
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-                torch.cuda.synchronize()  # Ensure cleanup completes
-                self.logger.debug("Cleaned up generation tensors and cleared CUDA cache")
+
+            # Use standardized cleanup after generation
+            from utils.memory_utils import aggressive_cleanup
+            aggressive_cleanup("post-generation cleanup")
 
             return {
                 'generated_text': generated_text.strip(),
@@ -470,13 +464,10 @@ class LLMEngine:
             # until explicitly deleted and cache is cleared
             del inputs
             del streamer
-            # Force garbage collection to free memory NOW, not later
-            import gc
-            gc.collect()
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-                torch.cuda.synchronize()  # Ensure cleanup completes
-                self.logger.debug("Cleaned up generation tensors and cleared CUDA cache")
+
+            # Use standardized cleanup after streaming generation
+            from utils.memory_utils import aggressive_cleanup
+            aggressive_cleanup("post-streaming cleanup")
 
             # Final yield
             yield {
