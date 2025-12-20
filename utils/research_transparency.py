@@ -336,18 +336,20 @@ def format_detailed_research_process(
         lines.append("")
 
         for i, doc in enumerate(final_results, 1):
-            reg_type = doc.get('regulation_type', 'N/A')
-            reg_num = doc.get('regulation_number', 'N/A')
-            year = doc.get('year', 'N/A')
-            about = doc.get('about', 'N/A')
-            enacting_body = doc.get('enacting_body', '')
-            effective_date = doc.get('effective_date', doc.get('tanggal_penetapan', ''))
+            record = doc.get('record', doc)
+            
+            reg_type = record.get('regulation_type', 'N/A')
+            reg_num = record.get('regulation_number', 'N/A')
+            year = record.get('year', 'N/A')
+            about = record.get('about', 'N/A')
+            enacting_body = record.get('enacting_body', '')
+            effective_date = record.get('effective_date', record.get('tanggal_penetapan', ''))
             score = doc.get('score', doc.get('final_score', 0))
 
             # Get article/chapter info
-            chapter = doc.get('chapter', doc.get('bab', ''))
-            article = doc.get('article', doc.get('pasal', ''))
-            article_number = doc.get('article_number', '')
+            chapter = record.get('chapter', record.get('bab', ''))
+            article = record.get('article', record.get('pasal', ''))
+            article_number = record.get('article_number', '')
 
             # Build full regulation name - skip N/A enacting_body
             if enacting_body and enacting_body != 'N/A':
@@ -374,7 +376,7 @@ def format_detailed_research_process(
             lines.append(f"   Skor Final: {score:.4f}")
 
             if show_content:
-                content = doc.get('content', '')[:300]
+                content = record.get('content', '')[:300]
                 lines.append(f"   Konten: {content}...")
 
             # Don't add separator between list items - they should be adjacent
