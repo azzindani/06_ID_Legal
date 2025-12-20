@@ -112,6 +112,9 @@ class ConsensusBuilder:
             "threshold": f"{self.consensus_threshold:.0%}"
         })
         
+        # FIXED: Get required_docs from config (needed for fallback logic)
+        required_docs = self.config.get('final_top_k', 3)
+        
         # FIXED: If we don't have enough results, apply fallback to get more
         # Changed from "== 0" to "< required_docs" to ensure we always try to reach target
         if len(consensus_data['validated_results']) < required_docs:
