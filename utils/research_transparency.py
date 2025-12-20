@@ -49,7 +49,43 @@ def format_detailed_research_process(
     research_data = result.get('research_data', {})
     consensus_data = result.get('consensus_data', {})
     phase_metadata = result.get('phase_metadata', result.get('all_retrieved_metadata', {}))
-    final_results = result.get('sources', result.get('citations', []))
+    final_results = result.get('final_results', result.get('sources', result.get('citations', [])))
+
+    # RECONSTRUCTION: If phase_metadata is missing but research_data is present, reconstruct it
+    if not phase_metadata and research_data:
+        # Reconstruct phase_metadata from research_data['phase_results']
+        phase_results = research_data.get('phase_results', {})
+        if phase_results:
+            entry_idx = 0
+            for phase_name, results in phase_results.items():
+                persona_groups = {}
+                for r in results:
+                    persona = r.get('metadata', {}).get('persona', 'unknown')
+                    if persona not in persona_groups:
+                        persona_groups[persona] = []
+                    persona_groups[persona].append(r)
+
+                for persona_name, persona_results_list in persona_groups.items():
+                    key = f"{entry_idx}_{phase_name}_{persona_name}"
+                    
+                    # Transform results to candidates format
+                    candidates = []
+                    for r in persona_results_list:
+                        candidates.append({
+                            'record': r.get('record', {}),
+                            'scores': r.get('scores', {}),
+                            'composite_score': r.get('scores', {}).get('final', 0),
+                            'team_consensus': r.get('team_consensus', False),
+                            'researcher_agreement': r.get('researcher_agreement', 0)
+                        })
+
+                    phase_metadata[key] = {
+                        'phase': phase_name,
+                        'researcher': persona_name,
+                        'candidates': candidates,
+                        'results': candidates
+                    }
+                    entry_idx += 1
 
     if not research_data and not phase_metadata:
         lines.append("⚠️  No research data available")
@@ -75,15 +111,15 @@ def format_detailed_research_process(
                 if persona_info:
                     researcher_personas[researcher_name] = persona_info
 
-    lines.append(f"**Team Size:** {len(researchers)} members")
+    lines.append(f"**Ukuran Tim:** {len(researchers)} anggota")
     lines.append("")
 
     for researcher in sorted(researchers):
         persona_info = researcher_personas.get(researcher, {})
         name = persona_info.get('name', researcher)
-        expertise = persona_info.get('expertise', 'General Research')
+        expertise = persona_info.get('expertise', 'Penelitian Umum')
         lines.append(f"   - **{name}**")
-        lines.append(f"     Expertise: {expertise}")
+        lines.append(f"     Keahlian: {expertise}")
 
     #lines.append("")
     lines.append("---")
@@ -127,13 +163,22 @@ def format_detailed_research_process(
         name = persona_info.get('name', researcher)
 
         lines.append(f"#### 👤 {name}")
-        lines.append(f"**Total Documents Found:** {findings['total_documents']}")
+        lines.append(f"**Total Dokumen Ditemukan:** {findings['total_documents']}")
         lines.append("")
 
         # Show by phase
+        phase_map = {
+            'initial_scan': 'Pemindaian Awal',
+            'focused_review': 'Tinjauan Terfokus',
+            'deep_analysis': 'Analisis Mendalam',
+            'verification': 'Verifikasi',
+            'expert_review': 'Tinjauan Pakar'
+        }
+
         for phase_name, candidates in findings['phases'].items():
-            lines.append(f"**Phase: {phase_name.replace('_', ' ').title()}**")
-            lines.append(f"   Documents: {len(candidates)}")
+            display_phase = phase_map.get(phase_name, phase_name.replace('_', ' ').title())
+            lines.append(f"**Fase: {display_phase}**")
+            lines.append(f"   Dokumen: {len(candidates)}")
 
             # Show top N documents
             sorted_candidates = sorted(
@@ -189,11 +234,11 @@ def format_detailed_research_process(
 
                 # Team consensus marker
                 if doc.get('team_consensus'):
-                    lines.append(f"      ⭐ **Team Consensus** (Agreement: {doc.get('researcher_agreement', 0):.2f})")
+                    lines.append(f"      ⭐ **Konsensus Tim** (Kesepakatan: {doc.get('researcher_agreement', 0):.2f})")
 
                 if show_content:
                     content = record.get('content', '')[:200]
-                    lines.append(f"      Content: {content}...")
+                    lines.append(f"      Konten: {content}...")
 
                 # Don't add separator between list items - they should be adjacent
 
@@ -211,12 +256,17 @@ def format_detailed_research_process(
     #lines.append("")
 
     if consensus_data:
-        consensus_results = consensus_data.get('consensus_results', [])
+        # Handle both key names (consensus_results vs validated_results)
+        consensus_results = consensus_data.get('consensus_results', consensus_data.get('validated_results', []))
+        
+        # Extract statistics safely
         consensus_stats = consensus_data.get('statistics', {})
+        threshold = consensus_stats.get('consensus_threshold', consensus_data.get('threshold', 0.6))
+        agreement_rate = consensus_stats.get('team_agreement_rate', consensus_data.get('agreement_level', 0))
 
         lines.append(f"**Dokumen Setelah Konsensus:** {len(consensus_results)}")
-        lines.append(f"**Ambang Batas Konsensus:** {consensus_stats.get('consensus_threshold', 0.6):.2f}")
-        lines.append(f"**Tingkat Kesepakatan Tim:** {consensus_stats.get('team_agreement_rate', 0):.2%}")
+        lines.append(f"**Ambang Batas Konsensus:** {threshold:.2f}")
+        lines.append(f"**Tingkat Kesepakatan Tim:** {agreement_rate:.2%}")
         lines.append("")
 
         # Show consensus documents
@@ -342,9 +392,15 @@ def format_detailed_research_process(
     #lines.append("-" * 80)
 
     # Calculate stats
-    total_retrieved = sum(f['total_documents'] for f in researcher_findings.values())
-    total_consensus = len(consensus_data.get('consensus_results', [])) if consensus_data else 0
-    total_final = len(final_results)
+    # Safely get researcher findings counts
+    total_retrieved = 0
+    if researcher_findings:
+        total_retrieved = sum(f['total_documents'] for f in researcher_findings.values())
+    elif research_data:
+        total_retrieved = research_data.get('total_candidates_evaluated', 0)
+        
+    total_consensus = len(consensus_data.get('consensus_results', consensus_data.get('validated_results', []))) if consensus_data else 0
+    total_final = len(final_results) if final_results else 0
 
     lines.append(f"**Alur Pipeline Penelitian:**")
     lines.append(f"   1. Pengambilan Awal: {total_retrieved} dokumen ({len(researcher_findings)} peneliti)")
@@ -392,15 +448,15 @@ def format_researcher_summary(phase_metadata: Dict[str, Any]) -> str:
 
     total_docs = sum(researchers.values())
 
-    lines.append("**Research Team Summary:**")
-    lines.append(f"Total: {len(researchers)} researchers | {total_docs} documents")
+    lines.append("**Ringkasan Tim Peneliti:**")
+    lines.append(f"Total: {len(researchers)} peneliti | {total_docs} dokumen")
     lines.append("")
 
     for researcher, count in sorted(researchers.items(), key=lambda x: x[1], reverse=True):
         persona_info = RESEARCH_TEAM_PERSONAS.get(researcher, {})
         name = persona_info.get('name', researcher)
         percentage = (count / total_docs * 100) if total_docs > 0 else 0
-        lines.append(f"   - {name}: {count} docs ({percentage:.1f}%)")
+        lines.append(f"   - {name}: {count} dok ({percentage:.1f}%)")
 
     return '\n'.join(lines)
 

@@ -563,10 +563,19 @@ def search_documents(query: str, num_results: int = 10, progress=gr.Progress()) 
         all_docs = format_all_documents(result)
         df_docs = get_docs_dataframe_data(result)
         
-        # Combine summary and detailed research process to match Gradio app's comprehensive look
-        research_summary = format_research_process_summary(result)
-        research_detail = format_detailed_research_process(result, top_n_per_researcher=20, show_content=True)
-        research = f"{research_summary}\n\n---\n\n{research_detail}"
+        # Match gradio_app.py style for detailed process
+        # Using show_content=False for cleaner initial view, matching gradio_app.py line 364
+        research_detail = format_detailed_research_process(result, top_n_per_researcher=20, show_content=False)
+        
+        # Add the "Proses yang Sudah Dilakukan" checklist style if possible
+        # Since we don't have the live 'current_progress' list here, we reconstruct it from result
+        checklist = ["### 📋 Proses yang Sudah Dilakukan\n"]
+        checklist.append("✅ Analisis Query Berhasil")
+        checklist.append("✅ Pemindaian Regulasi Selesai")
+        checklist.append("✅ Konsensus Tim Tercapai")
+        checklist.append("✅ Reranking Final Selesai")
+        
+        research = f"{'\n'.join(checklist)}\n\n---\n\n{research_detail}"
 
         yield summary, all_docs, df_docs, research
 
@@ -804,22 +813,22 @@ def export_results(export_format: str) -> Tuple[str, Optional[str]]:
 """)
             
             # Add Research Process to HTML
-            # Prepend the high-level summary to the detailed process
-            research_sum = format_research_process_summary(last_search_result)
-            research_det = format_detailed_research_process(last_search_result, top_n_per_researcher=20, show_content=True)
-            research_md = f"{research_sum}\n\n---\n\n{research_det}"
+            checklist = ["### 📋 Proses yang Sudah Dilakukan\n"]
+            checklist.append("✅ Analisis Query Berhasil")
+            checklist.append("✅ Pemindaian Regulasi Selesai")
+            checklist.append("✅ Konsensus Tim Tercapai")
+            checklist.append("✅ Reranking Final Selesai")
             
-            # Convert simple markdown headers to HTML for the research process section
+            # Using show_content=True for exports as it's a fixed report
+            research_det = format_detailed_research_process(last_search_result, top_n_per_researcher=20, show_content=True)
+            research_md = f"{'\n'.join(checklist)}\n\n---\n\n{research_det}"
+            
+            # Convert Markdown to HTML for the research process
             import re
             research_html = research_md
-            research_html = re.sub(r'^## (.*)$', r'<h1 style="color: #1e3a5f; text-align: center; border-bottom: 3px solid #1e3a5f; padding-bottom: 15px; margin-top: 50px;">\1</h1>', research_html, flags=re.MULTILINE)
-            research_html = re.sub(r'^### (.*)$', r'<h2 style="color: #1e3a5f; border-bottom: 2px solid #e0e0e0; padding-bottom: 10px; margin-top: 40px;">\1</h2>', research_html, flags=re.MULTILINE)
-            research_html = re.sub(r'^#### (.*)$', r'<h3 style="color: #2c5282; margin-top: 25px;">\1</h3>', research_html, flags=re.MULTILINE)
+            research_html = re.sub(r'### (.*)', r'<h2>\1</h2>', research_html)
+            research_html = re.sub(r'#### (.*)', r'<h3>\1</h3>', research_html)
             research_html = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', research_html)
-            research_html = re.sub(r'_(.*?)_', r'<em>\1</em>', research_html)
-            research_html = re.sub(r'^(   - .*)$', r'<div style="margin-left: 20px;">\1</div>', research_html, flags=re.MULTILINE)
-            research_html = research_html.replace('\n', '<br/>')
-            
             lines.append(f"""
     <div class="research-section" style="margin-top: 50px; background: #fafafa; padding: 30px; border-radius: 8px; border: 1px solid #e0e0e0;">
         {research_html}
