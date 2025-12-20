@@ -425,7 +425,13 @@ def format_summary(result: Dict) -> str:
         else:
             output.append(f"*(Ditemukan total **{total_found}** dokumen regulasi.)*\n\n")
             
-        output.append(f"Analisis dilakukan melalui **{len(result.get('phase_metadata', {}))}** fase penelitian agen.\n\n")
+        # Count phases from available sources
+        phase_count = len(result.get('phase_metadata', {}))
+        if phase_count == 0 and 'research_data' in result:
+            phase_count = len(result['research_data'].get('phase_results', {}))
+            
+        if phase_count > 0:
+            output.append(f"Analisis dilakukan melalui **{phase_count}** fase penelitian agen.\n\n")
 
     # Statistics
     output.append("---\n\n")
@@ -468,20 +474,40 @@ def search_documents(query: str, num_results: int = 10, progress=gr.Progress()) 
         # Use streaming to track progress if possible
         if hasattr(pipeline, 'orchestrator') and hasattr(pipeline.orchestrator, 'stream_run'):
             # Manual streaming through orchestrator nodes
-            result = None
+            orchestrator_state = {}
             for state_update in pipeline.orchestrator.stream_run(query, top_k=num_results):
-                # The keys in state_update are the node names that just finished
+                # Accumulate state updates
+                orchestrator_state.update(state_update)
+                
+                # Check for node completions
                 if "query_detection" in state_update:
                     progress(0.4, desc="🔬 Researching documents...")
                 elif "research" in state_update:
                     progress(0.6, desc="🤝 Building consensus...")
                 elif "consensus" in state_update:
                     progress(0.8, desc="🎯 Reranking results...")
-                elif "reranking" in state_update:
-                    result = state_update["reranking"]
             
+            # Extract final data from accumulated state
+            # LangGraph outputs state as node_name -> state_update
+            # We want to consolidate all updates into a single flat dictionary
+            result = {}
+            for node_name, node_update in orchestrator_state.items():
+                if isinstance(node_update, dict):
+                    result.update(node_update)
+            
+            # Ensure critical keys are at top level
+            if not result.get("final_results") and "reranking" in orchestrator_state:
+                result.update(orchestrator_state["reranking"])
+            
+            # Ensure metadata consistency
+            if "metadata" not in result:
+                result["metadata"] = {}
+            
+            if "query" not in result["metadata"]:
+                result["metadata"]["query"] = query
+                
             # If we didn't get a result from streaming, fall back to direct call
-            if not result:
+            if not result or "final_results" not in result:
                 result = pipeline.retrieve_documents(query, top_k=num_results)
         else:
             # Fallback for non-streaming orchestrator

@@ -20,6 +20,7 @@ class RAGState(TypedDict, total=False):
     # Input
     query: str
     conversation_history: Optional[List[Dict[str, str]]]
+    top_k: Optional[int]
     
     # Query Analysis
     query_analysis: Optional[Dict[str, Any]]
@@ -382,7 +383,10 @@ class LangGraphRAGOrchestrator:
             "query": query,
             "conversation_history": conversation_history or [],
             "top_k": top_k,
-            "metadata": {},
+            "metadata": {
+                "query": query,
+                "start_time": time.time()
+            },
             "errors": []
         }
         
@@ -432,7 +436,10 @@ class LangGraphRAGOrchestrator:
             "query": query,
             "conversation_history": conversation_history or [],
             "top_k": top_k,
-            "metadata": {},
+            "metadata": {
+                "query": query,
+                "start_time": time.time()
+            },
             "errors": []
         }
         
