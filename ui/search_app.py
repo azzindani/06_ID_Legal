@@ -410,22 +410,44 @@ def format_summary(result: Dict) -> str:
     all_docs = _extract_all_documents_from_metadata(result)
     
     if all_docs:
-        # Show top N results in summary (up to 10 for readability)
-        show_count = min(10, len(all_docs))
-        output.append(f"### ⭐ Hasil Paling Relevan (Top {show_count})\n\n")
+        # Show all results in summary (capped by pipeline's top_k)
+        show_count = len(all_docs)
+        output.append(f"### ⭐ Hasil Relevan ({show_count} dokumen)\n\n")
         
-        for i, doc in enumerate(all_docs[:show_count], 1):
+        for i, doc in enumerate(all_docs, 1):
             record = doc.get('record', doc)
-            output.append(f"{i}. **{record.get('regulation_type', '')} No. {record.get('regulation_number', '')}/{record.get('year', '')}**\n")
-            output.append(f"   _{record.get('about', '')}_\n\n")
-        
-        total_found = len(all_docs)
-        if total_found > show_count:
-            output.append(f"*(Ditemukan total **{total_found}** kandidat dokumen. Lihat tab **Semua Dokumen** untuk daftar lengkap.)*\n\n")
-        else:
-            output.append(f"*(Ditemukan total **{total_found}** dokumen regulasi.)*\n\n")
             
-        # Count phases from available sources
+            # Extract metadata
+            reg_type = record.get('regulation_type', 'N/A')
+            reg_num = record.get('regulation_number', 'N/A')
+            year = record.get('year', 'N/A')
+            about = record.get('about', 'N/A')
+            effective_date = record.get('effective_date', record.get('tanggal_penetapan', ''))
+            
+            # Location info
+            chapter = record.get('chapter', record.get('bab', ''))
+            article = record.get('article', record.get('pasal', ''))
+            article_num = record.get('article_number', '')
+            location_parts = []
+            if chapter: location_parts.append(chapter)
+            if article: location_parts.append(article)
+            elif article_num: location_parts.append(article_num)
+            location = " | ".join(location_parts) if location_parts else "Dokumen Lengkap"
+
+            output.append(f"{i}. **{reg_type} No. {reg_num}/{year}**\n")
+            output.append(f"   - **Lokasi:** {location}\n")
+            if effective_date and effective_date != 'N/A':
+                output.append(f"   - **Tgl Penetapan:** {effective_date}\n")
+            output.append(f"   - **Tentang:** _{about}_\n")
+            
+            # Content preview (safe truncation)
+            content = record.get('content', '')
+            if content:
+                preview = content[:300].replace('\n', ' ') + "..." if len(content) > 300 else content
+                output.append(f"   - **Konten:** {preview}\n")
+            output.append("\n")
+        
+        # Count phases
         phase_count = len(result.get('phase_metadata', {}))
         if phase_count == 0 and 'research_data' in result:
             phase_count = len(result['research_data'].get('phase_results', {}))
@@ -557,14 +579,22 @@ def export_results(export_format: str) -> Tuple[str, Optional[str]]:
                 }
             }
 
-            for doc in all_docs:
                 record = doc.get('record', doc)
                 scores = doc.get('scores', {})
+                
+                # Location
+                chapter = record.get('chapter', record.get('bab', ''))
+                article = record.get('article', record.get('pasal', ''))
+                article_num = record.get('article_number', '')
+                location = " | ".join(filter(None, [chapter, article or article_num])) or "N/A"
+
                 export_data['documents'].append({
                     'regulation_type': record.get('regulation_type', ''),
                     'regulation_number': record.get('regulation_number', ''),
                     'year': record.get('year', ''),
                     'about': record.get('about', ''),
+                    'location': location,
+                    'effective_date': record.get('effective_date', record.get('tanggal_penetapan', '')),
                     'enacting_body': record.get('enacting_body', ''),
                     'content': record.get('content', ''),
                     'scores': {
@@ -598,21 +628,30 @@ def export_results(export_format: str) -> Tuple[str, Optional[str]]:
 
             # Header
             writer.writerow([
-                'No', 'Regulation_Type', 'Regulation_Number', 'Year', 'About',
+                'No', 'Regulation_Type', 'Regulation_Number', 'Year', 'Location', 'Effective_Date', 'About',
                 'Final_Score', 'Semantic', 'Keyword', 'KG', 'Authority', 'Temporal',
-                'Domain', 'Hierarchy', 'Phase', 'Researcher', 'Consensus'
+                'Domain', 'Hierarchy', 'Phase', 'Researcher', 'Consensus', 'Content'
             ])
 
             # Data
             for i, doc in enumerate(all_docs, 1):
                 record = doc.get('record', doc)
                 scores = doc.get('scores', {})
+                
+                chapter = record.get('chapter', record.get('bab', ''))
+                article = record.get('article', record.get('pasal', ''))
+                article_num = record.get('article_number', '')
+                location = " | ".join(filter(None, [chapter, article or article_num])) or "N/A"
+                effective_date = record.get('effective_date', record.get('tanggal_penetapan', ''))
+
                 writer.writerow([
                     i,
                     record.get('regulation_type', ''),
                     record.get('regulation_number', ''),
                     record.get('year', ''),
-                    record.get('about', '')[:100],
+                    location,
+                    effective_date,
+                    record.get('about', '')[:200],
                     f"{scores.get('final', doc.get('final_score', 0)):.4f}",
                     f"{scores.get('semantic', doc.get('semantic_score', 0)):.4f}",
                     f"{scores.get('keyword', doc.get('keyword_score', 0)):.4f}",
@@ -623,7 +662,8 @@ def export_results(export_format: str) -> Tuple[str, Optional[str]]:
                     record.get('kg_hierarchy_level', 0),
                     doc.get('_phase', ''),
                     doc.get('_researcher', ''),
-                    'Yes' if doc.get('team_consensus') else 'No'
+                    'Yes' if doc.get('team_consensus') else 'No',
+                    record.get('content', '')[:1000]
                 ])
 
             content = output.getvalue()
@@ -673,14 +713,20 @@ def export_results(export_format: str) -> Tuple[str, Optional[str]]:
             <div class="meta-item"><span class="meta-label">Metode:</span> RAG Research Agency</div>
         </div>
         
-        <h3>⭐ Hasil Utama</h3>
+        <h3>⭐ Hasil Utama (Top {min(10, len(all_docs))})</h3>
         <ul style="padding-left: 20px;">
 """]
             
-            # Add top 3 to the summary list
-            for i, doc in enumerate(all_docs[:3], 1):
+            # Show top 10 in HTML summary list
+            for i, doc in enumerate(all_docs[:10], 1):
                 record = doc.get('record', doc)
-                lines.append(f"            <li><strong>{record.get('regulation_type', 'N/A')} No. {record.get('regulation_number', 'N/A')}/{record.get('year', 'N/A')}</strong>: {record.get('about', 'N/A')}</li>\n")
+                
+                chapter = record.get('chapter', record.get('bab', ''))
+                article = record.get('article', record.get('pasal', ''))
+                article_num = record.get('article_number', '')
+                location = " | ".join(filter(None, [chapter, article or article_num])) or "Dokumen Lengkap"
+                
+                lines.append(f"            <li><strong>{record.get('regulation_type', 'N/A')} No. {record.get('regulation_number', 'N/A')}/{record.get('year', 'N/A')}</strong> ({location}): {record.get('about', 'N/A')}</li>\n")
             
             lines.append(f"""        </ul>
     </div>
@@ -702,6 +748,8 @@ def export_results(export_format: str) -> Tuple[str, Optional[str]]:
         </div>
         <div class="doc-meta">
             <div><span class="meta-label">Tentang:</span> {record.get('about', 'N/A')}</div>
+            <div><span class="meta-label">Lokasi:</span> {" | ".join(filter(None, [record.get('chapter', record.get('bab', '')), record.get('article', record.get('pasal', '')) or record.get('article_number', '')])) or "Dokumen Lengkap"}</div>
+            <div><span class="meta-label">Tgl Penetapan:</span> {record.get('effective_date', record.get('tanggal_penetapan', 'N/A'))}</div>
             <div><span class="meta-label">Lembaga:</span> {record.get('enacting_body', 'N/A')}</div>
             <div><span class="meta-label">Domain:</span> {record.get('kg_primary_domain', 'N/A')}</div>
             <div><span class="meta-label">Fase:</span> {doc.get('_phase', 'N/A')}</div>
@@ -734,14 +782,22 @@ def export_results(export_format: str) -> Tuple[str, Optional[str]]:
             for i, doc in enumerate(all_docs, 1):
                 record = doc.get('record', doc)
                 scores = doc.get('scores', {})
+                
+                chapter = record.get('chapter', record.get('bab', ''))
+                article = record.get('article', record.get('pasal', ''))
+                article_num = record.get('article_number', '')
+                location = " | ".join(filter(None, [chapter, article or article_num])) or "Dokumen Lengkap"
+                effective_date = record.get('effective_date', record.get('tanggal_penetapan', 'N/A'))
 
                 lines.append(f"### {i}. {record.get('regulation_type', 'N/A')} No. {record.get('regulation_number', 'N/A')}/{record.get('year', 'N/A')}\n\n")
-                lines.append(f"**Tentang:** {record.get('about', 'N/A')}\n\n")
+                lines.append(f"- **Lokasi:** {location}\n")
+                lines.append(f"- **Tgl Penetapan:** {effective_date}\n")
+                lines.append(f"- **Tentang:** {record.get('about', 'N/A')}\n\n")
                 lines.append(f"**Skor:** Final={scores.get('final', doc.get('final_score', 0)):.4f}, ")
                 lines.append(f"Semantic={scores.get('semantic', doc.get('semantic_score', 0)):.4f}, ")
                 lines.append(f"KG={scores.get('kg', doc.get('kg_score', 0)):.4f}\n\n")
 
-                content_preview = record.get('content', '')[:500]
+                content_preview = record.get('content', '')[:1000]
                 if content_preview:
                     lines.append(f"**Konten:** {content_preview}...\n\n")
 
