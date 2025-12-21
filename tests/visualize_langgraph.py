@@ -5,7 +5,8 @@ Generates ASCII and Mermaid diagrams of the search orchestrator.
 
 import os
 import sys
-from unittest.mock import MagicMock
+import torch
+from unittest.mock import MagicMock, PropertyMock
 
 # Add project root to sys.path to allow imports from core, utils, etc.
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -15,13 +16,20 @@ def visualize_graph():
     
     # Mock dependencies to avoid loading heavy models or needing a dataset
     mock_loader = MagicMock()
-    mock_loader.get_all_records_count.return_value = 0
-    mock_loader.processed_data = [] # To avoid BM25 division by zero
+    mock_loader.get_all_records_count.return_value = 1
+    mock_loader.all_records = [{"about": "test", "content": "test"}]
+    mock_loader.processed_data = [{"about": "test", "content": "test"}]
+    mock_loader.metadata = [{"about": "test", "content": "test"}]
+    
+    # Mock embeddings with real numpy array to satisfy FAISS init (num_docs, dim)
+    import numpy as np
+    mock_loader.embeddings = np.zeros((1, 768))
     
     mock_emb = MagicMock()
+    mock_emb.device = torch.device('cpu')
     
     mock_rerank = MagicMock()
-    mock_rerank.device = "cpu" # Fix for torch.device(str(MagicMock)) error
+    mock_rerank.device = torch.device('cpu')
 
     
     try:
