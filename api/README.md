@@ -168,88 +168,129 @@ Copy and paste the following cell into your notebook:
 
 
 # ============================================
-# 📓 API SERVER + INTERACTIVE TESTS
+# 📓 API SERVER + INTERACTIVE TESTS (PURE PYTHON)
 # ============================================
-# This cell allows you to run the FastAPI server in the background
-# and test it immediately with curl commands.
+# This cell runs the server and tests it using Python's requests library.
+# It handles server startup, waiting, testing, and cleanup automatically.
 # ============================================
 
 import subprocess
 import time
 import os
 import sys
+import requests
+import json
+import signal
 
 # --------------------------------------------
-# 1. AUTHENTICATION SETUP
+# 1. SETUP
 # --------------------------------------------
-# We verify the API Key mechanism works
-os.environ['LEGAL_API_KEY'] = "test_integration_key_12345"
-print(f"✅ API Key configured: {os.environ['LEGAL_API_KEY']}")
+API_KEY = "test_integration_key_12345"
+os.environ['LEGAL_API_KEY'] = API_KEY
+BASE_URL = "http://127.0.0.1:8000/api/v1"
+HEADERS = {"X-API-Key": API_KEY, "Content-Type": "application/json"}
+
+
+def check_server_alive():
+    try:
+        requests.get(f"{BASE_URL}/health", timeout=1)
+        return True
+    except:
+        return False
 
 # --------------------------------------------
-# 2. START SERVER (BACKGROUND)
+# 2. START SERVER
 # --------------------------------------------
-print("\n🚀 Starting FastAPI Server in background...")
-# We use sys.executable to ensure we use the same Python environment
+print(f"🚀 Starting API Server on Port 8000...")
+# Use sys.executable to ensure we use the same Python environment
 server = subprocess.Popen(
     [sys.executable, "-m", "uvicorn", "api.server:app", "--host", "127.0.0.1", "--port", "8000"],
-    stdout=subprocess.PIPE,
-    stderr=subprocess.PIPE
+    stdout=sys.stdout,
+    stderr=sys.stderr
 )
 
-# Give it time to initialize the RAG pipeline
-print("⏳ Waiting 15 seconds for server initialization...")
-time.sleep(15)
-
-try:
-    # --------------------------------------------
-    # 3. HEALTH CHECK
-    # --------------------------------------------
-    print("\n[TEST 1] Checking System Health...")
-    !curl -s http://127.0.0.1:8000/api/v1/health | python -m json.tool
-
-    # --------------------------------------------
-    # 4. TEST: RETRIEVAL ENDPOINT
-    # --------------------------------------------
-    print("\n[TEST 2] Testing Retrieval (No LLM)...")
-    print("Query: 'Apa syarat pendirian PT?'")
-    !curl -s -X POST http://127.0.0.1:8000/api/v1/rag/retrieve \
-      -H "Content-Type: application/json" \
-      -H "X-API-Key: test_integration_key_12345" \
-      -d '{"query": "Apa syarat pendirian PT?", "top_k": 2}' | python -m json.tool
-
-    # --------------------------------------------
-    # 5. TEST: RESEARCH ENDPOINT (DEEP REASONING)
-    # --------------------------------------------
-    print("\n[TEST 3] Testing Deep Research (With LLM)...")
-    print("Query: 'Jelaskan prosedur likuidasi PT'")
-    print("Note: This performs multi-step reasoning, please wait...")
-    !curl -s -X POST http://127.0.0.1:8000/api/v1/rag/research \
-      -H "Content-Type: application/json" \
-      -H "X-API-Key: test_integration_key_12345" \
-      -d '{"query": "Jelaskan prosedur likuidasi PT", "thinking_level": "low", "team_size": 2}' | python -m json.tool
-
-    # --------------------------------------------
-    # 6. TEST: CHAT ENDPOINT (CONTEXTUAL)
-    # --------------------------------------------
-    print("\n[TEST 4] Testing Conversational Chat...")
-    print("Query: 'Apa itu UU Ketenagakerjaan?'")
-    !curl -s -X POST http://127.0.0.1:8000/api/v1/rag/chat \
-      -H "Content-Type: application/json" \
-      -H "X-API-Key: test_integration_key_12345" \
-      -d '{"query": "Apa itu UU Ketenagakerjaan?", "session_id": "nb_session_1", "stream": false}' | python -m json.tool
-
-finally:
-    # --------------------------------------------
-    # 7. CLEANUP
-    # --------------------------------------------
-    print("\n🛑 Stopping background server...")
-    server.terminate()
+# --------------------------------------------
+# 3. WAIT FOR HEALTHY (MAX 90s)
+# --------------------------------------------
+print("⏳ Waiting for server to be ready (may take ~300s for models)...", end="", flush=True)
+server_ready = False
+# Try polling explicitly
+for _ in range(300):
     try:
-        server.wait(timeout=5)
-        print("✅ Server stopped successfully")
-    except subprocess.TimeoutExpired:
-        server.kill()
-        print("⚠️ Server killed forcefully")
+        # We use a short timeout so we don't hang if server is dead
+        r = requests.get(f"{BASE_URL}/health", timeout=1)
+        if r.status_code == 200:
+            print("\n✅ Server is UP and READY!")
+            server_ready = True
+            break
+    except Exception:
+        time.sleep(1)
+        print(".", end="", flush=True)
+
+if not server_ready:
+    print("\n❌ Server failed to start.")
+    server.terminate()
+    print("\n❌ Server failed to start.")
+    server.terminate()
+    # Output already printed to stdout/stderr
+else:
+    try:
+        # TEST A: RETRIEVAL
+        # ------------------
+        print("\n[TEST A] Retrieval (curl)...")
+        cmd_a = [
+            "curl", "-X", "POST", f"{BASE_URL}/rag/retrieve",
+            "-H", f"X-API-Key: {API_KEY}",
+            "-H", "Content-Type: application/json",
+            "-d", json.dumps({"query": "Apa syarat pendirian PT?", "top_k": 2}),
+            "--max-time", "300" 
+        ]
+        subprocess.run(cmd_a)
+
+        # CHECK SERVER
+        if not check_server_alive():
+            print("\n\n❌ Server crashed after Test A (Likely OOM - Try reducing top_k)", flush=True)
+        else:
+            # TEST B: DEEP RESEARCH
+            # ------------------
+            print("\n\n[TEST B] Deep Research (curl) - This may take time...", flush=True)
+            cmd_b = [
+                "curl", "-X", "POST", f"{BASE_URL}/rag/research",
+                "-H", f"X-API-Key: {API_KEY}",
+                "-H", "Content-Type: application/json",
+                "-d", json.dumps({"query": "Apa itu PT?", "thinking_level": "low", "team_size": 1}),
+                "--max-time", "600"
+            ]
+            subprocess.run(cmd_b)
+
+        # CHECK SERVER
+        if not check_server_alive():
+             print("\n\n❌ Server crashed after Test B", flush=True)
+        else:
+            # TEST C: CHAT
+            # ------------------
+            print("\n\n[TEST C] Chat (curl)...", flush=True)
+            session_id = f"demo_{int(time.time())}"
+            cmd_c1 = [
+                "curl", "-X", "POST", f"{BASE_URL}/rag/chat",
+                "-H", f"X-API-Key: {API_KEY}",
+                "-H", "Content-Type: application/json",
+                "-d", json.dumps({"query": "Apa itu UU Ketenagakerjaan?", "session_id": session_id, "stream": False}),
+                "--max-time", "300"
+            ]
+            subprocess.run(cmd_c1)
+
+    finally:
+        # --------------------------------------------
+        # 5. CLEANUP
+        # --------------------------------------------
+        print("\n🛑 Shutting down server...")
+        server.terminate()
+        try:
+            server.wait(timeout=5)
+            print("✅ Server stopped successfully")
+        except:
+            server.kill()
+            print("⚠️ Server killed forcefully")
 
 print("\n🎉 All interactive tests completed!")
