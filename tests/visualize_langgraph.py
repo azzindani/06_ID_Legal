@@ -15,8 +15,14 @@ def visualize_graph():
     
     # Mock dependencies to avoid loading heavy models or needing a dataset
     mock_loader = MagicMock()
+    mock_loader.get_all_records_count.return_value = 0
+    mock_loader.processed_data = [] # To avoid BM25 division by zero
+    
     mock_emb = MagicMock()
+    
     mock_rerank = MagicMock()
+    mock_rerank.device = "cpu" # Fix for torch.device(str(MagicMock)) error
+
     
     try:
         from core.search.langgraph_orchestrator import LangGraphRAGOrchestrator
