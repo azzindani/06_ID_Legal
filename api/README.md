@@ -305,6 +305,24 @@ else:
             ]
             subprocess.run(cmd_c2)
 
+            # TEST D: STREAMING CHAT (Real-time Thinking)
+            # ------------------
+            print("\n\n[TEST D] Streaming Chat (Real-time Thinking)...", flush=True)
+            print("Note: You will see 'thinking' tokens followed by 'chunk' tokens.")
+            cmd_d = [
+                "curl", "-N", "-X", "POST", f"{BASE_URL}/rag/chat",
+                "-H", f"X-API-Key: {API_KEY}",
+                "-H", "Content-Type: application/json",
+                "-d", json.dumps({
+                    "query": "Jelaskan perbedaan PT dan CV secara mendalam.", 
+                    "session_id": session_id, 
+                    "thinking_level": "high",
+                    "stream": True # <--- ENABLE STREAMING
+                }),
+                "--max-time", "600"
+            ]
+            subprocess.run(cmd_d)
+
     finally:
         # --------------------------------------------
         # 5. CLEANUP
