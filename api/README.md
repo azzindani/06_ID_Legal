@@ -271,6 +271,20 @@ else:
             # ------------------
             print("\n\n[TEST C] Chat (curl)...", flush=True)
             session_id = f"demo_{int(time.time())}"
+            
+            # 1. CREATE SESSION
+            print(f"Creating session: {session_id}...")
+            cmd_c_init = [
+                "curl", "-X", "POST", f"{BASE_URL}/sessions",
+                "-H", f"X-API-Key: {API_KEY}",
+                "-H", "Content-Type: application/json",
+                "-d", json.dumps({"session_id": session_id}),
+                "--max-time", "30"
+            ]
+            subprocess.run(cmd_c_init)
+
+            # 2. TURN 1
+            print("\n\nTurn 1...", flush=True)
             cmd_c1 = [
                 "curl", "-X", "POST", f"{BASE_URL}/rag/chat",
                 "-H", f"X-API-Key: {API_KEY}",
@@ -279,6 +293,17 @@ else:
                 "--max-time", "300"
             ]
             subprocess.run(cmd_c1)
+
+            # 3. TURN 2 (Follow-up)
+            print("\n\nTurn 2 (Follow-up)...", flush=True)
+            cmd_c2 = [
+                "curl", "-X", "POST", f"{BASE_URL}/rag/chat",
+                "-H", f"X-API-Key: {API_KEY}",
+                "-H", "Content-Type: application/json",
+                "-d", json.dumps({"query": "Apa sanksi pidananya?", "session_id": session_id, "stream": False}),
+                "--max-time", "300"
+            ]
+            subprocess.run(cmd_c2)
 
     finally:
         # --------------------------------------------
