@@ -32,6 +32,9 @@ DANGEROUS_PATTERNS = [
     r'union\s+select',
     r';\s*insert\s+into',
     r'--\s*$',
+    r"'\s*or\s*'1'\s*=\s*'1",  # Classic OR '1'='1 attack
+    r'"\s*or\s*"1"\s*=\s*"1',  # Double-quote variant
+    r"'\s*or\s*1\s*=\s*1",     # Without quotes variant
     
     # Command injection
     r'&&\s*rm\s+-rf',
