@@ -404,7 +404,26 @@ python tests/integration/test_stress_single.py
 # 14. Stress Test - Conversational (MAXIMUM LOAD)
 # Tests 7-turn conversation with maximum settings
 python tests/integration/test_stress_conversational.py
+
+# 15. LangGraph Visualization (NEW) ⭐
+# Generates ASCII and Mermaid diagrams of the search orchestrator workflow
+python tests/visualize_langgraph.py
 ```
+
+## 📊 LangGraph Visualization
+
+The system uses **LangGraph** to orchestrate the multi-stage research and consensus process. You can preview the workflow logic using the visualization tool:
+
+```bash
+python tests/visualize_langgraph.py
+```
+
+This will:
+1. Print an **ASCII diagram** directly to your console.
+2. Generate a **Mermaid.js code** block compatible with GitHub/VSCode.
+3. Save a preview file at `tests/langgraph_workflow.md`.
+
+You can view the resulting [langgraph_workflow.md](langgraph_workflow.md) file in any Markdown viewer (including GitHub or VSCode with Mermaid extension) to see the visual flow.
 
 ## 🧠 Thinking Modes for Legal Analysis
 
