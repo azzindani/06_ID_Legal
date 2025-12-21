@@ -259,6 +259,7 @@ class GenerationEngine:
 
         full_response = ""
         tokens_generated = 0
+        in_thinking_block = False
 
         try:
             for chunk in self.llm_engine.generate_stream(prompt, max_new_tokens=max_new_tokens):
@@ -268,8 +269,17 @@ class GenerationEngine:
                         full_response += token
                         tokens_generated = chunk['tokens_generated']
                         
+                        # Real-time thinking detection (DeepSeek/CoT style)
+                        # Detect <think> start
+                        if "<think>" in token.lower() or (not in_thinking_block and "<think" in full_response.lower()[-10:]):
+                            in_thinking_block = True
+                        
+                        # Detect </think> end
+                        if "</think>" in token.lower() or (in_thinking_block and "</think" in full_response.lower()[-10:]):
+                            in_thinking_block = False
+
                         yield {
-                            'type': 'token',
+                            'type': 'thinking' if in_thinking_block else 'token',
                             'token': token,
                             'tokens_generated': tokens_generated,
                             'done': False

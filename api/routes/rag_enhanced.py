@@ -418,6 +418,10 @@ async def conversational_rag(req: ChatRequest, request: Request):
                         full_answer += chunk
                         yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
                     
+                    elif event_type == 'thinking_chunk':
+                        chunk = data.get('chunk', '')
+                        yield f"data: {json.dumps({'type': 'thinking', 'content': chunk})}\n\n"
+                    
                     elif event_type == 'final_result':
                         final_result = data
                         full_answer = data.get('answer', full_answer)

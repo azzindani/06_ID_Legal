@@ -745,6 +745,12 @@ class RAGPipeline:
                         'token': chunk['token'],
                         'done': False
                     }
+                elif chunk.get('type') == 'thinking':
+                    yield {
+                        'type': 'thinking',
+                        'token': chunk['token'],
+                        'done': False
+                    }
                 elif chunk.get('type') == 'complete':
                     total_time = time.time() - start_time
 
