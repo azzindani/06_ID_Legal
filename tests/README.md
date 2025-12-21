@@ -409,13 +409,13 @@ python tests/integration/test_stress_conversational.py
 # Generates ASCII and Mermaid diagrams of the search orchestrator workflow
 python tests/visualize_langgraph.py
 
-# 16. Security Module Tests (NEW) 🛡️
-# Tests authentication, input safety, rate limiting, and file protection
-python tests/test_security_module.py
+# 16. Security Integration Test (NEW) 🛡️
+# Real integration test with authentication, XSS/SQL/prompt injection, rate limiting
+python tests/integration/test_security_integration.py
 
-# 17. API Integration Tests (NEW) 🌐
-# Documentation tests for the enhanced RAG API endpoints
-python tests/api/test_enhanced_api.py
+# 17. API Integration Test (NEW) 🌐
+# Tests all three API endpoints with actual pipeline execution
+python tests/integration/test_api_integration.py --quick
 ```
 
 ## 📊 LangGraph Visualization
@@ -433,94 +433,148 @@ This will:
 
 You can view the resulting [langgraph_workflow.md](langgraph_workflow.md) file in any Markdown viewer (including GitHub or VSCode with Mermaid extension) to see the visual flow.
 
-## 🛡️ Security Module Tests
+## 🛡️ Security Integration Test
 
-The system includes a comprehensive security module (`security/`) that provides reusable protection across all services. You can verify all security features work correctly:
+Comprehensive integration test that validates all security features with **real system components** and **actual threat scenarios**.
 
 ```bash
-python tests/test_security_module.py
+python tests/integration/test_security_integration.py --verbose
 ```
 
-**What's tested:**
-- ✅ **API Key Authentication**: Valid/invalid key detection with constant-time comparison
-- ✅ **Input Safety**: XSS, SQL injection, command injection, and prompt injection detection
-- ✅ **Rate Limiting**: Per-user request throttling with sliding window algorithm
-- ✅ **File Protection**: Filename sanitization and dangerous extension blocking
+**What's tested with real components:**
+
+### 1. Authentication Integration
+- ✅ API Key validation with environment variables
+- ✅ Constant-time comparison (timing attack prevention)
+- ✅ Key generation and validation
+- ✅ Token bucket rate limiting per key
+- ✅ Empty/invalid key rejection
+
+### 2. Input Safety with Real Legal Queries
+- ✅ Valid Indonesian legal queries (accepted)
+- ✅ XSS injection attempts: `<script>`, `javascript:`, `onerror=`
+- ✅ Prompt injection: "ignore previous instructions", "system prompt"
+- ✅ SQL injection: `' OR '1'='1`, `DROP TABLE`, `UNION SELECT`
+- ✅ Command injection detection
+
+### 3. Rate Limiting Stress Test
+- ✅ Per-user request throttling
+- ✅ 10 requests/minute limit enforcement
+- ✅ Separate limits per user
+- ✅ Retry-after time calculation
+- ✅ Stats tracking and reset functionality
+
+### 4. File Protection Real Scenarios
+- ✅ Safe file extensions (PDF, DOCX, JPG)
+- ✅ Dangerous extensions blocked (EXE, BAT, SH, DLL)
+- ✅ Path traversal attacks: `../../etc/passwd`
+- ✅ Null byte injection: `file.pdf\x00.exe`
+- ✅ Overly long filename detection
 
 **Expected Output:**
 ```
-🛡️  SECURITY MODULE TEST SUITE
-
 ==================================================
-Testing Authentication Module
+TEST 1: API Key Authentication Integration
 ==================================================
 ✓ Valid API key accepted
 ✓ Invalid API key rejected
-✓ Generated key: legal_abc123...
+✓ Empty API key rejected
+✓ Generated secure key: legal_abc123...
+✓ Token bucket: 5 requests allowed
+✓ Token bucket: 6th request blocked
 
+... (4 test suites)
+
+Results: 4/4 tests passed
+🎉 ALL SECURITY TESTS PASSED!
+```
+
+## 🌐 API Integration Test
+
+Comprehensive integration test that **initializes the full RAG pipeline** and tests all three Enhanced RAG API endpoints with **actual execution**.
+
+```bash
+# Quick mode (lighter config, faster)
+python tests/integration/test_api_integration.py --quick
+
+# Full mode (complete pipeline, slower)
+python tests/integration/test_api_integration.py
+
+# Verbose output
+python tests/integration/test_api_integration.py --quick --verbose
+```
+
+**What's tested with real pipeline:**
+
+### TEST 1: Retrieval Endpoint (`/api/v1/rag/retrieve`)
+- ✅ Initializes full RAG pipeline
+- ✅ Runs orchestrator for pure retrieval (no LLM)
+- ✅ Tests score filtering and top_k limiting
+- ✅ Validates document metadata extraction
+- ✅ Shows actual retrieved documents
+
+**Example output:**
+```
+Retrieved: 3 documents in 2.45s
+
+Top Results:
+  1. UU No. 40/2007
+     Score: 0.8523
+     About: Perseroan Terbatas...
+```
+
+### TEST 2: Research Endpoint (`/api/v1/rag/research`)
+- ✅ Tests deep research with LLM generation
+- ✅ Validates thinking_level parameter ('low', 'medium', 'high')
+- ✅ Tests team_size configuration
+- ✅ Verifies answer generation and citation extraction
+- ✅ Measures research time
+
+**Example output:**
+```
+✓ Research completed in 12.34s
+
+Answer length: 1523 characters
+Citations: 5 documents
+
+Answer preview:
+Untuk mendirikan PT, syarat minimal yang harus dipenuhi...
+```
+
+### TEST 3: Chat Endpoint (`/api/v1/rag/chat`)
+- ✅ Tests multi-turn conversational flow
+- ✅ Validates session management and context retention
+- ✅ Tests ConversationManager integration
+- ✅ Verifies history tracking across turns
+
+**Example output:**
+```
+--- Turn 1 ---
+Query: Apa itu PT?
+Answer (3.21s): PT adalah badan hukum...
+
+--- Turn 2 ---
+Query: Berapa modal minimal untuk mendirikannya?
+Context: 1 previous turns
+Answer (2.87s): Modal minimal PT adalah...
+
+✓ Conversation with 2 turns completed
+✓ Chat endpoint test PASSED
+```
+
+**Final Results:**
+```
 ==================================================
-Testing Input Safety Module
+API INTEGRATION TEST RESULTS
 ==================================================
-✓ Safe query accepted: Apa itu UU Perdata?...
-✓ XSS injection blocked
-✓ Prompt injection detected
-✓ Path traversal blocked
 
-... (and more)
-```
+✓ PASS - /api/v1/rag/retrieval
+✓ PASS - /api/v1/rag/research
+✓ PASS - /api/v1/rag/chat
 
-## 🌐 Enhanced API Tests
+Results: 3/3 tests passed
 
-The system exposes three specialized REST API endpoints for legal intelligence. Test the API documentation and request/response formats:
-
-```bash
-python tests/api/test_enhanced_api.py
-```
-
-**Available Endpoints:**
-1. **`POST /api/v1/rag/retrieve`** - Pure retrieval without LLM (fast document search)
-2. **`POST /api/v1/rag/research`** - Deep research with high thinking mode
-3. **`POST /api/v1/rag/chat`** - Streaming conversational service
-
-**To test live endpoints:**
-
-```bash
-# 1. Set your API key in .env
-echo "LEGAL_API_KEY=your_secure_key_here" >> .env
-
-# 2. Start the API server
-uvicorn api.server:app --reload
-
-# 3. Visit the interactive API docs
-# http://localhost:8000/docs
-
-# 4. Click "Authorize" and enter your API key
-
-# 5. Test endpoints directly in the browser
-```
-
-**Example API Request (using curl):**
-
-```bash
-# Test retrieval endpoint
-curl -X POST "http://localhost:8000/api/v1/rag/retrieve" \
-  -H "X-API-Key: your_secure_key_here" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "query": "Apa itu UU Perdata?",
-    "top_k": 5,
-    "min_score": 0.5
-  }'
-
-# Test research endpoint
-curl -X POST "http://localhost:8000/api/v1/rag/research" \
-  -H "X-API-Key: your_secure_key_here" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "query": "Jelaskan prosedur pendirian PT",
-    "thinking_level": "high",
-    "team_size": 4
-  }'
+🎉 ALL API TESTS PASSED (quick mode)!
 ```
 
 ## 🧠 Thinking Modes for Legal Analysis
