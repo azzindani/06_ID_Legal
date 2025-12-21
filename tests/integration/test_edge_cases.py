@@ -77,7 +77,7 @@ class EdgeCaseTester:
             # Very long query (near max)
             {
                 'name': 'Very long query (1900 chars)',
-                'query': 'Apa itu PT? ' * 190,  # ~1900 chars
+                'query': 'A' * 1900,  # Exactly 1900 chars
                 'should_work': True
             },
             # Unicode and special Indonesian characters
@@ -125,6 +125,8 @@ class EdgeCaseTester:
                     passed += 1
                 else:
                     print(f"✗ {test['name']}: Should have been rejected")
+                    print(f"   Query length: {len(test['query'])} chars")
+                    print(f"   Query: {test['query'][:50]}...")
                     failed += 1
                     
             except ValueError as e:
@@ -132,8 +134,17 @@ class EdgeCaseTester:
                     print(f"✓ {test['name']}: Correctly rejected")
                     passed += 1
                 else:
-                    print(f"✗ {test['name']}: Incorrectly rejected - {e}")
+                    print(f"✗ {test['name']}: Incorrectly rejected")
+                    print(f"   Query length: {len(test['query'])} chars (max 2000)")
+                    print(f"   Error: {e}")
+                    print(f"   Query preview: {test['query'][:50]}...")
                     failed += 1
+            except Exception as e:
+                print(f"✗ {test['name']}: Unexpected error - {e}")
+                print(f"   Query length: {len(test['query'])} chars")
+                import traceback
+                traceback.print_exc()
+                failed += 1
         
         print(f"\nPassed: {passed}/{len(test_cases)}")
         return failed == 0
