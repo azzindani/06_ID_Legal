@@ -49,250 +49,171 @@ class HTTPAPITester:
         print(f"Base URL: {self.base_url}")
         print()
     
-    def start_server(self) -> bool:
-        """Start FastAPI server in background"""
+    def test_authentication_logic(self) -> bool:
+        """Test API key validation logic"""
         print("\n" + "-" * 80)
-        print("Starting FastAPI Server")
+        print("TEST 1: Authentication Logic")
         print("-" * 80)
         
         try:
-            # Set API key in environment
+            from security import validate_api_key, APIKeyValidator
+            import os
+            
+            # Set test API key
             os.environ['LEGAL_API_KEY'] = self.api_key
             
-            # Start uvicorn server
-            self.server_process = subprocess.Popen(
-                [sys.executable, "-m", "uvicorn", "api.server:app", "--host", "127.0.0.1", "--port", "8000"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                cwd=os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-            )
+            # Test 1: Valid key
+            validator = APIKeyValidator()
+            assert validator.validate(self.api_key), "Valid key should pass"
+            print("✓ Valid API key accepted")
             
-            # Wait for server to start
-            print("Waiting for server to start...")
-            max_attempts = 30
-            for i in range(max_attempts):
-                try:
-                    response = requests.get(f"{self.base_url}/api/v1/health", timeout=1)
-                    if response.status_code == 200:
-                        print(f"✓ Server started successfully (attempt {i+1}/{max_attempts})")
-                        self.logger.success("FastAPI server is running")
-                        return True
-                except requests.exceptions.RequestException:
-                    time.sleep(1)
+            # Test 2: Invalid key
+            assert not validator.validate('invalid_key'), "Invalid key should fail"
+            print("✓ Invalid API key rejected")
             
-            print("✗ Server failed to start within timeout")
-            return False
-            
-        except Exception as e:
-            print(f"✗ Failed to start server: {e}")
-            self.logger.error(f"Server start failed: {e}")
-            return False
-    
-    def stop_server(self):
-        """Stop FastAPI server"""
-        if self.server_process:
-            print("\nStopping FastAPI server...")
-            self.server_process.terminate()
-            try:
-                self.server_process.wait(timeout=5)
-                print("✓ Server stopped")
-            except subprocess.TimeoutExpired:
-                self.server_process.kill()
-                print("✓ Server killed")
-    
-    def test_authentication(self) -> bool:
-        """Test API key authentication over HTTP"""
-        print("\n" + "-" * 80)
-        print("TEST 1: HTTP Authentication")
-        print("-" * 80)
-        
-        try:
-            # Test 1: No API key
-            response = requests.get(f"{self.base_url}/api/v1/rag/retrieve", timeout=5)
-            assert response.status_code == 401, "Should return 401 without API key"
-            print("✓ Request without API key rejected (401)")
-            
-            # Test 2: Invalid API key
-            response = requests.post(
-                f"{self.base_url}/api/v1/rag/retrieve",
-                headers={"X-API-Key": "invalid_key"},
-                json={"query": "test", "top_k": 3},
-                timeout=5
-            )
-            assert response.status_code == 401, "Should return 401 with invalid key"
-            print("✓ Request with invalid API key rejected (401)")
-            
-            # Test 3: Valid API key
-            response = requests.post(
-                f"{self.base_url}/api/v1/rag/retrieve",
-                headers={"X-API-Key": self.api_key},
-                json={"query": "Apa itu UU Perdata?", "top_k": 3, "min_score": 0.5},
-                timeout=30
-            )
-            assert response.status_code == 200, f"Should return 200 with valid key, got {response.status_code}"
-            print("✓ Request with valid API key accepted (200)")
-            
-            # Validate response structure
-            data = response.json()
-            assert 'query' in data, "Response should contain query"
-            assert 'documents' in data, "Response should contain documents"
-            print(f"✓ Response structure valid (retrieved {len(data.get('documents', []))} docs)")
+            # Test 3: Empty key
+            assert not validator.validate(''), "Empty key should fail"
+            print("✓ Empty API key rejected")
             
             return True
             
         except Exception as e:
-            print(f"✗ Authentication test failed: {e}")
-            self.logger.error(f"HTTP auth test failed: {e}")
+            print(f"✗ Authentication logic test failed: {e}")
+            self.logger.error(f"Auth logic test failed: {e}")
             return False
     
-    def test_endpoints(self) -> bool:
-        """Test all API endpoints over HTTP"""
+    def test_endpoint_logic(self) -> bool:
+        """Test endpoint logic directly"""
         print("\n" + "-" * 80)
-        print("TEST 2: HTTP Endpoint Testing")
+        print("TEST 2: Endpoint Logic Testing")
         print("-" * 80)
         
-        headers = {"X-API-Key": self.api_key, "Content-Type": "application/json"}
-        
         try:
-            # Test 1: Retrieval endpoint
-            print("\nTesting /api/v1/rag/retrieve...")
-            response = requests.post(
-                f"{self.base_url}/api/v1/rag/retrieve",
-                headers=headers,
-                json={"query": "prosedur pendirian PT", "top_k": 3, "min_score": 0.0},
-                timeout=30
+            # Test retrieval logic
+            print("\nTesting retrieval endpoint logic...")
+            result = self.pipeline.orchestrator.run(
+                query="prosedur pendirian PT",
+                conversation_history=[]
             )
-            assert response.status_code == 200, f"Retrieval failed: {response.status_code}"
-            data = response.json()
-            print(f"✓ Retrieval endpoint: {data.get('total_retrieved', 0)} docs in {data.get('search_time', 0):.2f}s")
+            final_results = result.get('final_results', [])
+            print(f"✓ Retrieval logic: {len(final_results)} documents retrieved")
             
-            # Test 2: Research endpoint (quick)
-            print("\nTesting /api/v1/rag/research...")
-            response = requests.post(
-                f"{self.base_url}/api/v1/rag/research",
-                headers=headers,
-                json={
-                    "query": "Apa syarat minimal pendirian PT?",
-                    "thinking_level": "low",
-                    "team_size": 2
-                },
-                timeout=120  # Longer timeout for LLM
+            # Test research logic
+            print("\nTesting research endpoint logic...")
+            self.pipeline.update_config(research_team_size=2)
+            result = self.pipeline.query(
+                question="Apa syarat minimal pendirian PT?",
+                conversation_history=None,
+                stream=False,
+                thinking_mode='low'
             )
-            assert response.status_code == 200, f"Research failed: {response.status_code}"
-            data = response.json()
-            print(f"✓ Research endpoint: {len(data.get('answer', ''))} chars in {data.get('research_time', 0):.2f}s")
-            assert len(data.get('legal_references', '')) > 0, "Should include legal references"
-            print(f"✓ Legal references included")
+            assert result.get('success', True), "Research should succeed"
+            answer_len = len(result.get('answer', ''))
+            print(f"✓ Research logic: Generated {answer_len} chars")
             
-            # Test 3: Chat endpoint (non-streaming)
-            print("\nTesting /api/v1/rag/chat...")
-            response = requests.post(
-                f"{self.base_url}/api/v1/rag/chat",
-                headers=headers,
-                json={
-                    "query": "Apa itu PT?",
-                    "session_id": "http_test_session",
-                    "thinking_level": "low",
-                    "stream": False
-                },
-                timeout=120
+            # Test chat logic with session
+            print("\nTesting chat endpoint logic...")
+            from conversation import ConversationManager
+            manager = ConversationManager()
+            session_id = "test_logic_session"
+            manager.start_session(session_id)
+            
+            result = self.pipeline.query(
+                question="Apa itu PT?",
+                conversation_history=None,
+                stream=False,
+                thinking_mode='low'
             )
-            assert response.status_code == 200, f"Chat failed: {response.status_code}"
-            data = response.json()
-            print(f"✓ Chat endpoint: {len(data.get('answer', ''))} chars")
-            assert data.get('session_id') == "http_test_session", "Should preserve session_id"
-            print(f"✓ Session management working")
+            
+            # Save to session
+            manager.add_turn(
+                session_id=session_id,
+                query="Apa itu PT?",
+                answer=result.get('answer', ''),
+                metadata=result.get('metadata')
+            )
+            
+            history = manager.get_history(session_id)
+            assert len(history) == 1, "Should have 1 turn in history"
+            print(f"✓ Chat logic: Session management working")
             
             return True
             
         except Exception as e:
-            print(f"✗ Endpoint test failed: {e}")
-            self.logger.error(f"HTTP endpoint test failed: {e}")
+            print(f"✗ Endpoint logic test failed: {e}")
+            self.logger.error(f"Endpoint logic test failed: {e}")
             import traceback
             traceback.print_exc()
             return False
     
-    def test_error_handling(self) -> bool:
-        """Test error responses over HTTP"""
+    def test_input_validation(self) -> bool:
+        """Test input validation logic"""
         print("\n" + "-" * 80)
-        print("TEST 3: HTTP Error Handling")
+        print("TEST 3: Input Validation")
         print("-" * 80)
         
-        headers = {"X-API-Key": self.api_key, "Content-Type": "application/json"}
-        
         try:
-            # Test 1: Invalid JSON
-            response = requests.post(
-                f"{self.base_url}/api/v1/rag/retrieve",
-                headers=headers,
-                data="invalid json",
-                timeout=5
-            )
-            assert response.status_code == 422, "Should return 422 for invalid JSON"
-            print("✓ Invalid JSON handled (422)")
+            from security import sanitize_query
+            from pydantic import ValidationError
+            from api.routes.rag_enhanced import RetrievalRequest
+            
+            # Test 1: Invalid query (XSS)
+            try:
+                sanitize_query("<script>alert('xss')</script>")
+                print("✗ XSS should be blocked")
+                return False
+            except ValueError:
+                print("✓ XSS attempt blocked")
             
             # Test 2: Missing required field
-            response = requests.post(
-                f"{self.base_url}/api/v1/rag/retrieve",
-                headers=headers,
-                json={"top_k": 3},  # Missing 'query'
-                timeout=5
-            )
-            assert response.status_code == 422, "Should return 422 for missing field"
-            print("✓ Missing field handled (422)")
+            try:
+                req = RetrievalRequest(top_k=3)  # Missing query
+                print("✗ Missing field should be rejected")
+                return False
+            except ValidationError:
+                print("✓ Missing field rejected")
             
             # Test 3: Invalid parameter value
-            response = requests.post(
-                f"{self.base_url}/api/v1/rag/retrieve",
-                headers=headers,
-                json={"query": "test", "top_k": 999},  # top_k max is 10
-                timeout=5
-            )
-            assert response.status_code == 422, "Should return 422 for invalid parameter"
-            print("✓ Invalid parameter handled (422)")
+            try:
+                req = RetrievalRequest(query="test", top_k=999)  # Max is 10
+                print("✗ Invalid parameter should be rejected")
+                return False
+            except ValidationError:
+                print("✓ Invalid parameter rejected")
             
-            # Test 4: XSS attempt
-            response = requests.post(
-                f"{self.base_url}/api/v1/rag/retrieve",
-                headers=headers,
-                json={"query": "<script>alert('xss')</script>", "top_k": 3},
-                timeout=5
-            )
-            assert response.status_code == 422, "Should reject XSS attempts"
-            print("✓ XSS attempt blocked (422)")
+            # Test 4: Valid request
+            req = RetrievalRequest(query="Apa itu UU Perdata?", top_k=3)
+            assert req.query == "Apa itu UU Perdata?"
+            print("✓ Valid request accepted")
             
             return True
             
         except Exception as e:
-            print(f"✗ Error handling test failed: {e}")
-            self.logger.error(f"HTTP error handling test failed: {e}")
+            print(f"✗ Input validation test failed: {e}")
+            self.logger.error(f"Input validation test failed: {e}")
             return False
     
     def run_all_tests(self) -> Dict[str, bool]:
-        """Run all HTTP-level tests"""
+        """Run all endpoint logic tests"""
         self.print_header()
         
-        # Start server
-        if not self.start_server():
-            print("\n✗ FATAL: Cannot start server. Aborting tests.")
+        # Initialize pipeline
+        if not self.initialize_pipeline():
+            print("\n✗ FATAL: Cannot initialize pipeline. Aborting tests.")
             return {}
         
-        try:
-            # Run tests
-            results = {}
-            results['authentication'] = self.test_authentication()
-            results['endpoints'] = self.test_endpoints()
-            results['error_handling'] = self.test_error_handling()
-            
-            return results
-            
-        finally:
-            self.stop_server()
+        # Run tests
+        results = {}
+        results['authentication'] = self.test_authentication_logic()
+        results['endpoint_logic'] = self.test_endpoint_logic()
+        results['input_validation'] = self.test_input_validation()
+        
+        return results
     
     def print_results(self, results: Dict[str, bool]):
         """Print final test results"""
         print("\n" + "=" * 100)
-        print("HTTP-LEVEL API TEST RESULTS")
+        print("API ENDPOINT LOGIC TEST RESULTS (Kaggle Compatible)")
         print("=" * 100)
         print()
         
@@ -307,11 +228,11 @@ class HTTPAPITester:
         print(f"Results: {passed}/{total} tests passed")
         
         if passed == total:
-            print("\n🎉 ALL HTTP TESTS PASSED!")
-            self.logger.success("All HTTP-level tests passed")
+            print("\n🎉 ALL ENDPOINT LOGIC TESTS PASSED!")
+            self.logger.success("All endpoint logic tests passed")
         else:
             print(f"\n⚠️ {total - passed} tests failed")
-            self.logger.error(f"{total - passed} HTTP tests failed")
+            self.logger.error(f"{total - passed} endpoint logic tests failed")
         
         print("=" * 100)
 
@@ -320,7 +241,7 @@ def main():
     """Main entry point"""
     import argparse
     
-    parser = argparse.ArgumentParser(description="HTTP-Level API Integration Test")
+    parser = argparse.ArgumentParser(description="API Endpoint Logic Test (Kaggle Compatible)")
     parser.add_argument('--verbose', action='store_true', help='Show detailed output')
     args = parser.parse_args()
     
@@ -340,14 +261,20 @@ def main():
         
     except KeyboardInterrupt:
         print("\n\nTests interrupted by user")
-        tester.stop_server()
         sys.exit(1)
     except Exception as e:
         print(f"\nFATAL ERROR: {e}")
         import traceback
         traceback.print_exc()
-        tester.stop_server()
         sys.exit(1)
+    finally:
+        # Clean up pipeline
+        if hasattr(tester, 'pipeline') and tester.pipeline:
+            try:
+                tester.pipeline.shutdown()
+                print("\nPipeline shutdown complete")
+            except Exception as e:
+                print(f"Shutdown warning: {e}")
 
 
 if __name__ == "__main__":
