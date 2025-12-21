@@ -408,6 +408,14 @@ python tests/integration/test_stress_conversational.py
 # 15. LangGraph Visualization (NEW) ⭐
 # Generates ASCII and Mermaid diagrams of the search orchestrator workflow
 python tests/visualize_langgraph.py
+
+# 16. Security Module Tests (NEW) 🛡️
+# Tests authentication, input safety, rate limiting, and file protection
+python tests/test_security_module.py
+
+# 17. API Integration Tests (NEW) 🌐
+# Documentation tests for the enhanced RAG API endpoints
+python tests/api/test_enhanced_api.py
 ```
 
 ## 📊 LangGraph Visualization
@@ -424,6 +432,96 @@ This will:
 3. Save a preview file at `tests/langgraph_workflow.md`.
 
 You can view the resulting [langgraph_workflow.md](langgraph_workflow.md) file in any Markdown viewer (including GitHub or VSCode with Mermaid extension) to see the visual flow.
+
+## 🛡️ Security Module Tests
+
+The system includes a comprehensive security module (`security/`) that provides reusable protection across all services. You can verify all security features work correctly:
+
+```bash
+python tests/test_security_module.py
+```
+
+**What's tested:**
+- ✅ **API Key Authentication**: Valid/invalid key detection with constant-time comparison
+- ✅ **Input Safety**: XSS, SQL injection, command injection, and prompt injection detection
+- ✅ **Rate Limiting**: Per-user request throttling with sliding window algorithm
+- ✅ **File Protection**: Filename sanitization and dangerous extension blocking
+
+**Expected Output:**
+```
+🛡️  SECURITY MODULE TEST SUITE
+
+==================================================
+Testing Authentication Module
+==================================================
+✓ Valid API key accepted
+✓ Invalid API key rejected
+✓ Generated key: legal_abc123...
+
+==================================================
+Testing Input Safety Module
+==================================================
+✓ Safe query accepted: Apa itu UU Perdata?...
+✓ XSS injection blocked
+✓ Prompt injection detected
+✓ Path traversal blocked
+
+... (and more)
+```
+
+## 🌐 Enhanced API Tests
+
+The system exposes three specialized REST API endpoints for legal intelligence. Test the API documentation and request/response formats:
+
+```bash
+python tests/api/test_enhanced_api.py
+```
+
+**Available Endpoints:**
+1. **`POST /api/v1/rag/retrieve`** - Pure retrieval without LLM (fast document search)
+2. **`POST /api/v1/rag/research`** - Deep research with high thinking mode
+3. **`POST /api/v1/rag/chat`** - Streaming conversational service
+
+**To test live endpoints:**
+
+```bash
+# 1. Set your API key in .env
+echo "LEGAL_API_KEY=your_secure_key_here" >> .env
+
+# 2. Start the API server
+uvicorn api.server:app --reload
+
+# 3. Visit the interactive API docs
+# http://localhost:8000/docs
+
+# 4. Click "Authorize" and enter your API key
+
+# 5. Test endpoints directly in the browser
+```
+
+**Example API Request (using curl):**
+
+```bash
+# Test retrieval endpoint
+curl -X POST "http://localhost:8000/api/v1/rag/retrieve" \
+  -H "X-API-Key: your_secure_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "Apa itu UU Perdata?",
+    "top_k": 5,
+    "min_score": 0.5
+  }'
+
+# Test research endpoint
+curl -X POST "http://localhost:8000/api/v1/rag/research" \
+  -H "X-API-Key: your_secure_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "Jelaskan prosedur pendirian PT",
+    "thinking_level": "high",
+    "team_size": 4
+  }'
+```
 
 ## 🧠 Thinking Modes for Legal Analysis
 

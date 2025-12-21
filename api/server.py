@@ -83,14 +83,40 @@ def create_app() -> FastAPI:
         requests_per_minute=60,  # 60 requests per minute per IP
         requests_per_hour=1000   # 1000 requests per hour per IP
     )
+    
+    # Add API Key authentication middleware
+    from .middleware.auth import APIKeyMiddleware
+    app.add_middleware(
+        APIKeyMiddleware,
+        exempt_paths=[
+            '/docs',
+            '/redoc',
+            '/openapi.json',
+            '/api/v1/health'
+        ]
+    )
+    
+    # Add security headers
+    @app.middleware("http")
+    async def add_security_headers(request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        return response
 
     # Include routers
-    from .routes import search_router, generate_router, health_router, session_router
+    from .routes import (
+        search_router, generate_router, health_router, 
+        session_router, rag_enhanced_router
+    )
 
     app.include_router(health_router, prefix="/api/v1", tags=["Health"])
     app.include_router(search_router, prefix="/api/v1", tags=["Search"])
     app.include_router(generate_router, prefix="/api/v1", tags=["Generate"])
     app.include_router(session_router, prefix="/api/v1", tags=["Session"])
+    app.include_router(rag_enhanced_router, prefix="/api/v1", tags=["Enhanced RAG"])
 
     return app
 
