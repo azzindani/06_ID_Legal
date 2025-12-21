@@ -305,23 +305,55 @@ else:
             ]
             subprocess.run(cmd_c2)
 
-            # TEST D: STREAMING CHAT (Real-time Thinking)
-            # ------------------
-            print("\n\n[TEST D] Streaming Chat (Real-time Thinking)...", flush=True)
-            print("Note: You will see 'thinking' tokens followed by 'chunk' tokens.")
-            cmd_d = [
-                "curl", "-N", "-X", "POST", f"{BASE_URL}/rag/chat",
-                "-H", f"X-API-Key: {API_KEY}",
-                "-H", "Content-Type: application/json",
-                "-d", json.dumps({
-                    "query": "Jelaskan perbedaan PT dan CV secara mendalam.", 
-                    "session_id": session_id, 
-                    "thinking_level": "high",
-                    "stream": True # <--- ENABLE STREAMING
-                }),
-                "--max-time", "600"
-            ]
-            subprocess.run(cmd_d)
+            # CHECK SERVER
+            if not check_server_alive():
+                print("\n\n❌ Server crashed after Test C", flush=True)
+            else:
+                # TEST D: STREAMING CHAT (Real-time Thinking)
+                # ------------------
+                print("\n\n[TEST D] Streaming Chat (Real-time Thinking)...", flush=True)
+                print("Testing live thinking process and answer streaming...")
+                
+                try:
+                    import requests
+                    payload = {
+                        "query": "Jelaskan perbedaan PT dan CV secara mendalam.", 
+                        "session_id": session_id, 
+                        "thinking_level": "medium", # Use medium for faster results
+                        "stream": True
+                    }
+                    
+                    response = requests.post(
+                        f"{BASE_URL}/rag/chat", 
+                        headers=HEADERS, 
+                        json=payload, 
+                        stream=True,
+                        timeout=600
+                    )
+                    
+                    print(f"HTTP Status: {response.status_code}")
+                    if response.status_code == 200:
+                        print("--- STREAM START ---")
+                        for line in response.iter_lines():
+                            if line:
+                                content = line.decode('utf-8')
+                                if content.startswith('data: '):
+                                    data = json.loads(content[6:])
+                                    ev_type = data.get('type')
+                                    
+                                    if ev_type == 'progress':
+                                        print(f"[PROGRESS] {data.get('message')}")
+                                    elif ev_type == 'thinking':
+                                        print(data.get('content'), end="", flush=True) # Stream thinking
+                                    elif ev_type == 'chunk':
+                                        print(data.get('content'), end="", flush=True) # Stream answer
+                                    elif ev_type == 'done':
+                                        print("\n--- STREAM END ---")
+                        print("✅ Streaming test finished successfully")
+                    else:
+                        print(f"❌ Streaming failed: {response.text}")
+                except Exception as e:
+                    print(f"❌ Error during streaming test: {e}")
 
     finally:
         # --------------------------------------------
