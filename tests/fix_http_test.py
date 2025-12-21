@@ -1,5 +1,28 @@
 # Simple script to add the missing initialize_pipeline method
-with open(r'd:\Antigravity\06_ID_Legal\tests\integration\test_api_http.py', 'r', encoding='utf-8') as f:
+import os
+import sys
+
+# Determine path relative to this script
+# This script is in tests/, target is in tests/integration/
+script_dir = os.path.dirname(os.path.abspath(__file__))
+# Try integration subdirectory first (if script is in tests/)
+target_file = os.path.join(script_dir, 'integration', 'test_api_http.py')
+
+print(f"Current script dir: {script_dir}")
+print(f"Looking for target at: {target_file}")
+
+if not os.path.exists(target_file):
+    # Try assuming script is in root (fallback)
+    target_file = os.path.join(script_dir, 'tests', 'integration', 'test_api_http.py')
+    print(f"Fallback target check: {target_file}")
+
+if not os.path.exists(target_file):
+    print("❌ Could not find test_api_http.py. Please ensure you are running this from the correct directory.")
+    sys.exit(1)
+
+print(f"✅ Found target file: {target_file}")
+
+with open(target_file, 'r', encoding='utf-8') as f:
     lines = f.readlines()
 
 # Find where to insert (after print_header method, line 50)
@@ -37,11 +60,16 @@ if insert_at > 0:
             return False
     
 '''
-    lines.insert(insert_at, new_method)
-    
-    with open(r'd:\Antigravity\06_ID_Legal\tests\integration\test_api_http.py', 'w', encoding='utf-8') as f:
-        f.writelines(lines)
-    
-    print("Method successfully added!")
+    # Check if method already exists to avoid duplication
+    content = "".join(lines)
+    if "def initialize_pipeline" in content:
+        print("Method initialize_pipeline already exists. No changes made.")
+    else:
+        lines.insert(insert_at, new_method)
+        
+        with open(target_file, 'w', encoding='utf-8') as f:
+            f.writelines(lines)
+        
+        print(f"✅ Method successfully added to {target_file}!")
 else:
-    print("Could not find insertion point")
+    print("❌ Could not find insertion point in the file structure.")
