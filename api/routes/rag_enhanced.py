@@ -20,6 +20,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 from ..validators import validate_query, validate_session_id
 from security import sanitize_query
 from utils.logger_utils import get_logger
+from utils.formatting import format_sources_info as format_detailed_sources_info, format_all_documents
+from utils.research_transparency import format_detailed_research_process
 
 logger = get_logger(__name__)
 
@@ -109,6 +111,8 @@ class ResearchResponse(BaseModel):
     """Response for research endpoint"""
     answer: str
     legal_references: str
+    research_process: str
+    all_retrieved_documents: str
     query: str
     thinking_level: str
     citations: List[LegalDocument]
@@ -120,6 +124,8 @@ class ChatResponse(BaseModel):
     """Response for chat endpoint"""
     answer: str
     legal_references: str
+    research_process: str
+    all_retrieved_documents: str
     query: str
     session_id: Optional[str]
     citations: List[LegalDocument]
@@ -339,13 +345,21 @@ async def deep_research(req: ResearchRequest, request: Request):
         
         # Format legal references
         citations_data = result.get('citations', [])
-        legal_refs = format_legal_references(citations_data)
+        legal_refs = format_detailed_sources_info(citations_data, {})
+        
+        # Format research process transparency
+        research_process = format_detailed_research_process(result, show_content=False)
+        
+        # Format all documents dump
+        all_docs_dump = format_all_documents(result, max_docs=50)
         
         research_time = time.time() - start_time
         
         return ResearchResponse(
             answer=result.get('answer', ''),
             legal_references=legal_refs,
+            research_process=research_process,
+            all_retrieved_documents=all_docs_dump,
             query=req.query,
             thinking_level=req.thinking_level,
             citations=documents,
@@ -426,12 +440,20 @@ async def conversational_rag(req: ChatRequest, request: Request):
                         final_result = data
                         full_answer = data.get('answer', full_answer)
                 
-                # Send final message with legal references
+                # Send final message with detailed research info
                 if final_result:
                     citations = final_result.get('citations', [])
-                    legal_refs = format_legal_references(citations)
+                    legal_refs = format_detailed_sources_info(citations, {})
+                    research_proc = format_detailed_research_process(final_result, show_content=False)
+                    all_docs = format_all_documents(final_result, max_docs=20)
                     
-                    yield f"data: {json.dumps({'type': 'done', 'answer': full_answer, 'legal_references': legal_refs})}\n\n"
+                    yield f"data: {json.dumps({
+                        'type': 'done', 
+                        'answer': full_answer, 
+                        'legal_references': legal_refs,
+                        'research_process': research_proc,
+                        'all_retrieved_documents': all_docs
+                    })}\n\n"
             
             return StreamingResponse(generate(), media_type="text/event-stream")
         
@@ -455,11 +477,15 @@ async def conversational_rag(req: ChatRequest, request: Request):
             
             # Extract and format
             documents = extract_documents(result)
-            legal_refs = format_legal_references(result.get('citations', []))
+            legal_refs = format_detailed_sources_info(result.get('citations', []), {})
+            research_proc = format_detailed_research_process(result, show_content=False)
+            all_docs = format_all_documents(result, max_docs=50)
             
             return ChatResponse(
                 answer=result.get('answer', ''),
                 legal_references=legal_refs,
+                research_process=research_proc,
+                all_retrieved_documents=all_docs,
                 query=req.query,
                 session_id=req.session_id,
                 citations=documents,

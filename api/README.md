@@ -253,15 +253,23 @@ else:
         # TEST B: DEEP RESEARCH
         # ------------------
         if check_server_alive():
-            print("\n\n[TEST B] Deep Research (curl) - This may take time...", flush=True)
-            cmd_b = [
-                "curl", "-X", "POST", f"{BASE_URL}/rag/research",
-                "-H", f"X-API-Key: {API_KEY}",
-                "-H", "Content-Type: application/json",
-                "-d", json.dumps({"query": "Apa itu PT?", "thinking_level": "low", "team_size": 1}),
-                "--max-time", "600"
-            ]
-            subprocess.run(cmd_b)
+            print("\n\n[TEST B] Deep Research (Python) - Detailed Metadata...", flush=True)
+            try:
+                import requests
+                payload = {"query": "Apa itu PT?", "thinking_level": "low", "team_size": 1}
+                r = requests.post(f"{BASE_URL}/rag/research", headers=HEADERS, json=payload, timeout=600)
+                
+                if r.status_code == 200:
+                    res = r.json()
+                    print(f"\n✅ Answer: {res['answer'][:200]}...")
+                    print(f"\n📑 Legal References:\n{res['legal_references'][:300]}...")
+                    print(f"\n🔬 Research Process Log (First 300 chars):\n{res['research_process'][:300]}...")
+                    print(f"\n📂 Total Documents Found: {len(res['citations'])}")
+                    print(f"📂 Total unique docs in dump: {res['all_retrieved_documents'].count('[')]}")
+                else:
+                    print(f"❌ Research failed: {r.text}")
+            except Exception as e:
+                print(f"❌ Error in Test B: {e}")
         else:
             print("\n\n❌ Server crashed after Test A (Likely OOM)", flush=True)
 
@@ -305,7 +313,7 @@ else:
         else:
             print("\n\n❌ Server crashed before Test C", flush=True)
 
-        # TEST D: STREAMING CHAT (Real-time Thinking)
+        # TEST D: STREAMING CHAT (Real-time Thinking + Advanced Metadata)
         # ------------------
         if check_server_alive():
             print("\n\n[TEST D] Streaming Chat (Real-time Thinking)...", flush=True)
@@ -346,7 +354,9 @@ else:
                                     print(data.get('content'), end="", flush=True)
                                 elif ev_type == 'done':
                                     print("\n--- STREAM END ---")
-                    print("✅ Streaming test finished successfully")
+                                    print(f"\n📊 [METADATA] Detailed Research Log:\n{data.get('research_process', '')[:500]}...")
+                                    print(f"\n📂 [METADATA] All Documents Trace:\n{data.get('all_retrieved_documents', '')[:500]}...")
+                    print("\n✅ Streaming test finished successfully")
                 else:
                     print(f"❌ Streaming failed: {response.text}")
             except Exception as e:
