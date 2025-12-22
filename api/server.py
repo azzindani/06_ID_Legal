@@ -92,7 +92,9 @@ def create_app() -> FastAPI:
             '/docs',
             '/redoc',
             '/openapi.json',
-            '/api/v1/health'
+            '/api/v1/health',
+            '/api/v1/ready',
+            '/api/v1/live'
         ]
     )
     

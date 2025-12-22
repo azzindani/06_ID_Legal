@@ -199,40 +199,92 @@ def check_server_alive():
         return False
 
 # --------------------------------------------
-# 2. START SERVER
+# 2. START SERVER (CLEANUP PORT FIRST)
 # --------------------------------------------
+print(f"🧹 Cleaning up Port 8000...")
+if os.name == 'nt': # Windows
+    os.system("for /f \"tokens=5\" %a in ('netstat -aon ^| findstr :8000') do taskkill /f /pid %a >nul 2>&1")
+else: # Linux/Mac
+    os.system("fuser -k 8000/tcp > /dev/null 2>&1")
+
+time.sleep(2)
 print(f"🚀 Starting API Server on Port 8000...")
-# Use sys.executable to ensure we use the same Python environment
+
+# Set PYTHONPATH to ensure imports work correctly
+env = os.environ.copy()
+env["PYTHONPATH"] = os.getcwd()
+
+# Start server using subprocess
 server = subprocess.Popen(
-    [sys.executable, "-m", "uvicorn", "api.server:app", "--host", "127.0.0.1", "--port", "8000"],
-    stdout=sys.stdout,
-    stderr=sys.stderr
+    [sys.executable, "-m", "uvicorn", "api.server:app", "--host", "127.0.0.1", "--port", "8000", "--log-level", "debug"],
+    stdout=subprocess.PIPE,
+    stderr=subprocess.STDOUT, # Merge stdout and stderr
+    text=True,
+    bufsize=1,
+    env=env
 )
 
 # --------------------------------------------
-# 3. WAIT FOR HEALTHY (MAX 90s)
+# 3. WAIT FOR READINESS (MAX 600s for models)
 # --------------------------------------------
-print("⏳ Waiting for server to be ready (may take ~300s for models)...", end="", flush=True)
+print("⏳ Waiting for server to be ready (~300s-600s for model loading)...", flush=True)
 server_ready = False
-# Try polling explicitly
-for _ in range(300):
+start_wait = time.time()
+
+# Function to safely read lines from the process
+import threading
+import queue
+
+def reader(pipe, queue):
     try:
-        # We use a short timeout so we don't hang if server is dead
-        r = requests.get(f"{BASE_URL}/health", timeout=1)
+        for line in pipe:
+            queue.put(line)
+    except: pass
+
+log_queue = queue.Queue()
+log_thread = threading.Thread(target=reader, args=(server.stdout, log_queue))
+log_thread.daemon = True
+log_thread.start()
+
+for i in range(600):
+    # Print status from logs
+    while not log_queue.empty():
+        line = log_queue.get()
+        if "ERROR" in line or "Traceback" in line:
+            print(f"\n❌ SERVER ERROR: {line.strip()}")
+        elif i % 5 == 0: # Only print some logs to avoid clutter
+             pass # Use this to see raw logs if needed: print(f"  [Log] {line.strip()}")
+
+    # Check if process is still alive
+    if server.poll() is not None:
+        print("\n❌ Server process died unexpectedly during startup.")
+        print("\n--- FINAL SERVER LOGS ---")
+        while not log_queue.empty():
+            print(log_queue.get().strip())
+        break
+        
+    try:
+        r = requests.get(f"{BASE_URL}/ready", timeout=2)
         if r.status_code == 200:
-            print("\n✅ Server is UP and READY!")
-            server_ready = True
-            break
+            data = r.json()
+            if data.get('ready'):
+                print(f"\n✅ Server and Pipeline ready in {int(time.time() - start_wait)}s!")
+                server_ready = True
+                break
+            else:
+                if i % 10 == 0:
+                    print(f"\n[Status] {data.get('message', 'Initializing...')}", end="", flush=True)
     except Exception:
-        time.sleep(1)
+        pass
+    
+    if i % 5 == 0:
         print(".", end="", flush=True)
+    time.sleep(1)
 
 if not server_ready:
-    print("\n❌ Server failed to start.")
-    server.terminate()
-    print("\n❌ Server failed to start.")
-    server.terminate()
-    # Output already printed to stdout/stderr
+    if server.poll() is None:
+        print("\n❌ Server failed to initialize within timeout.")
+        server.terminate()
 else:
     try:
         # Pre-define session_id so it's always in scope
@@ -265,7 +317,7 @@ else:
                     print(f"\n📑 Legal References:\n{res['legal_references'][:300]}...")
                     print(f"\n🔬 Research Process Log (First 300 chars):\n{res['research_process'][:300]}...")
                     print(f"\n📂 Total Documents Found: {len(res['citations'])}")
-                    print(f"📂 Total unique docs in dump: {res['all_retrieved_documents'].count('[')]}")
+                    print(f"📂 Total unique docs in dump: {res['all_retrieved_documents'].count('[')}")
                 else:
                     print(f"❌ Research failed: {r.text}")
             except Exception as e:
