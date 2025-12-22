@@ -447,13 +447,14 @@ async def conversational_rag(req: ChatRequest, request: Request):
                     research_proc = format_detailed_research_process(final_result, show_content=False)
                     all_docs = format_all_documents(final_result, max_docs=20)
                     
-                    yield f"data: {json.dumps({
+                    done_data = {
                         'type': 'done', 
                         'answer': full_answer, 
                         'legal_references': legal_refs,
                         'research_process': research_proc,
                         'all_retrieved_documents': all_docs
-                    })}\n\n"
+                    }
+                    yield f"data: {json.dumps(done_data)}\n\n"
             
             return StreamingResponse(generate(), media_type="text/event-stream")
         

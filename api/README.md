@@ -224,43 +224,40 @@ server = subprocess.Popen(
     env=env
 )
 
-# --------------------------------------------
-# 3. WAIT FOR READINESS (MAX 600s for models)
-# --------------------------------------------
-print("⏳ Waiting for server to be ready (~300s-600s for model loading)...", flush=True)
-server_ready = False
-start_wait = time.time()
-
 # Function to safely read lines from the process
 import threading
 import queue
 
-def reader(pipe, queue):
+log_db = []
+def reader(pipe):
     try:
         for line in pipe:
-            queue.put(line)
+            log_db.append(line.strip())
     except: pass
 
-log_queue = queue.Queue()
-log_thread = threading.Thread(target=reader, args=(server.stdout, log_queue))
+log_thread = threading.Thread(target=reader, args=(server.stdout,))
 log_thread.daemon = True
 log_thread.start()
 
+print("⏳ Waiting for server to be ready (~300s-600s for model loading)...", flush=True)
+server_ready = False
+start_wait = time.time()
+last_log_idx = 0
+
 for i in range(600):
-    # Print status from logs
-    while not log_queue.empty():
-        line = log_queue.get()
-        if "ERROR" in line or "Traceback" in line:
-            print(f"\n❌ SERVER ERROR: {line.strip()}")
-        elif i % 5 == 0: # Only print some logs to avoid clutter
-             pass # Use this to see raw logs if needed: print(f"  [Log] {line.strip()}")
+    # Print new logs
+    while last_log_idx < len(log_db):
+        line = log_db[last_log_idx]
+        if any(x in line for x in ["ERROR", "Traceback", "Exception", "Fail"]):
+            print(f"\n🚩 {line}")
+        last_log_idx += 1
 
     # Check if process is still alive
     if server.poll() is not None:
         print("\n❌ Server process died unexpectedly during startup.")
-        print("\n--- FINAL SERVER LOGS ---")
-        while not log_queue.empty():
-            print(log_queue.get().strip())
+        print("\n--- RECENT SERVER LOGS ---")
+        for line in log_db[-20:]: # Show last 20 lines of logs
+            print(f"  > {line}")
         break
         
     try:
