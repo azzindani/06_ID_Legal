@@ -17,15 +17,15 @@ This is what a REAL production deployment looks like.
 """
 
 import sys
-from config import LOG_DIR, ENABLE_FILE_LOGGING, LOG_VERBOSITY
 import os
 import time
 import json
 from typing import Dict, Any, Optional
 
-# Add project root to path
+# Add project root to path FIRST (before any project imports)
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
+from config import LOG_DIR, ENABLE_FILE_LOGGING, LOG_VERBOSITY
 from utils.logger_utils import get_logger, initialize_logging
 from pipeline import RAGPipeline
 
