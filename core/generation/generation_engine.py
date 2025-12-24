@@ -116,15 +116,19 @@ class GenerationEngine:
                 "prompt_length": len(prompt)
             })
 
-            # Print complete prompt for test transparency
-            print("\n" + "=" * 100)
-            print("COMPLETE LLM INPUT PROMPT (FULL TRANSPARENCY)")
-            print("=" * 100)
-            print(f"Character Count: {len(prompt):,}")
-            print("-" * 100)
-            print(prompt)
-            print("-" * 100)
-            print()
+            # Log complete prompt for test transparency (controlled by config)
+            # Enable via LOG_PROMPT_TRANSPARENCY=true environment variable
+            import os
+            if os.getenv("LOG_PROMPT_TRANSPARENCY", "false").lower() == "true":
+                self.logger.info("=" * 80)
+                self.logger.info("COMPLETE LLM INPUT PROMPT (TEST TRANSPARENCY)")
+                self.logger.info("=" * 80)
+                self.logger.info(f"Character Count: {len(prompt):,}")
+                self.logger.info("-" * 80)
+                # Log in chunks to avoid log line limits
+                for i in range(0, len(prompt), 4000):
+                    self.logger.info(prompt[i:i+4000])
+                self.logger.info("-" * 80)
 
             # Step 2.5: Determine max_new_tokens based on thinking mode
             max_new_tokens = self._get_max_tokens_for_thinking_mode(thinking_mode)

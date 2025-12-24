@@ -113,6 +113,8 @@ POST /api/v1/rag/chat
 }
 ```
 
+> **💾 Session Persistence**: Sessions are now stored in SQLite (`.data/sessions.db`) and survive server restarts. No code changes needed - the API works exactly the same, but sessions are permanent.
+
 ---
 
 ## ⚙️ Configuration Parameters
