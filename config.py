@@ -61,7 +61,7 @@ _auto_config = _get_auto_config()
 # DATASET CONFIGURATION
 # =============================================================================
 
-DATASET_NAME = os.getenv("DATASET_NAME", "Azzindani/ID_REG_DB_2511")
+DATASET_NAME = os.getenv("DATASET_NAME", "Azzindani/ID_REG_DB_2510")
 HF_TOKEN = os.getenv("HF_TOKEN", None)
 
 # =============================================================================
