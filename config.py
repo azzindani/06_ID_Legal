@@ -61,7 +61,7 @@ _auto_config = _get_auto_config()
 # DATASET CONFIGURATION
 # =============================================================================
 
-DATASET_NAME = os.getenv("DATASET_NAME", "Azzindani/ID_REG_DB_2510")
+DATASET_NAME = os.getenv("DATASET_NAME", "Azzindani/ID_REG_DB_2511")
 HF_TOKEN = os.getenv("HF_TOKEN", None)
 
 # =============================================================================
@@ -971,3 +971,4 @@ def get_adaptive_thresholds(query_complexity: float) -> dict:
     
 
     return phases
+
