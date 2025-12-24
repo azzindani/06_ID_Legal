@@ -178,6 +178,99 @@ class RAGPipeline:
             })
             return False
 
+    def initialize_retrieval_only(self, progress_callback: Optional[callable] = None) -> bool:
+        """
+        Initialize ONLY retrieval components (no LLM loading)
+        Perfect for search UI that doesn't need answer generation
+        
+        Args:
+            progress_callback: Optional callback for progress updates
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        if self._initialized:
+            self.logger.warning("Pipeline already initialized")
+            return True
+            
+        self.logger.info("Initializing RAG Pipeline (RETRIEVAL ONLY - NO LLM)...")
+        start_time = time.time()
+        
+        total_steps = 3  # Only 3 steps instead of 5
+        
+        try:
+            # Step 1: Load embedding and reranker models
+            if progress_callback:
+                progress_callback("Loading models", 1, total_steps)
+                
+            self.logger.info("Step 1/3: Loading embedding and reranker models...")
+            from core.model_manager import load_models
+            self.embedding_model, self.reranker_model = load_models()
+            
+            if self.embedding_model is None or self.reranker_model is None:
+                self.logger.error("Failed to load models")
+                return False
+                
+            # Step 2: Load dataset
+            if progress_callback:
+                progress_callback("Loading dataset", 2, total_steps)
+                
+            self.logger.info("Step 2/3: Loading dataset...")
+            from loader.dataloader import EnhancedKGDatasetLoader
+            
+            self.data_loader = EnhancedKGDatasetLoader(
+                DATASET_NAME,
+                EMBEDDING_DIM
+            )
+            self.data_loader.load_from_huggingface(
+                progress_callback=lambda msg: self.logger.debug(f"Dataset: {msg}")
+            )
+            
+            stats = self.data_loader.get_statistics()
+            self.logger.info("Dataset loaded", {
+                "total_records": stats.get('total_records', 0),
+                "kg_enhanced": stats.get('kg_enhanced_records', 0)
+            })
+            
+            # Step 3: Create RAG orchestrator (NO LLM!)
+            if progress_callback:
+                progress_callback("Creating orchestrator", 3, total_steps)
+                
+            self.logger.info("Step 3/3: Creating RAG orchestrator (retrieval only)...")
+            from core.search.langgraph_orchestrator import LangGraphRAGOrchestrator
+            
+            self.orchestrator = LangGraphRAGOrchestrator(
+                data_loader=self.data_loader,
+                embedding_model=self.embedding_model,
+                reranker_model=self.reranker_model,
+                config=self.config
+            )
+            
+            # SKIP Step 4 (GenerationEngine) - NO LLM!
+            self.generation_engine = None
+            self.logger.info("SKIPPED: LLM initialization (retrieval-only mode)")
+            
+            self._initialized = True
+            self._initialization_time = time.time() - start_time
+            
+            self.logger.success("RAG Pipeline initialized (RETRIEVAL ONLY)", {
+                "initialization_time": f"{self._initialization_time:.2f}s",
+                "llm_loaded": False
+            })
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error("Pipeline initialization failed", {
+                "error": str(e),
+                "error_type": type(e).__name__
+            })
+            import traceback
+            self.logger.debug("Traceback", {
+                "traceback": traceback.format_exc()
+            })
+            return False
+
     def query(
         self,
         question: str,
@@ -281,6 +374,7 @@ class RAGPipeline:
                     return no_results_generator()
                 else:
                     return no_results_response
+
 
             # Step 2: Generate answer
             self.logger.info("Generating answer...")
@@ -440,6 +534,129 @@ class RAGPipeline:
                 }
             }
 
+    def retrieve_documents(
+        self,
+        question: str,
+        top_k: int = 10,
+        conversation_history: Optional[List[Dict[str, str]]] = None
+    ) -> Dict[str, Any]:
+        """
+        Retrieve documents WITHOUT LLM generation (for search UI)
+        
+        Args:
+            question: User question
+            top_k: Number of documents to retrieve
+            conversation_history: Optional conversation context
+            
+        Returns:
+            Dictionary with sources, metadata, and phase_metadata
+        """
+        if not self._initialized:
+            return {
+                'success': False,
+                'error': 'Pipeline not initialized',
+                'sources': [],
+                'metadata': {}
+            }
+
+        self.logger.info("Retrieving documents (no LLM)", {"top_k": top_k})
+        start_time = time.time()
+
+        try:
+            # Run retrieval
+            rag_result = self.orchestrator.run(
+                query=question,
+                conversation_history=conversation_history or [],
+                top_k=top_k
+            )
+
+            retrieval_time = time.time() - start_time
+            final_results = rag_result.get('final_results', [])[:top_k]
+
+            # Build phase metadata
+            phase_metadata = {}
+            research_data = rag_result.get('research_data', {})
+
+            if research_data:
+                phase_results = research_data.get('phase_results', {})
+                from config import RESEARCH_TEAM_PERSONAS
+
+                entry_idx = 0
+                for phase_name, results in phase_results.items():
+                    persona_groups = {}
+                    for result in results:
+                        persona = result.get('metadata', {}).get('persona', 'unknown')
+                        if persona not in persona_groups:
+                            persona_groups[persona] = []
+                        persona_groups[persona].append(result)
+
+                    for persona_name, persona_results_list in persona_groups.items():
+                        key = f"{entry_idx}_{phase_name}_{persona_name}"
+                        researcher_info = RESEARCH_TEAM_PERSONAS.get(persona_name, {})
+
+                        candidates = []
+                        for r in persona_results_list:
+                            candidates.append({
+                                'record': r.get('record', {}),
+                                'scores': r.get('scores', {}),
+                                'final_score': r.get('scores', {}).get('final', 0),
+                                '_phase': phase_name,
+                                '_researcher': persona_name
+                            })
+
+                        phase_metadata[key] = {
+                            'phase': phase_name,
+                            'researcher': persona_name,
+                            'researcher_name': researcher_info.get('name', persona_name),
+                            'candidates': candidates,
+                            'confidence': 1.0,
+                            'results': candidates
+                        }
+                        entry_idx += 1
+
+            # Format sources
+            sources = []
+            for r in final_results:
+                record = r.get('record', r)
+                scores = r.get('scores', {})
+                sources.append({
+                    'regulation_type': record.get('regulation_type', ''),
+                    'regulation_number': record.get('regulation_number', ''),
+                    'year': record.get('year', ''),
+                    'about': record.get('about', ''),
+                    'content': record.get('content', ''),
+                    'enacting_body': record.get('enacting_body', ''),
+                    'chapter': record.get('chapter', ''),
+                    'article': record.get('article', ''),
+                    'score': scores.get('final', 0),
+                    'scores': scores,
+                    'record': record,
+                    '_phase': r.get('_phase', ''),
+                    '_researcher': r.get('_researcher', '')
+                })
+
+            return {
+                'success': True,
+                'sources': sources,
+                'metadata': {
+                    'query': question,
+                    'retrieval_time': retrieval_time,
+                    'total_time': retrieval_time,
+                    'results_count': len(sources)
+                },
+                'phase_metadata': phase_metadata,
+                'consensus_data': rag_result.get('consensus_data', {})
+            }
+
+        except Exception as e:
+            self.logger.error("Retrieval failed", {"error": str(e)})
+            return {
+                'success': False,
+                'error': str(e),
+                'sources': [],
+                'metadata': {}
+            }
+
     def _generate_streaming(
         self,
         question: str,
@@ -525,6 +742,12 @@ class RAGPipeline:
                 if chunk.get('type') == 'token':
                     yield {
                         'type': 'token',
+                        'token': chunk['token'],
+                        'done': False
+                    }
+                elif chunk.get('type') == 'thinking':
+                    yield {
+                        'type': 'thinking',
                         'token': chunk['token'],
                         'done': False
                     }

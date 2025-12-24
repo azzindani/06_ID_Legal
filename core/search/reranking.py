@@ -260,7 +260,18 @@ class RerankerEngine:
             reranked.sort(key=lambda x: x['final_score'], reverse=True)
 
             # Return top-k
-            return reranked[:top_k]
+            result = reranked[:top_k]
+            
+            # FIXED: Warn if we couldn't meet top_k (defensive logging)
+            # Use len(candidates) since consensus_results is not in scope here
+            if len(result) < top_k:
+                self.logger.warning(
+                    f"Could only return {len(result)}/{top_k} documents - "
+                    f"reranker had only {len(candidates)} candidates. "
+                    f"Consider lowering consensus_threshold in config."
+                )
+            
+            return result
 
         except Exception as e:
             self.logger.error("Error during reranking", {

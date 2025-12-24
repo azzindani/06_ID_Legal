@@ -188,10 +188,12 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
             ]
 
         # Process query with service
+        thinking_mode = config_dict.get('thinking_mode', 'low')
         for event in service.process_query(
             message,
             current_session,
-            config_dict
+            config_dict,
+            thinking_mode=thinking_mode
         ):
             event_type = event.get('type')
             data = event.get('data', {})
@@ -707,6 +709,12 @@ def create_gradio_interface():
                             final_top_k = gr.Slider(1, 10, value=3, step=1, label="Final Top K Results")
                             temperature = gr.Slider(0.0, 2.0, value=0.7, step=0.1, label="LLM Temperature")
                             max_new_tokens = gr.Slider(512, 4096, value=2048, step=256, label="Max New Tokens")
+                            thinking_mode = gr.Radio(
+                                choices=["Low", "Medium", "High"],
+                                value=DEFAULT_CONFIG.get('thinking_mode', 'low').capitalize(),
+                                label="Thinking Level",
+                                info="Higher levels provide deeper legal analysis but take more time."
+                            )
 
                         # Research Team Settings
                         with gr.Group(elem_classes="settings-panel researcher-settings"):
@@ -936,6 +944,7 @@ def create_gradio_interface():
                     'top_p': float(args[27]),
                     'top_k': int(args[28]),
                     'min_p': float(args[29]),
+                    'thinking_mode': str(args[30]).lower(),
                     'search_phases': search_phases,
                     'max_rounds': 5,
                     'initial_quality': 0.8,
@@ -983,11 +992,12 @@ def create_gradio_interface():
                     DEFAULT_CONFIG['consensus_threshold'],  # 26
                     DEFAULT_CONFIG['top_p'],  # 27
                     DEFAULT_CONFIG['top_k'],  # 28
-                    DEFAULT_CONFIG['min_p']   # 29
+                    DEFAULT_CONFIG['min_p'],   # 29
+                    DEFAULT_CONFIG.get('thinking_mode', 'low').capitalize()  # 30
                 )
             except Exception as e:
                 print(f"Error resetting to defaults: {e}")
-                return tuple([0.5] * 30)  # Fallback
+                return tuple([0.5] * 31)  # Fallback
 
         # All configuration inputs
         config_inputs = [
@@ -998,7 +1008,8 @@ def create_gradio_interface():
             verification_enabled, verification_candidates, verification_semantic, verification_keyword,  # 16-19
             expert_review_enabled, expert_review_candidates, expert_review_semantic, expert_review_keyword,  # 20-23
             enable_cross_validation, enable_devil_advocate, consensus_threshold,  # 24-26
-            top_p, top_k, min_p  # 27-29
+            top_p, top_k, min_p,  # 27-29
+            thinking_mode  # 30
         ]
 
         # Connect all inputs to config update

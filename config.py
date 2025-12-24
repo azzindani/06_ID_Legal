@@ -61,7 +61,7 @@ _auto_config = _get_auto_config()
 # DATASET CONFIGURATION
 # =============================================================================
 
-DATASET_NAME = os.getenv("DATASET_NAME", "Azzindani/ID_REG_DB_2510")
+DATASET_NAME = os.getenv("DATASET_NAME", "Azzindani/ID_REG_DB_2511")
 HF_TOKEN = os.getenv("HF_TOKEN", None)
 
 # =============================================================================
@@ -392,7 +392,7 @@ DEFAULT_CONFIG = {
     'min_p': float(os.getenv("MIN_P", "0.1")),
     'enable_cross_validation': os.getenv("ENABLE_CROSS_VALIDATION", "true").lower() == "true",
     'enable_devil_advocate': os.getenv("ENABLE_DEVIL_ADVOCATE", "true").lower() == "true",
-    'consensus_threshold': float(os.getenv("CONSENSUS_THRESHOLD", "0.6")),
+    'consensus_threshold': float(os.getenv("CONSENSUS_THRESHOLD", "0.4")),
     'thinking_mode': DEFAULT_THINKING_MODE,
     'enable_thinking_pipeline': ENABLE_THINKING_PIPELINE,
     'batch_size': BATCH_SIZE,
@@ -409,8 +409,8 @@ DEFAULT_CONFIG = {
 DEFAULT_SEARCH_PHASES = {
     'initial_scan': {
         'candidates': 400,
-        'semantic_threshold': 0.25,  # ↑ from 0.20 - stricter initial filtering
-        'keyword_threshold': 0.10,   # ↑ from 0.06 - require keyword relevance
+        'semantic_threshold': 0.15,  # ↓ from 0.25 - more permissive to capture relevant docs
+        'keyword_threshold': 0.05,   # ↓ from 0.10 - more permissive for keyword matching
         'description': 'Quick broad scan like human initial reading',
         'time_limit': 30,
         'focus_areas': ['regulation_type', 'enacting_body'],
@@ -971,3 +971,4 @@ def get_adaptive_thresholds(query_complexity: float) -> dict:
     
 
     return phases
+

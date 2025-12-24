@@ -1,77 +1,429 @@
-# API Module
+# Indonesian Legal RAG API
 
-FastAPI REST API for the Indonesian Legal RAG System.
+A high-performance, secure REST API for the Indonesian Legal RAG system. This API exposes advanced retrieval, deep research, and conversational capabilities over legal documents.
 
-## Quick Start
+## 🚀 Quick Start
 
 ```bash
-# Run server
-uvicorn api.server:app --host 0.0.0.0 --port 8000
-
-# Or with auto-reload
-uvicorn api.server:app --reload
+# Start the server
+uvicorn api.server:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-## Endpoints
+The API will be available at `http://localhost:8000`.
+- **Swagger UI**: [http://localhost:8000/docs](http://localhost:8000/docs)
+- **ReDoc**: [http://localhost:8000/redoc](http://localhost:8000/redoc)
 
-### Health
-- `GET /api/v1/health` - System health check
-- `GET /api/v1/ready` - Readiness check
-- `GET /api/v1/live` - Liveness check
+---
 
-### Search
-- `POST /api/v1/search` - Search documents
+## 🔐 Authentication
 
-### Generate
-- `POST /api/v1/generate` - Generate answer
-- `POST /api/v1/generate/stream` - Streaming answer
+All API endpoints require authentication via an API Key.
+You must include the `X-API-Key` header in every request.
 
-### Sessions
-- `POST /api/v1/sessions` - Create session
-- `GET /api/v1/sessions` - List sessions
-- `GET /api/v1/sessions/{id}` - Get session
-- `GET /api/v1/sessions/{id}/history` - Get history
-- `DELETE /api/v1/sessions/{id}` - Delete session
-- `POST /api/v1/sessions/{id}/export` - Export session
+```http
+X-API-Key: your_secure_api_key_here
+```
 
-## Usage Examples
+> **Note**: Configure your keys in the `LEGAL_API_KEYS_ADDITIONAL` environment variable or `config.py`.
 
-### Generate Answer
+---
+
+## 📚 Endpoints
+
+### 1. Retrieve Documents (`/api/v1/rag/retrieve`)
+Fast, pure document retrieval without LLM generation. Ideal for search bars or getting raw context.
+
+**Request:**
+```json
+POST /api/v1/rag/retrieve
+{
+  "query": "Apa syarat pendirian PT?",
+  "top_k": 5,              // Optional (default: 5)
+  "min_score": 0.3         // Optional (default: 0.0)
+}
+```
+
+**Response:**
+```json
+{
+  "query": "Apa syarat pendirian PT?",
+  "total_retrieved": 5,
+  "search_time": 0.12,
+  "documents": [
+    {
+      "content": "...",
+      "score": 0.85,
+      "metadata": {
+        "source": "UU No. 40 Tahun 2007",
+        "category": "Undang-Undang"
+      }
+    }
+  ]
+}
+```
+
+### 2. Deep Research (`/api/v1/rag/research`)
+Full RAG pipeline with multi-step reasoning, team consensus, and deep analysis.
+
+**Request:**
+```json
+POST /api/v1/rag/research
+{
+  "query": "Jelaskan prosedur likuidasi perseroan terbatas menurut UU terbaru",
+  "thinking_level": "medium",  // "low" (fast), "medium" (balanced), "high" (deep)
+  "team_size": 3               // Number of AI researchers (default: 3)
+}
+```
+
+**Response:**
+```json
+{
+  "answer": "Berdasarkan UU No. 40 Tahun 2007...",
+  "research_time": 4.5,
+  "legal_references": [
+    "Pasal 142 UU No. 40 Tahun 2007",
+    "Pasal 143 UU No. 40 Tahun 2007"
+  ],
+  "confidence_score": 0.92,
+  "thinking_process": "..."   // Detailed reasoning steps
+}
+```
+
+### 3. Chat (`/api/v1/rag/chat`)
+Conversational endpoint with session management and context retention.
+
+**Request:**
+```json
+POST /api/v1/rag/chat
+{
+  "query": "Apa sanksinya?",
+  "session_id": "user_123_session",  // Optional: creates new if omitted
+  "thinking_level": "low",
+  "stream": false
+}
+```
+
+**Response:**
+```json
+{
+  "answer": "Sanksi pelanggaran tersebut meliputi...",
+  "session_id": "user_123_session",
+  "history_length": 2,
+  "references": [...]
+}
+```
+
+---
+
+## ⚙️ Configuration Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `thinking_level` | string | "medium" | Controls analysis depth. Options: `low`, `medium`, `high`. |
+| `team_size` | int | 3 | Number of AI agents reaching consensus (1-5). |
+| `top_k` | int | 5 | Number of documents to retrieve initially. |
+
+---
+
+## 🛡️ Security Features
+
+This API includes a comprehensive modular security system:
+
+1.  **Rate Limiting**: Token-bucket algorithm prevents abuse (default: 60 req/min).
+2.  **Input Sanitization**: Automatically blocks XSS, SQL Injection, and Prompt Injection attacks.
+3.  **Secure Headers**: Responses include HSTS, X-Content-Type-Options, etc.
+4.  **File Protection**: Validates magic bytes and MIME types for uploads (if enabled).
+
+### Error Codes
+
+| Code | Meaning | Solution |
+|------|---------|----------|
+| `401` | Unauthorized | Check your `X-API-Key` header. |
+| `422` | Validation Error | Check JSON body format or invalid parameters. |
+| `429` | Too Many Requests | Slow down request rate. |
+| `400` | Security Block | Input detected as malicious (XSS/Injection). |
+| `500` | Server Error | Check server logs for details. |
+
+---
+
+## 🧪 Testing
+
+Run the integration tests to verify API functionality:
+
 ```bash
-curl -X POST http://localhost:8000/api/v1/generate \
-  -H "Content-Type: application/json" \
-  -d '{"query": "Apa sanksi pelanggaran UU Ketenagakerjaan?"}'
+# Run HTTP-level tests
+python tests/integration/test_api_http.py --verbose
+
+# Run concurrent load tests
+python tests/integration/test_concurrent_users.py --users 10
 ```
 
-### With Session
-```bash
-# Create session
-curl -X POST http://localhost:8000/api/v1/sessions \
-  -H "Content-Type: application/json" \
-  -d '{}'
+---
 
-# Generate with session
-curl -X POST http://localhost:8000/api/v1/generate \
-  -H "Content-Type: application/json" \
-  -d '{"query": "Apa sanksinya?", "session_id": "YOUR_SESSION_ID"}'
-```
+## 📓 Jupyter Notebook Usage
 
-### Search Documents
-```bash
-curl -X POST http://localhost:8000/api/v1/search \
-  -H "Content-Type: application/json" \
-  -d '{"query": "ketenagakerjaan", "max_results": 5}'
-```
+You can test the API directly within a Jupyter Notebook (e.g., on Kaggle) by running the server in a background subprocess.
 
-## API Documentation
+Copy and paste the following cell into your notebook:
 
-- Swagger UI: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
 
-## Configuration
+# ============================================
+# 📓 API SERVER + INTERACTIVE TESTS (PURE PYTHON)
+# ============================================
+# This cell runs the server and tests it using Python's requests library.
+# It handles server startup, waiting, testing, and cleanup automatically.
+# ============================================
 
-The API uses the global configuration from `config.py`.
+import subprocess
+import time
+import os
+import sys
+import requests
+import json
+import signal
 
-Environment variables:
-- `HOST` - Server host (default: 0.0.0.0)
-- `PORT` - Server port (default: 8000)
+# --------------------------------------------
+# 1. SETUP
+# --------------------------------------------
+API_KEY = "test_integration_key_12345"
+os.environ['LEGAL_API_KEY'] = API_KEY
+BASE_URL = "http://127.0.0.1:8000/api/v1"
+HEADERS = {"X-API-Key": API_KEY, "Content-Type": "application/json"}
+
+
+def check_server_alive():
+    try:
+        requests.get(f"{BASE_URL}/health", timeout=1)
+        return True
+    except:
+        return False
+
+# --------------------------------------------
+# 2. START SERVER (CLEANUP PORT FIRST)
+# --------------------------------------------
+print(f"🧹 Cleaning up Port 8000...")
+if os.name == 'nt': # Windows
+    os.system("for /f \"tokens=5\" %a in ('netstat -aon ^| findstr :8000') do taskkill /f /pid %a >nul 2>&1")
+else: # Linux/Mac
+    os.system("fuser -k 8000/tcp > /dev/null 2>&1")
+
+time.sleep(2)
+print(f"🚀 Starting API Server on Port 8000...")
+
+# Set PYTHONPATH to ensure imports work correctly
+env = os.environ.copy()
+env["PYTHONPATH"] = os.getcwd()
+
+# Start server using subprocess
+server = subprocess.Popen(
+    [sys.executable, "-m", "uvicorn", "api.server:app", "--host", "127.0.0.1", "--port", "8000", "--log-level", "debug"],
+    stdout=subprocess.PIPE,
+    stderr=subprocess.STDOUT, # Merge stdout and stderr
+    text=True,
+    bufsize=1,
+    env=env
+)
+
+# Function to safely read lines from the process
+import threading
+import queue
+
+log_db = []
+def reader(pipe):
+    try:
+        for line in pipe:
+            log_db.append(line.strip())
+    except: pass
+
+log_thread = threading.Thread(target=reader, args=(server.stdout,))
+log_thread.daemon = True
+log_thread.start()
+
+print("⏳ Waiting for server to be ready (~300s-600s for model loading)...", flush=True)
+server_ready = False
+start_wait = time.time()
+last_log_idx = 0
+
+for i in range(600):
+    # Print new logs
+    while last_log_idx < len(log_db):
+        line = log_db[last_log_idx]
+        if any(x in line for x in ["ERROR", "Traceback", "Exception", "Fail"]):
+            print(f"\n🚩 {line}")
+        last_log_idx += 1
+
+    # Check if process is still alive
+    if server.poll() is not None:
+        print("\n❌ Server process died unexpectedly during startup.")
+        print("\n--- RECENT SERVER LOGS ---")
+        for line in log_db[-20:]: # Show last 20 lines of logs
+            print(f"  > {line}")
+        break
+        
+    try:
+        r = requests.get(f"{BASE_URL}/ready", timeout=2)
+        if r.status_code == 200:
+            data = r.json()
+            if data.get('ready'):
+                print(f"\n✅ Server and Pipeline ready in {int(time.time() - start_wait)}s!")
+                server_ready = True
+                break
+            else:
+                if i % 10 == 0:
+                    print(f"\n[Status] {data.get('message', 'Initializing...')}", end="", flush=True)
+    except Exception:
+        pass
+    
+    if i % 5 == 0:
+        print(".", end="", flush=True)
+    time.sleep(1)
+
+if not server_ready:
+    if server.poll() is None:
+        print("\n❌ Server failed to initialize within timeout.")
+        server.terminate()
+else:
+    try:
+        # Pre-define session_id so it's always in scope
+        session_id = f"demo_{int(time.time())}"
+        
+        # TEST A: RETRIEVAL
+        # ------------------
+        print("\n[TEST A] Retrieval (curl)...")
+        cmd_a = [
+            "curl", "-X", "POST", f"{BASE_URL}/rag/retrieve",
+            "-H", f"X-API-Key: {API_KEY}",
+            "-H", "Content-Type: application/json",
+            "-d", json.dumps({"query": "Apa syarat pendirian PT?", "top_k": 2}),
+            "--max-time", "300" 
+        ]
+        subprocess.run(cmd_a)
+
+        # TEST B: DEEP RESEARCH
+        # ------------------
+        if check_server_alive():
+            print("\n\n[TEST B] Deep Research (Python) - Detailed Metadata...", flush=True)
+            try:
+                import requests
+                payload = {"query": "Apa itu PT?", "thinking_level": "low", "team_size": 1}
+                r = requests.post(f"{BASE_URL}/rag/research", headers=HEADERS, json=payload, timeout=600)
+                
+                if r.status_code == 200:
+                    res = r.json()
+                    print(f"\n✅ Answer: {res['answer'][:200]}...")
+                    print(f"\n📑 Legal References:\n{res['legal_references'][:300]}...")
+                    print(f"\n🔬 Research Process Log (First 300 chars):\n{res['research_process'][:300]}...")
+                    print(f"\n📂 Total Documents Found: {len(res['citations'])}")
+                    print(f"📂 Total unique docs in dump: {res['all_retrieved_documents'].count('[')}")
+                else:
+                    print(f"❌ Research failed: {r.text}")
+            except Exception as e:
+                print(f"❌ Error in Test B: {e}")
+        else:
+            print("\n\n❌ Server crashed after Test A (Likely OOM)", flush=True)
+
+        # TEST C: CHAT
+        # ------------------
+        if check_server_alive():
+            print("\n\n[TEST C] Chat (curl)...", flush=True)
+            
+            # 1. CREATE SESSION
+            print(f"Creating session: {session_id}...")
+            cmd_c_init = [
+                "curl", "-X", "POST", f"{BASE_URL}/sessions",
+                "-H", f"X-API-Key: {API_KEY}",
+                "-H", "Content-Type: application/json",
+                "-d", json.dumps({"session_id": session_id}),
+                "--max-time", "30"
+            ]
+            subprocess.run(cmd_c_init)
+
+            # 2. TURN 1
+            print("\n\nTurn 1...", flush=True)
+            cmd_c1 = [
+                "curl", "-X", "POST", f"{BASE_URL}/rag/chat",
+                "-H", f"X-API-Key: {API_KEY}",
+                "-H", "Content-Type: application/json",
+                "-d", json.dumps({"query": "Apa itu UU Ketenagakerjaan?", "session_id": session_id, "stream": False}),
+                "--max-time", "300"
+            ]
+            subprocess.run(cmd_c1)
+
+            # 3. TURN 2 (Follow-up)
+            print("\n\nTurn 2 (Follow-up)...", flush=True)
+            cmd_c2 = [
+                "curl", "-X", "POST", f"{BASE_URL}/rag/chat",
+                "-H", f"X-API-Key: {API_KEY}",
+                "-H", "Content-Type: application/json",
+                "-d", json.dumps({"query": "Apa sanksi pidananya?", "session_id": session_id, "stream": False}),
+                "--max-time", "300"
+            ]
+            subprocess.run(cmd_c2)
+        else:
+            print("\n\n❌ Server crashed before Test C", flush=True)
+
+        # TEST D: STREAMING CHAT (Real-time Thinking + Advanced Metadata)
+        # ------------------
+        if check_server_alive():
+            print("\n\n[TEST D] Streaming Chat (Real-time Thinking)...", flush=True)
+            print("Testing live thinking process and answer streaming...")
+            
+            try:
+                import requests
+                # Use medium for faster results
+                payload = {
+                    "query": "Jelaskan perbedaan PT dan CV secara mendalam.", 
+                    "session_id": session_id, 
+                    "thinking_level": "medium", 
+                    "stream": True
+                }
+                
+                response = requests.post(
+                    f"{BASE_URL}/rag/chat", 
+                    headers=HEADERS, 
+                    json=payload, 
+                    stream=True,
+                    timeout=600
+                )
+                
+                if response.status_code == 200:
+                    print("--- STREAM START ---")
+                    for line in response.iter_lines():
+                        if line:
+                            content = line.decode('utf-8')
+                            if content.startswith('data: '):
+                                data = json.loads(content[6:])
+                                ev_type = data.get('type')
+                                
+                                if ev_type == 'progress':
+                                    print(f"[PROGRESS] {data.get('message')}")
+                                elif ev_type == 'thinking':
+                                    print(data.get('content'), end="", flush=True)
+                                elif ev_type == 'chunk':
+                                    print(data.get('content'), end="", flush=True)
+                                elif ev_type == 'done':
+                                    print("\n--- STREAM END ---")
+                                    print(f"\n📊 [METADATA] Detailed Research Log:\n{data.get('research_process', '')[:500]}...")
+                                    print(f"\n📂 [METADATA] All Documents Trace:\n{data.get('all_retrieved_documents', '')[:500]}...")
+                    print("\n✅ Streaming test finished successfully")
+                else:
+                    print(f"❌ Streaming failed: {response.text}")
+            except Exception as e:
+                print(f"❌ Error during streaming test: {e}")
+        else:
+            print("\n\n❌ Server crashed before Test D", flush=True)
+
+    finally:
+        # --------------------------------------------
+        # 5. CLEANUP
+        # --------------------------------------------
+        print("\n🛑 Shutting down server...")
+        server.terminate()
+        try:
+            server.wait(timeout=5)
+            print("✅ Server stopped successfully")
+        except:
+            server.kill()
+            print("⚠️ Server killed forcefully")
+
+print("\n🎉 All interactive tests completed!")

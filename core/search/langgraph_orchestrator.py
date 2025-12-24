@@ -3,6 +3,7 @@ LangGraph Orchestrator for RAG System - FIXED VERSION
 Proper state handling and error management
 """
 
+import time
 from typing import Dict, Any, List, TypedDict, Optional
 from langgraph.graph import StateGraph, END
 from utils.logger_utils import get_logger
@@ -20,6 +21,7 @@ class RAGState(TypedDict, total=False):
     # Input
     query: str
     conversation_history: Optional[List[Dict[str, str]]]
+    top_k: Optional[int]
     
     # Query Analysis
     query_analysis: Optional[Dict[str, Any]]
@@ -304,21 +306,34 @@ class LangGraphRAGOrchestrator:
             consensus_data = state['consensus_data']
             
             # Rerank results
+            expected_top_k = state.get('top_k') or self.config.get('final_top_k', 3)
             rerank_data = self.reranker.rerank(
                 query=query,
-                consensus_results=consensus_data['validated_results']
+                consensus_results=consensus_data['validated_results'],
+                top_k=expected_top_k
             )
 
             final_results = rerank_data['reranked_results']
 
-            # SAFETY: Ensure exactly final_top_k documents (defense in depth)
-            expected_top_k = self.config.get('final_top_k', 3)
+            # SAFETY: Ensure exactly expected_top_k documents (defense in depth)
             if len(final_results) > expected_top_k:
                 self.logger.warning(f"Reranker returned {len(final_results)} docs, trimming to {expected_top_k}")
                 final_results = final_results[:expected_top_k]
                 # Update rerank_data to reflect trimmed results
                 rerank_data['reranked_results'] = final_results
                 rerank_data['metadata']['reranked_count'] = len(final_results)
+            # FIXED: Validate and warn if we got fewer than expected
+            elif len(final_results) < expected_top_k:
+                self.logger.error(
+                    f"Pipeline returned {len(final_results)}/{expected_top_k} documents - "
+                    f"consensus may be too strict"
+                )
+                self.logger.info(
+                    "RECOMMENDATION: Lower consensus_threshold in config "
+                    "(current: {:.2f}) or check if search is finding relevant results".format(
+                        self.config.get('consensus_threshold', 0.6)
+                    )
+                )
 
             self.logger.success("Reranking completed", {
                 "final_count": len(final_results),
@@ -347,7 +362,8 @@ class LangGraphRAGOrchestrator:
     def run(
         self,
         query: str,
-        conversation_history: Optional[List[Dict[str, str]]] = None
+        conversation_history: Optional[List[Dict[str, str]]] = None,
+        top_k: Optional[int] = None
     ) -> Dict[str, Any]:
         """
         Run complete RAG workflow
@@ -367,7 +383,11 @@ class LangGraphRAGOrchestrator:
         initial_state: RAGState = {
             "query": query,
             "conversation_history": conversation_history or [],
-            "metadata": {},
+            "top_k": top_k,
+            "metadata": {
+                "query": query,
+                "start_time": time.time()
+            },
             "errors": []
         }
         
@@ -405,7 +425,8 @@ class LangGraphRAGOrchestrator:
     def stream_run(
         self,
         query: str,
-        conversation_history: Optional[List[Dict[str, str]]] = None
+        conversation_history: Optional[List[Dict[str, str]]] = None,
+        top_k: Optional[int] = None
     ):
         """
         Stream workflow execution (yields intermediate states)
@@ -415,7 +436,11 @@ class LangGraphRAGOrchestrator:
         initial_state: RAGState = {
             "query": query,
             "conversation_history": conversation_history or [],
-            "metadata": {},
+            "top_k": top_k,
+            "metadata": {
+                "query": query,
+                "start_time": time.time()
+            },
             "errors": []
         }
         

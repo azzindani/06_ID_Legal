@@ -279,6 +279,19 @@ class ConversationalRAGService:
                         }
                     }
 
+                elif chunk_type == 'thinking':
+                    # Streaming thinking token (CoT)
+                    token = chunk.get('token', '')
+                    chunk_count += 1
+                    
+                    yield {
+                        'type': 'thinking_chunk',
+                        'data': {
+                            'chunk': token,
+                            'chunk_count': chunk_count
+                        }
+                    }
+
                 elif chunk_type == 'complete':
                     # Final result with all metadata
                     result = chunk
