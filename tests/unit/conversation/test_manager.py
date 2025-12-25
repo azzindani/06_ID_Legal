@@ -1,7 +1,8 @@
 """
 Conversation Manager Tests
 
-Unit tests for ConversationManager class.
+Unit tests for ConversationManager class (in-memory mode).
+Persistent storage is tested in test_session_storage.py.
 
 Run with: pytest conversation/tests/test_manager.py -v
 """
@@ -14,13 +15,16 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 from conversation.manager import ConversationManager
 
+# Use in-memory mode for these tests (persistent mode tested in test_session_storage.py)
+IN_MEMORY_CONFIG = {'persist': False}
+
 
 class TestSessionManagement:
     """Test session creation and management"""
 
     def test_start_session(self):
         """Test starting a new session"""
-        manager = ConversationManager()
+        manager = ConversationManager(IN_MEMORY_CONFIG)
         session_id = manager.start_session()
 
         assert session_id is not None
@@ -29,7 +33,7 @@ class TestSessionManagement:
 
     def test_start_session_custom_id(self):
         """Test starting session with custom ID"""
-        manager = ConversationManager()
+        manager = ConversationManager(IN_MEMORY_CONFIG)
         custom_id = "my-custom-session"
         session_id = manager.start_session(custom_id)
 
@@ -38,7 +42,7 @@ class TestSessionManagement:
 
     def test_start_session_duplicate(self):
         """Test starting session with duplicate ID returns existing"""
-        manager = ConversationManager()
+        manager = ConversationManager(IN_MEMORY_CONFIG)
         session_id = manager.start_session("test-session")
         session_id_2 = manager.start_session("test-session")
 
@@ -47,7 +51,7 @@ class TestSessionManagement:
 
     def test_end_session(self):
         """Test ending a session"""
-        manager = ConversationManager()
+        manager = ConversationManager(IN_MEMORY_CONFIG)
         session_id = manager.start_session()
 
         result = manager.end_session(session_id)
@@ -57,14 +61,14 @@ class TestSessionManagement:
 
     def test_end_session_not_found(self):
         """Test ending non-existent session"""
-        manager = ConversationManager()
+        manager = ConversationManager(IN_MEMORY_CONFIG)
         result = manager.end_session("non-existent")
 
         assert result is None
 
     def test_list_sessions(self):
         """Test listing all sessions"""
-        manager = ConversationManager()
+        manager = ConversationManager(IN_MEMORY_CONFIG)
         manager.start_session("session-1")
         manager.start_session("session-2")
 
@@ -74,7 +78,7 @@ class TestSessionManagement:
 
     def test_clear_all_sessions(self):
         """Test clearing all sessions"""
-        manager = ConversationManager()
+        manager = ConversationManager(IN_MEMORY_CONFIG)
         manager.start_session()
         manager.start_session()
 
@@ -89,7 +93,7 @@ class TestConversationTurns:
     @pytest.fixture
     def manager_with_session(self):
         """Create manager with active session"""
-        manager = ConversationManager()
+        manager = ConversationManager(IN_MEMORY_CONFIG)
         session_id = manager.start_session()
         return manager, session_id
 
@@ -143,7 +147,7 @@ class TestConversationTurns:
 
     def test_add_turn_invalid_session(self):
         """Test adding turn to non-existent session"""
-        manager = ConversationManager()
+        manager = ConversationManager(IN_MEMORY_CONFIG)
 
         with pytest.raises(ValueError):
             manager.add_turn(
@@ -182,7 +186,7 @@ class TestHistoryRetrieval:
     @pytest.fixture
     def manager_with_turns(self):
         """Create manager with multiple turns"""
-        manager = ConversationManager()
+        manager = ConversationManager(IN_MEMORY_CONFIG)
         session_id = manager.start_session()
 
         for i in range(5):
@@ -215,7 +219,7 @@ class TestHistoryRetrieval:
 
     def test_get_history_invalid_session(self):
         """Test getting history for invalid session"""
-        manager = ConversationManager()
+        manager = ConversationManager(IN_MEMORY_CONFIG)
         history = manager.get_history("non-existent")
 
         assert history == []
@@ -241,7 +245,7 @@ class TestHistoryRetrieval:
 
     def test_get_last_turn_empty_session(self):
         """Test getting last turn from empty session"""
-        manager = ConversationManager()
+        manager = ConversationManager(IN_MEMORY_CONFIG)
         session_id = manager.start_session()
 
         last = manager.get_last_turn(session_id)
@@ -254,7 +258,7 @@ class TestSessionInfo:
 
     def test_get_session(self):
         """Test getting full session data"""
-        manager = ConversationManager()
+        manager = ConversationManager(IN_MEMORY_CONFIG)
         session_id = manager.start_session()
 
         manager.add_turn(
@@ -272,14 +276,14 @@ class TestSessionInfo:
 
     def test_get_session_not_found(self):
         """Test getting non-existent session"""
-        manager = ConversationManager()
+        manager = ConversationManager(IN_MEMORY_CONFIG)
         session = manager.get_session("non-existent")
 
         assert session is None
 
     def test_get_session_summary(self):
         """Test getting session summary"""
-        manager = ConversationManager()
+        manager = ConversationManager(IN_MEMORY_CONFIG)
         session_id = manager.start_session()
 
         manager.add_turn(
@@ -303,7 +307,7 @@ class TestHistorySearch:
 
     def test_search_history(self):
         """Test searching conversation history"""
-        manager = ConversationManager()
+        manager = ConversationManager(IN_MEMORY_CONFIG)
         session_id = manager.start_session()
 
         manager.add_turn(session_id, "What is labor law?", "Labor law is...")
@@ -316,7 +320,7 @@ class TestHistorySearch:
 
     def test_search_history_no_results(self):
         """Test search with no results"""
-        manager = ConversationManager()
+        manager = ConversationManager(IN_MEMORY_CONFIG)
         session_id = manager.start_session()
 
         manager.add_turn(session_id, "Question", "Answer")
@@ -331,7 +335,7 @@ class TestConfiguration:
 
     def test_custom_max_history(self):
         """Test custom max history turns"""
-        manager = ConversationManager({'max_history_turns': 3})
+        manager = ConversationManager({'persist': False, 'max_history_turns': 3})
         session_id = manager.start_session()
 
         for i in range(5):
@@ -343,7 +347,7 @@ class TestConfiguration:
 
     def test_custom_max_context(self):
         """Test custom max context turns"""
-        manager = ConversationManager({'max_context_turns': 2})
+        manager = ConversationManager({'persist': False, 'max_context_turns': 2})
         session_id = manager.start_session()
 
         for i in range(5):
