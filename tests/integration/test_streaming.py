@@ -75,7 +75,8 @@ class StreamingTester:
             start_time = time.time()
 
             # Stream the response
-            # Pipeline yields dicts with 'type' field: 'token', 'complete', or 'error'
+            # Pipeline yields dicts with 'type' field: 'token', 'thinking', 'complete', or 'error'
+            thinking_count = 0
             for chunk in self.pipeline.query(query, stream=True):
                 chunk_type = chunk.get('type', '')
 
@@ -86,6 +87,14 @@ class StreamingTester:
                     full_answer += token
                     chunk_count += 1
 
+                elif chunk_type == 'thinking':
+                    # Thinking chunk - print with indicator (real-time streaming of thinking)
+                    token = chunk.get('token', '')
+                    # Print thinking content (shows CoT in real-time)
+                    print(token, end='', flush=True)
+                    thinking_count += 1
+                    chunk_count += 1
+
                 elif chunk_type == 'complete':
                     # Final result with metadata
                     full_answer = chunk.get('answer', full_answer)
@@ -93,7 +102,7 @@ class StreamingTester:
 
                     print("\n" + "─" * 80)
                     self.logger.info(f"\n✅ Streaming complete!")
-                    self.logger.info(f"Total chunks: {chunk_count}")
+                    self.logger.info(f"Total chunks: {chunk_count} (thinking: {thinking_count}, answer: {chunk_count - thinking_count})")
                     self.logger.info(f"Total time: {time.time() - start_time:.2f}s")
                     self.logger.info(f"Final length: {len(full_answer)} chars")
 
