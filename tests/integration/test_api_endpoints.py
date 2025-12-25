@@ -12,7 +12,6 @@ This shows REAL output like production would generate.
 """
 
 import sys
-from config import LOG_DIR, ENABLE_FILE_LOGGING, LOG_VERBOSITY
 import os
 import time
 import json
@@ -24,6 +23,7 @@ import signal
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
+from config import LOG_DIR, ENABLE_FILE_LOGGING, LOG_VERBOSITY
 from utils.logger_utils import get_logger, initialize_logging
 
 

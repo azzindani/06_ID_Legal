@@ -9,7 +9,6 @@ This initializes the full system and shows real output.
 """
 
 import sys
-from config import LOG_DIR, ENABLE_FILE_LOGGING, LOG_VERBOSITY
 import os
 import time
 import json
@@ -17,6 +16,7 @@ import json
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
+from config import LOG_DIR, ENABLE_FILE_LOGGING, LOG_VERBOSITY
 from utils.logger_utils import get_logger, initialize_logging
 from conversation import ConversationManager, MarkdownExporter, JSONExporter, HTMLExporter
 

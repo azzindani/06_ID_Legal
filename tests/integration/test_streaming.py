@@ -15,7 +15,6 @@ You'll see the LLM output streaming in REAL-TIME!
 """
 
 import sys
-from config import LOG_DIR, ENABLE_FILE_LOGGING, LOG_VERBOSITY
 import os
 import time
 import json
@@ -27,6 +26,7 @@ from typing import Optional
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
+from config import LOG_DIR, ENABLE_FILE_LOGGING, LOG_VERBOSITY
 from utils.logger_utils import get_logger, initialize_logging
 from pipeline import RAGPipeline
 
