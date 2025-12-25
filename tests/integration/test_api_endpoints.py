@@ -41,7 +41,7 @@ class APIEndpointTester:
         self.base_url = f"http://localhost:{port}/api/v1"
         self.server_process: Optional[subprocess.Popen] = None
 
-    def start_server(self, timeout: int = 30) -> bool:
+    def start_server(self, timeout: int = 600) -> bool:
         """Start the API server and wait for it to be ready"""
         self.logger.info("=" * 80)
         self.logger.info("STARTING API SERVER")
@@ -50,26 +50,45 @@ class APIEndpointTester:
         try:
             # Start uvicorn server
             self.logger.info(f"Starting server on port {self.port}...")
+            
+            # Cross-platform process creation
+            popen_kwargs = {
+                'stdout': subprocess.PIPE,
+                'stderr': subprocess.PIPE,
+            }
+            
+            # Unix-specific: create new process group
+            if hasattr(os, 'setsid'):
+                popen_kwargs['preexec_fn'] = os.setsid
+            
             self.server_process = subprocess.Popen(
                 ["python", "-m", "uvicorn", "api.server:app",
                  "--host", "0.0.0.0", "--port", str(self.port)],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                preexec_fn=os.setsid  # Create new process group
+                **popen_kwargs
             )
 
-            # Wait for server to be ready
-            self.logger.info(f"Waiting for server to be ready (timeout: {timeout}s)...")
+            # Wait for server to be ready (use /ready endpoint which checks pipeline)
+            self.logger.info(f"Waiting for server and pipeline to initialize (timeout: {timeout}s)...")
+            self.logger.info("This may take 5-10 minutes on first run while loading models...")
             start_time = time.time()
 
             while time.time() - start_time < timeout:
                 try:
-                    response = requests.get(f"{self.base_url}/health", timeout=1)
+                    # Use /ready endpoint which checks if pipeline is initialized
+                    response = requests.get(f"{self.base_url}/ready", timeout=2)
                     if response.status_code == 200:
-                        self.logger.success(f"Server ready after {time.time() - start_time:.1f}s")
-                        return True
+                        data = response.json()
+                        if data.get('ready', False):
+                            self.logger.success(f"Server and pipeline ready after {time.time() - start_time:.1f}s")
+                            return True
+                        else:
+                            # Show progress
+                            elapsed = int(time.time() - start_time)
+                            if elapsed % 30 == 0:
+                                self.logger.info(f"Still initializing... ({elapsed}s elapsed)")
                 except requests.exceptions.RequestException:
-                    time.sleep(1)
+                    pass
+                time.sleep(2)
 
             self.logger.error("Server failed to start within timeout")
             return False
@@ -83,12 +102,21 @@ class APIEndpointTester:
         if self.server_process:
             self.logger.info("Stopping API server...")
             try:
-                # Kill the entire process group
-                os.killpg(os.getpgid(self.server_process.pid), signal.SIGTERM)
+                # Cross-platform process termination
+                if hasattr(os, 'killpg') and hasattr(os, 'getpgid'):
+                    # Unix: Kill the entire process group
+                    os.killpg(os.getpgid(self.server_process.pid), signal.SIGTERM)
+                else:
+                    # Windows: Just terminate the process
+                    self.server_process.terminate()
                 self.server_process.wait(timeout=5)
                 self.logger.success("Server stopped")
             except Exception as e:
                 self.logger.error("Error stopping server", {"error": str(e)})
+                try:
+                    self.server_process.kill()
+                except:
+                    pass
 
     def test_health_check(self) -> bool:
         """Test health check endpoint"""
