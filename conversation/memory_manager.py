@@ -566,10 +566,15 @@ class MemoryManager:
         Returns:
             Statistics including cache, key facts, summaries, etc.
         """
+        # Get session count safely (works with both in-memory and persistent modes)
+        sessions_list = self.conversation_manager.list_sessions()
+        session_count = len(sessions_list) if sessions_list else 0
+        session_ids = [s.get('session_id', s.get('id', '')) for s in sessions_list] if sessions_list else []
+        
         stats = {
             'manager_stats': self._stats.copy(),
-            'sessions': len(self.conversation_manager.sessions),
-            'active_sessions': list(self.conversation_manager.sessions.keys()),
+            'sessions': session_count,
+            'active_sessions': session_ids,
             'total_key_facts': sum(len(facts) for facts in self.key_facts_storage.values()),
             'sessions_with_summaries': len(self.session_summaries)
         }

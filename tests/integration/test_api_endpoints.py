@@ -40,6 +40,10 @@ class APIEndpointTester:
         self.port = port
         self.base_url = f"http://localhost:{port}/api/v1"
         self.server_process: Optional[subprocess.Popen] = None
+        
+        # Get API key from environment
+        self.api_key = os.getenv('LEGAL_API_KEY', 'dev-key-for-testing')
+        self.headers = {'X-API-Key': self.api_key}
 
     def start_server(self, timeout: int = 600) -> bool:
         """Start the API server and wait for it to be ready"""
@@ -160,6 +164,7 @@ class APIEndpointTester:
             response = requests.post(
                 f"{self.base_url}/search",
                 json=payload,
+                headers=self.headers,
                 timeout=30
             )
             elapsed = time.time() - start_time
@@ -210,6 +215,7 @@ class APIEndpointTester:
             response = requests.post(
                 f"{self.base_url}/generate",
                 json=payload,
+                headers=self.headers,
                 timeout=60  # Generation takes longer
             )
             elapsed = time.time() - start_time
@@ -254,7 +260,8 @@ class APIEndpointTester:
             self.logger.info("Step 1: Creating session...")
             response = requests.post(
                 f"{self.base_url}/sessions",
-                json={"session_id": session_id}
+                json={"session_id": session_id},
+                headers=self.headers
             )
 
             if response.status_code != 200:
@@ -266,7 +273,7 @@ class APIEndpointTester:
 
             # 2. List sessions
             self.logger.info("Step 2: Listing sessions...")
-            response = requests.get(f"{self.base_url}/sessions")
+            response = requests.get(f"{self.base_url}/sessions", headers=self.headers)
 
             if response.status_code != 200:
                 self.logger.error(f"Failed to list sessions: {response.text}")
@@ -277,7 +284,7 @@ class APIEndpointTester:
 
             # 3. Get specific session
             self.logger.info("Step 3: Getting session details...")
-            response = requests.get(f"{self.base_url}/sessions/{session_id}")
+            response = requests.get(f"{self.base_url}/sessions/{session_id}", headers=self.headers)
 
             if response.status_code != 200:
                 self.logger.error(f"Failed to get session: {response.text}")
@@ -289,7 +296,7 @@ class APIEndpointTester:
 
             # 4. Delete session
             self.logger.info("Step 4: Deleting session...")
-            response = requests.delete(f"{self.base_url}/sessions/{session_id}")
+            response = requests.delete(f"{self.base_url}/sessions/{session_id}", headers=self.headers)
 
             if response.status_code != 200:
                 self.logger.error(f"Failed to delete session: {response.text}")
@@ -329,6 +336,7 @@ class APIEndpointTester:
                 response = requests.post(
                     f"{self.base_url}/search",
                     json={"query": query, "max_results": 5},
+                    headers=self.headers,
                     timeout=5
                 )
 
