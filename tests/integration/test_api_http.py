@@ -56,7 +56,7 @@ class HTTPAPITester:
         print("-" * 80)
         
         try:
-            from core.pipeline import RAGPipeline
+            from pipeline.rag_pipeline import RAGPipeline
             
             print("Loading RAG pipeline...")
             self.pipeline = RAGPipeline()
