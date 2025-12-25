@@ -23,7 +23,7 @@ import signal
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from config import LOG_DIR, ENABLE_FILE_LOGGING, LOG_VERBOSITY
+from config import LOG_DIR, ENABLE_FILE_LOGGING, LOG_VERBOSITY, LEGAL_API_KEY
 from utils.logger_utils import get_logger, initialize_logging
 
 
@@ -41,8 +41,8 @@ class APIEndpointTester:
         self.base_url = f"http://localhost:{port}/api/v1"
         self.server_process: Optional[subprocess.Popen] = None
         
-        # Get API key from environment
-        self.api_key = os.getenv('LEGAL_API_KEY', 'dev-key-for-testing')
+        # Get API key from config (same source as server)
+        self.api_key = LEGAL_API_KEY
         self.headers = {'X-API-Key': self.api_key}
 
     def start_server(self, timeout: int = 600) -> bool:
