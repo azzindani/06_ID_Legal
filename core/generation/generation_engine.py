@@ -264,7 +264,8 @@ class GenerationEngine:
         full_response = ""
         tokens_generated = 0
         in_thinking_block = False
-        think_tag_detected = False  # Track if we've ever seen a think tag
+        think_start_detected = False  # Track if we've seen <think>
+        think_end_detected = False    # Track if we've seen </think>
 
         try:
             for chunk in self.llm_engine.generate_stream(prompt, max_new_tokens=max_new_tokens):
@@ -274,23 +275,20 @@ class GenerationEngine:
                         full_response += token
                         tokens_generated = chunk['tokens_generated']
                         
-                        # Real-time thinking detection - check FULL accumulated response
-                        # This handles tags split across token chunks
+                        # Real-time thinking detection using accumulated response
                         full_lower = full_response.lower()
                         
-                        # Detect <think> tag in full response (not just current token)
-                        if not think_tag_detected and '<think>' in full_lower:
+                        # Detect <think> start (only once)
+                        if not think_start_detected and '<think>' in full_lower:
+                            think_start_detected = True
                             in_thinking_block = True
-                            think_tag_detected = True
                             self.logger.debug("Detected <think> tag start in stream")
                         
-                        # Detect </think> end - must check full response
-                        if think_tag_detected and '</think>' in full_lower:
-                            # Check if we're past the closing tag
-                            close_pos = full_lower.rfind('</think>')
-                            if close_pos != -1 and close_pos + 8 <= len(full_response):
-                                in_thinking_block = False
-                                self.logger.debug("Detected </think> tag end in stream")
+                        # Detect </think> end (only once, after start detected)
+                        if think_start_detected and not think_end_detected and '</think>' in full_lower:
+                            think_end_detected = True
+                            in_thinking_block = False
+                            self.logger.debug("Detected </think> tag end in stream")
 
                         yield {
                             'type': 'thinking' if in_thinking_block else 'token',
