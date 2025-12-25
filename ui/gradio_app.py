@@ -245,18 +245,39 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                         final_answer.append(new_text)
                         live_output.append(new_text)
                 else:
-                    # No think tags detected yet
-                    if len(accumulated_text) > 20 and not saw_think_tag:
-                        # Likely direct answer without thinking
+                    # Check if <think> appeared anywhere in accumulated text (may have been split across chunks)
+                    if '<think>' in accumulated_text:
+                        # Found think tag in accumulated text - reprocess
+                        saw_think_tag = True
+                        in_thinking_block = '</think>' not in accumulated_text
+                        if not thinking_header_shown and show_thinking:
+                            live_output = [progress_header, '🧠 **Sedang berfikir...**\n\n']
+                            thinking_header_shown = True
+                        # Extract thinking content so far
+                        think_start = accumulated_text.find('<think>') + 7
+                        if '</think>' in accumulated_text:
+                            think_end = accumulated_text.find('</think>')
+                            thinking_content = [accumulated_text[think_start:think_end]]
+                            final_answer.append(accumulated_text[think_end + 8:])
+                            if show_thinking:
+                                live_output.append(accumulated_text[think_start:think_end])
+                                live_output.append('\n\n---\n\n✅ **Sedang menjawab...**\n\n')
+                                live_output.append(accumulated_text[think_end + 8:])
+                        else:
+                            thinking_content = [accumulated_text[think_start:]]
+                            if show_thinking:
+                                live_output.append(accumulated_text[think_start:])
+                    elif len(accumulated_text) > 100 and not saw_think_tag:
+                        # After 100 chars with no think tag, assume direct answer
                         if not thinking_header_shown:
                             live_output = [progress_header, '⭐ **Jawaban langsung:**\n\n']
                             thinking_header_shown = True
                         final_answer.append(new_text)
                         live_output.append(new_text)
                     else:
-                        # Still waiting to see if think tag appears
+                        # Still waiting to see if think tag appears (buffer for split chunks)
                         if not thinking_header_shown:
-                            live_output = [progress_header, f"🤖 Generating response...\n\n{new_text}"]
+                            live_output = [progress_header, f"🤖 Generating response...\n\n{accumulated_text}"]
                         else:
                             live_output.append(new_text)
 
