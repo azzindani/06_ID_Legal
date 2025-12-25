@@ -103,7 +103,7 @@ async def list_sessions(request: Request):
 
         return [
             SessionSummary(
-                session_id=s['id'],
+                session_id=s.get('session_id') or s.get('id', ''),
                 total_turns=s.get('total_turns', 0),
                 total_queries=s.get('total_queries', 0),
                 total_tokens=s.get('total_tokens', 0),
