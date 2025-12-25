@@ -340,7 +340,7 @@ class APIEndpointTester:
                     f"{self.base_url}/search",
                     json={"query": query, "max_results": 5},
                     headers=self.headers,
-                    timeout=60  # Increased for Kaggle
+                    timeout=180  # Increased for Kaggle
                 )
 
                 if response.status_code == expected_status:
@@ -377,7 +377,7 @@ class APIEndpointTester:
             rate_limited_count = 0
 
             for i in range(70):
-                response = requests.get(f"{self.base_url}/health", timeout=10)
+                response = requests.get(f"{self.base_url}/health", timeout=30)
 
                 if response.status_code == 200:
                     success_count += 1
