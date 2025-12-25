@@ -44,7 +44,8 @@ class APIEndpointTester:
         # Get API key from environment (MUST match server's key)
         self.api_key = os.getenv('LEGAL_API_KEY')
         if not self.api_key:
-            raise ValueError("LEGAL_API_KEY environment variable not set. Set it before running this test.")
+            self.logger.warning("LEGAL_API_KEY not set - using empty key (tests may fail)")
+            self.api_key = ""
         self.headers = {'X-API-Key': self.api_key}
 
     def start_server(self, timeout: int = 600) -> bool:
