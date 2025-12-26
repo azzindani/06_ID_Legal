@@ -161,21 +161,26 @@ def dummy_login(username: str, password: str):
         return (
             gr.update(visible=True),   # login panel stays visible
             gr.update(visible=False),  # main app hidden
-            "⚠️ Masukkan username dan password"
+            "⚠️ Masukkan username dan password",
+            ""  # status display (not updated)
         )
     
     if username in DEMO_USERS and DEMO_USERS[username] == password:
         authenticated_user = username
+        # Initialize API client on successful login
+        status_msg = initialize_client(DEFAULT_CONFIG['api_url'], DEFAULT_CONFIG['api_key'])
         return (
             gr.update(visible=False),  # hide login
             gr.update(visible=True),   # show main app
-            ""
+            "",
+            status_msg  # status display
         )
     else:
         return (
             gr.update(visible=True),   # login stays visible
             gr.update(visible=False),  # main app hidden
-            "❌ Username atau password salah"
+            "❌ Username atau password salah",
+            ""  # status display (not updated)
         )
 
 
@@ -630,18 +635,12 @@ def create_unified_interface():
         login_btn.click(
             fn=dummy_login,
             inputs=[username_input, password_input],
-            outputs=[login_panel, main_app, login_error]
+            outputs=[login_panel, main_app, login_error, status_display]
         )
         
         logout_btn.click(
             fn=dummy_logout,
             outputs=[login_panel, main_app, chatbot]
-        )
-        
-        # Initialize API on successful login
-        main_app.change(
-            fn=lambda: initialize_client(DEFAULT_CONFIG['api_url'], DEFAULT_CONFIG['api_key']),
-            outputs=status_display
         )
     
     return app
