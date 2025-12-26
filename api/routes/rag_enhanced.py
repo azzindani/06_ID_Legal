@@ -136,44 +136,7 @@ class ChatResponse(BaseModel):
 # UTILITY FUNCTIONS
 # ============================================================================
 
-def format_legal_references(citations: List[Dict]) -> str:
-    """
-    Format citations as a legal references section
-    
-    Args:
-        citations: List of citation dictionaries
-        
-    Returns:
-        Formatted markdown string
-    """
-    if not citations:
-        return ""
-    
-    references = ["### 📖 Referensi Hukum\n"]
-    
-    for i, citation in enumerate(citations[:10], 1):  # Limit to top 10
-        reg_type = citation.get('regulation_type', 'N/A')
-        reg_num = citation.get('regulation_number', 'N/A')
-        year = citation.get('year', 'N/A')
-        about = citation.get('about', 'N/A')
-        
-        references.append(f"{i}. **{reg_type} No. {reg_num} Tahun {year}**")
-        references.append(f"   - Tentang: {about}")
-        
-        # Add location if available
-        chapter = citation.get('chapter') or citation.get('bab')
-        article = citation.get('article') or citation.get('pasal')
-        if chapter or article:
-            location_parts = []
-            if chapter:
-                location_parts.append(f"Bab {chapter}")
-            if article:
-                location_parts.append(f"Pasal {article}")
-            references.append(f"   - Lokasi: {' | '.join(location_parts)}")
-        
-        references.append("")
-    
-    return "\n".join(references)
+# Note: format_legal_references removed - use utils.formatting.format_sources_info instead
 
 
 def extract_documents(result: Dict) -> List[LegalDocument]:

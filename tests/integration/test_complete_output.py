@@ -15,7 +15,6 @@ You'll see complete RAG output with real-time streaming!
 """
 
 import sys
-from config import LOG_DIR, ENABLE_FILE_LOGGING, LOG_VERBOSITY
 import os
 import time
 import json
@@ -24,6 +23,7 @@ from typing import Optional, Dict, Any, List
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
+from config import LOG_DIR, ENABLE_FILE_LOGGING, LOG_VERBOSITY
 from utils.logger_utils import get_logger, initialize_logging
 from pipeline import RAGPipeline
 from utils.formatting import _extract_all_documents_from_metadata
@@ -394,6 +394,12 @@ class CompleteOutputTester:
                     token = chunk.get('token', '')
                     print(token, end='', flush=True)
                     full_answer += token
+                    chunk_count += 1
+
+                elif chunk_type == 'thinking':
+                    # Thinking chunk - print CoT content
+                    token = chunk.get('token', '')
+                    print(token, end='', flush=True)
                     chunk_count += 1
 
                 elif chunk_type == 'complete':

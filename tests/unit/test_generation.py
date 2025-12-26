@@ -468,6 +468,10 @@ Untuk kasus atau situasi spesifik, disarankan untuk berkonsultasi dengan ahli hu
                     print(chunk['token'], end='', flush=True)
                     full_answer += chunk['token']
                     tokens = chunk['tokens_generated']
+                elif chunk['type'] == 'thinking':
+                    # Thinking chunk - print CoT content
+                    print(chunk['token'], end='', flush=True)
+                    tokens = chunk['tokens_generated']
                 elif chunk['type'] == 'complete':
                     print("\n")
                     self.logger.success("Streaming completed", {

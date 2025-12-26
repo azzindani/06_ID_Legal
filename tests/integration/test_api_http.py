@@ -49,6 +49,29 @@ class HTTPAPITester:
         print(f"Base URL: {self.base_url}")
         print()
     
+    def initialize_pipeline(self) -> bool:
+        """Initialize the RAG pipeline for testing"""
+        print("\n" + "-" * 80)
+        print("INITIALIZING RAG PIPELINE")
+        print("-" * 80)
+        
+        try:
+            from pipeline.rag_pipeline import RAGPipeline
+            
+            print("Loading RAG pipeline...")
+            self.pipeline = RAGPipeline()
+            self.pipeline.initialize()
+            
+            print("✓ Pipeline initialized successfully")
+            return True
+            
+        except Exception as e:
+            print(f"✗ Failed to initialize pipeline: {e}")
+            self.logger.error(f"Pipeline init failed: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+    
     def test_authentication_logic(self) -> bool:
         """Test API key validation logic"""
         print("\n" + "-" * 80)

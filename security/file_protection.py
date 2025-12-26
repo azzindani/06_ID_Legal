@@ -287,6 +287,12 @@ class SecureFileUploader:
         if not check_file_header(file_path, ext):
             return False, "File header does not match extension (possible spoofing)"
         
+        # Virus scan if enabled
+        if self.enable_virus_scan:
+            is_clean, scan_result = self._scan_for_viruses(file_path)
+            if not is_clean:
+                return False, f"Virus detected: {scan_result}"
+        
         try:
             # Move file
             import shutil
@@ -298,3 +304,67 @@ class SecureFileUploader:
         except Exception as e:
             logger.error(f"File upload failed: {e}")
             return False, str(e)
+    
+    def _scan_for_viruses(self, file_path: str) -> Tuple[bool, str]:
+        """
+        Scan file for viruses using ClamAV
+        
+        Args:
+            file_path: Path to file to scan
+            
+        Returns:
+            Tuple of (is_clean, scan_result)
+            is_clean: True if no virus found
+            scan_result: Description of scan result
+        """
+        try:
+            # Try pyclamd first (daemon connection)
+            try:
+                import pyclamd
+                cd = pyclamd.ClamdUnixSocket()
+                
+                # Test connection
+                if not cd.ping():
+                    # Try network socket
+                    cd = pyclamd.ClamdNetworkSocket()
+                    if not cd.ping():
+                        logger.warning("ClamAV daemon not available, skipping virus scan")
+                        return True, "ClamAV not available - scan skipped"
+                
+                # Scan file
+                result = cd.scan_file(file_path)
+                
+                if result is None:
+                    return True, "No virus detected"
+                else:
+                    # Virus found - result is dict with filepath as key
+                    virus_name = result.get(file_path, ("FOUND", "Unknown virus"))
+                    logger.warning(f"Virus detected in file: {virus_name}")
+                    return False, str(virus_name)
+                    
+            except ImportError:
+                # pyclamd not installed, try command line
+                import subprocess
+                
+                result = subprocess.run(
+                    ['clamscan', '--no-summary', file_path],
+                    capture_output=True,
+                    text=True,
+                    timeout=60
+                )
+                
+                if result.returncode == 0:
+                    return True, "No virus detected"
+                elif result.returncode == 1:
+                    # Virus found
+                    return False, result.stdout.strip()
+                else:
+                    # clamscan not available
+                    logger.warning("clamscan not available, skipping virus scan")
+                    return True, "ClamAV not available - scan skipped"
+                    
+        except Exception as e:
+            logger.warning(f"Virus scan failed (continuing): {e}")
+            # Fail open - don't block uploads if scanner fails
+            return True, f"Scan failed: {e}"
+

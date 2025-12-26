@@ -280,15 +280,25 @@ class ConversationalRAGService:
                     }
 
                 elif chunk_type == 'thinking':
-                    # Streaming thinking token (CoT)
+                    # Streaming thinking token (CoT) - add to streamed_answer
+                    # so gradio_app.py can parse <think> tags from accumulated text
                     token = chunk.get('token', '')
+                    streamed_answer += token  # Include thinking in accumulated stream
                     chunk_count += 1
                     
+                    # Call stream callback for thinking tokens too
+                    if stream_callback:
+                        stream_callback(token)
+                    
+                    # Yield as streaming_chunk so gradio_app.py processes it
+                    # The <think> tag parsing in gradio_app.py handles display
                     yield {
-                        'type': 'thinking_chunk',
+                        'type': 'streaming_chunk',
                         'data': {
                             'chunk': token,
-                            'chunk_count': chunk_count
+                            'accumulated': streamed_answer,
+                            'chunk_count': chunk_count,
+                            'is_thinking': True  # Flag for context
                         }
                     }
 

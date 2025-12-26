@@ -428,6 +428,65 @@ python tests/integration/test_concurrent_users.py --users 10 --requests 5
 # 20. Edge Cases & Error Handling (NEW) ⚠️
 # Unusual inputs, boundary conditions, error recovery
 python tests/integration/test_edge_cases.py
+
+# 21. Session Storage Unit Tests (NEW) 💾
+# SQLite persistence: CRUD, turns, persistence across restarts, isolation
+python -m pytest tests/unit/conversation/test_session_storage.py -v
+
+# 22. Multi-User Session Tests (NEW) 👥💬
+# Concurrent sessions, API simulation, multi-worker, session isolation
+python -m pytest tests/integration/test_multi_user_sessions.py -v
+
+# 23. Virus Scanning Tests (NEW) 🦠
+# ClamAV integration: clean/infected detection, fallback behavior
+python -m pytest tests/unit/test_virus_scanning.py -v
+
+# 24. Path Setup Tests (NEW) 📁
+# Centralized path utility: PROJECT_ROOT, import verification
+python -m pytest tests/unit/test_path_setup.py -v
+```
+
+## 💾 Session Persistence Tests
+
+The system now includes **SQLite-based session persistence** for conversations. Sessions survive server restarts and work across API workers.
+
+### Session Storage Unit Tests
+
+```bash
+python -m pytest tests/unit/conversation/test_session_storage.py -v
+```
+
+**What's tested:**
+- ✅ Session creation (auto ID, custom ID, duplicates)
+- ✅ Turn management (add, retrieve, limit)
+- ✅ Session data and summary statistics
+- ✅ Deletion and cleanup
+- ✅ Search history functionality
+- ✅ **Persistence across restarts** (critical!)
+- ✅ Session isolation (no data leakage)
+
+### Multi-User Session Tests (API Simulation)
+
+```bash
+python -m pytest tests/integration/test_multi_user_sessions.py -v
+```
+
+**What's tested:**
+- ✅ Concurrent session creation from multiple threads
+- ✅ Parallel turn additions
+- ✅ Interleaved read/write operations
+- ✅ Session data isolation between users
+- ✅ API-like session flow simulation
+- ✅ Multi-worker access to same database
+- ✅ Backward compatibility with in-memory mode
+
+**Example output:**
+```
+test_concurrent_session_creation PASSED
+test_concurrent_turn_additions PASSED
+test_session_isolation_no_data_leakage PASSED
+test_api_like_session_flow PASSED
+test_multi_worker_simulation PASSED
 ```
 
 ## 📊 LangGraph Visualization

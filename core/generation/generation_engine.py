@@ -116,15 +116,19 @@ class GenerationEngine:
                 "prompt_length": len(prompt)
             })
 
-            # Print complete prompt for test transparency
-            print("\n" + "=" * 100)
-            print("COMPLETE LLM INPUT PROMPT (FULL TRANSPARENCY)")
-            print("=" * 100)
-            print(f"Character Count: {len(prompt):,}")
-            print("-" * 100)
-            print(prompt)
-            print("-" * 100)
-            print()
+            # Log complete prompt for test transparency (controlled by config)
+            # Enable via LOG_PROMPT_TRANSPARENCY=true environment variable
+            import os
+            if os.getenv("LOG_PROMPT_TRANSPARENCY", "false").lower() == "true":
+                self.logger.info("=" * 80)
+                self.logger.info("COMPLETE LLM INPUT PROMPT (TEST TRANSPARENCY)")
+                self.logger.info("=" * 80)
+                self.logger.info(f"Character Count: {len(prompt):,}")
+                self.logger.info("-" * 80)
+                # Log in chunks to avoid log line limits
+                for i in range(0, len(prompt), 4000):
+                    self.logger.info(prompt[i:i+4000])
+                self.logger.info("-" * 80)
 
             # Step 2.5: Determine max_new_tokens based on thinking mode
             max_new_tokens = self._get_max_tokens_for_thinking_mode(thinking_mode)
@@ -260,6 +264,8 @@ class GenerationEngine:
         full_response = ""
         tokens_generated = 0
         in_thinking_block = False
+        think_start_detected = False  # Track if we've seen <think>
+        think_end_detected = False    # Track if we've seen </think>
 
         try:
             for chunk in self.llm_engine.generate_stream(prompt, max_new_tokens=max_new_tokens):
@@ -269,14 +275,20 @@ class GenerationEngine:
                         full_response += token
                         tokens_generated = chunk['tokens_generated']
                         
-                        # Real-time thinking detection (DeepSeek/CoT style)
-                        # Detect <think> start
-                        if "<think>" in token.lower() or (not in_thinking_block and "<think" in full_response.lower()[-10:]):
-                            in_thinking_block = True
+                        # Real-time thinking detection using accumulated response
+                        full_lower = full_response.lower()
                         
-                        # Detect </think> end
-                        if "</think>" in token.lower() or (in_thinking_block and "</think" in full_response.lower()[-10:]):
+                        # Detect <think> start (only once)
+                        if not think_start_detected and '<think>' in full_lower:
+                            think_start_detected = True
+                            in_thinking_block = True
+                            self.logger.debug("Detected <think> tag start in stream")
+                        
+                        # Detect </think> end (only once, after start detected)
+                        if think_start_detected and not think_end_detected and '</think>' in full_lower:
+                            think_end_detected = True
                             in_thinking_block = False
+                            self.logger.debug("Detected </think> tag end in stream")
 
                         yield {
                             'type': 'thinking' if in_thinking_block else 'token',
