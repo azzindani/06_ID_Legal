@@ -699,6 +699,10 @@ def launch_app(share: bool = False, server_port: int = 7860):
     )
 
 
+# Alias for backward compatibility
+launch_unified_app = launch_app
+
+
 if __name__ == "__main__":
     share = os.environ.get("GRADIO_SHARE", "false").lower() == "true"
     server_port = int(os.environ.get("GRADIO_SERVER_PORT", "7860"))
