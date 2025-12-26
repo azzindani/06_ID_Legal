@@ -667,9 +667,6 @@ def create_gradio_interface():
             fn=dummy_logout,
             outputs=[login_panel, main_app, chatbot]
         )
-        
-        # Initialize API on main app visible
-        main_app.render(initialize_api)
     
     interface.queue()
     return interface
