@@ -21,6 +21,14 @@ from ui.services.api_client import LegalRAGAPIClient
 from utils.text_utils import parse_think_tags
 from utils.research_transparency import format_detailed_research_process
 from utils.formatting import _extract_all_documents_from_metadata
+from utils.search_formatting import (
+    format_score_bar,
+    format_document_card,
+    format_all_documents,
+    get_docs_dataframe_data,
+    format_research_process_summary,
+    format_summary
+)
 from conversation.export import (
     MarkdownExporter, JSONExporter, HTMLExporter,
     parse_gradio_content, history_to_session_data, extract_text_content
@@ -543,85 +551,20 @@ Mohon tunggu sejenak, sistem sedang menganalisis query Anda.
         last_search_result['documents'] = docs
         last_search_result['search_time'] = search_time
         
-        # Format summary (like search_app.py format_summary)
-        summary_lines = [f"## 📋 Ringkasan Hasil Pencarian\n\n"]
-        summary_lines.append(f"**Query:** `{query}`\n")
-        summary_lines.append(f"**Waktu Proses:** {search_time:.3f} detik\n\n")
+        # Add metadata for format_summary compatibility
+        rich_result['metadata']['query'] = query
+        rich_result['metadata']['total_time'] = search_time
         
-        if final_results:
-            summary_lines.append(f"### ⭐ Hasil Relevan ({len(final_results)} dokumen)\n\n")
-            
-            for i, doc in enumerate(final_results, 1):
-                record = doc.get('record', doc)
-                
-                reg_type = record.get('regulation_type', 'N/A')
-                reg_num = record.get('regulation_number', 'N/A')
-                year = record.get('year', 'N/A')
-                about = record.get('about', 'N/A')
-                effective_date = record.get('effective_date', record.get('tanggal_penetapan', ''))
-                
-                chapter = record.get('chapter', record.get('bab', ''))
-                article = record.get('article', record.get('pasal', ''))
-                article_num = record.get('article_number', '')
-                location_parts = []
-                if chapter: location_parts.append(chapter)
-                if article: location_parts.append(article)
-                elif article_num: location_parts.append(article_num)
-                location = " | ".join(location_parts) if location_parts else "Dokumen Lengkap"
-                
-                summary_lines.append(f"{i}. **{reg_type} No. {reg_num}/{year}**\n")
-                summary_lines.append(f"   - **Lokasi:** {location}\n")
-                if effective_date and effective_date != 'N/A':
-                    summary_lines.append(f"   - **Tgl Penetapan:** {effective_date}\n")
-                summary_lines.append(f"   - **Tentang:** _{about}_\n")
-                
-                content = record.get('content', '')
-                if content:
-                    preview = content[:300].replace('\n', ' ') + "..." if len(content) > 300 else content
-                    summary_lines.append(f"   - **Konten:** {preview}\n")
-                summary_lines.append("\n")
-            
-            if phase_metadata:
-                summary_lines.append(f"Analisis dilakukan melalui **{len(phase_metadata)}** fase penelitian agen.\n\n")
+        # Use shared format functions from utils/search_formatting.py
+        summary = format_summary(rich_result)
         
-        summary_lines.append("---\n\n")
-        summary_lines.append("### 📊 Statistik Sistem\n\n")
-        all_docs_list = _extract_all_documents_from_metadata(rich_result) if final_results else []
-        summary_lines.append(f"- **Dokumen Dievaluasi:** {len(all_docs_list)}\n")
-        agreement = consensus_data.get('agreement_level', 0) if consensus_data else 0
-        summary_lines.append(f"- **Tingkat Konsensus:** {agreement:.0%}\n")
-        summary_lines.append(f"- **Waktu Proses Total:** {search_time:.2f} detik\n")
+        # Format all documents using shared function
+        all_docs_output = format_all_documents(rich_result) if final_results else "❌ Tidak ada dokumen"
         
-        summary = "".join(summary_lines)
+        # Create DataFrame using shared function
+        table_df = get_docs_dataframe_data(rich_result)
         
-        # Format all documents using API result
-        all_docs_output = format_all_documents_rich(final_results) if final_results else "❌ Tidak ada dokumen"
-        
-        # Create DataFrame for table (like search_app.py get_docs_dataframe_data)
-        table_rows = []
-        for i, doc in enumerate(final_results, 1):
-            record = doc.get('record', doc)
-            scores = doc.get('scores', {})
-            
-            chapter = record.get('chapter', record.get('bab', ''))
-            article = record.get('article', record.get('pasal', '')) or record.get('article_number', '')
-            location = " | ".join(filter(None, [chapter, article])) or "Lengkap"
-            
-            table_rows.append({
-                "No": i,
-                "Jenis": record.get('regulation_type', ''),
-                "Nomor": record.get('regulation_number', ''),
-                "Tahun": record.get('year', ''),
-                "Lokasi": location,
-                "Tgl Penetapan": record.get('effective_date', record.get('tanggal_penetapan', 'N/A')),
-                "Tentang": record.get('about', ''),
-                "Skor Final": f"{scores.get('final', doc.get('final_score', 0)):.4f}",
-                "Bidang": record.get('kg_primary_domain', ''),
-                "Konten": record.get('content', '')[:150] + "..." if record.get('content') else ""
-            })
-        table_df = pd.DataFrame(table_rows)
-        
-        # Research process (use format_detailed_research_process like search_app.py)
+        # Research process using format_detailed_research_process
         checklist = ["### 📋 Proses yang Sudah Dilakukan\n"]
         checklist.append("✅ Analisis Query Berhasil")
         checklist.append("✅ Pemindaian Regulasi Selesai")
@@ -698,7 +641,7 @@ def format_all_documents_rich(final_results: list) -> str:
 
 
 def export_search_results(export_format: str):
-    """Export search results to specified format"""
+    """Export search results to specified format (complete version like search_app.py)"""
     global last_search_result
     
     if last_search_result is None:
@@ -706,27 +649,56 @@ def export_search_results(export_format: str):
     
     try:
         from datetime import datetime
+        import re
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         query = last_search_result.get('query', 'search')
-        docs = last_search_result.get('documents', [])
+        
+        # Get rich data
+        final_results = last_search_result.get('final_results', [])
+        phase_metadata = last_search_result.get('phase_metadata', {})
+        consensus_data = last_search_result.get('consensus_data', {})
+        search_time = last_search_result.get('search_time', 0)
+        
+        # Extract all docs using helper
+        all_docs = _extract_all_documents_from_metadata(last_search_result) if final_results else []
         
         if export_format == "JSON":
             import json
             data = {
                 'query': query,
                 'timestamp': timestamp,
-                'total_documents': len(docs),
+                'search_time': search_time,
+                'total_documents': len(final_results),
+                'consensus_data': {
+                    'agreement_level': consensus_data.get('agreement_level', 0) if consensus_data else 0
+                },
+                'phase_count': len(phase_metadata),
                 'documents': []
             }
-            for d in docs:
+            for i, doc in enumerate(final_results, 1):
+                record = doc.get('record', doc)
+                scores = doc.get('scores', {})
+                
+                chapter = record.get('chapter', record.get('bab', ''))
+                article = record.get('article', record.get('pasal', '')) or record.get('article_number', '')
+                location = " | ".join(filter(None, [chapter, article])) or "Dokumen Lengkap"
+                
                 data['documents'].append({
-                    'regulation_type': getattr(d, 'regulation_type', ''),
-                    'regulation_number': getattr(d, 'regulation_number', ''),
-                    'year': getattr(d, 'year', ''),
-                    'about': getattr(d, 'about', ''),
-                    'location': getattr(d, 'location', ''),
-                    'score': getattr(d, 'score', 0),
-                    'content': getattr(d, 'content', '')[:1000]
+                    'rank': i,
+                    'regulation_type': record.get('regulation_type', ''),
+                    'regulation_number': record.get('regulation_number', ''),
+                    'year': record.get('year', ''),
+                    'about': record.get('about', ''),
+                    'location': location,
+                    'effective_date': record.get('effective_date', record.get('tanggal_penetapan', '')),
+                    'enacting_body': record.get('enacting_body', ''),
+                    'scores': {
+                        'final': scores.get('final', doc.get('final_score', 0)),
+                        'semantic': scores.get('semantic', 0),
+                        'keyword': scores.get('keyword', 0),
+                        'kg': scores.get('kg', 0)
+                    },
+                    'content': record.get('content', '')[:2000]
                 })
             content = json.dumps(data, indent=2, ensure_ascii=False)
             filename = f"search_{timestamp}.json"
@@ -736,36 +708,186 @@ def export_search_results(export_format: str):
             import io
             output = io.StringIO()
             writer = csv.writer(output)
-            writer.writerow(['No', 'Jenis', 'Nomor', 'Tahun', 'Tentang', 'Lokasi', 'Skor', 'Konten'])
-            for i, d in enumerate(docs, 1):
+            writer.writerow(['No', 'Jenis', 'Nomor', 'Tahun', 'Lokasi', 'Tgl Penetapan', 'Tentang', 'Skor Final', 'Skor Semantik', 'Skor Keyword', 'Skor KG', 'Konten'])
+            for i, doc in enumerate(final_results, 1):
+                record = doc.get('record', doc)
+                scores = doc.get('scores', {})
+                chapter = record.get('chapter', record.get('bab', ''))
+                article = record.get('article', record.get('pasal', '')) or record.get('article_number', '')
+                location = " | ".join(filter(None, [chapter, article])) or "Lengkap"
+                
                 writer.writerow([
                     i,
-                    getattr(d, 'regulation_type', ''),
-                    getattr(d, 'regulation_number', ''),
-                    getattr(d, 'year', ''),
-                    getattr(d, 'about', '')[:200],
-                    getattr(d, 'location', ''),
-                    f"{getattr(d, 'score', 0):.4f}",
-                    getattr(d, 'content', '')[:500]
+                    record.get('regulation_type', ''),
+                    record.get('regulation_number', ''),
+                    record.get('year', ''),
+                    location,
+                    record.get('effective_date', record.get('tanggal_penetapan', '')),
+                    record.get('about', ''),
+                    f"{scores.get('final', 0):.4f}",
+                    f"{scores.get('semantic', 0):.4f}",
+                    f"{scores.get('keyword', 0):.4f}",
+                    f"{scores.get('kg', 0):.4f}",
+                    record.get('content', '')[:1000]
                 ])
             content = output.getvalue()
             filename = f"search_{timestamp}.csv"
+        
+        elif export_format == "HTML":
+            # Full HTML export like search_app.py
+            html_title = f"Laporan Hasil Pencarian Hukum: {query}"
+            agreement = consensus_data.get('agreement_level', 0) if consensus_data else 0
+            
+            lines = [f"""<!DOCTYPE html>
+<html>
+<head>
+    <title>{html_title}</title>
+    <style>
+        body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; max-width: 1000px; margin: 40px auto; padding: 0 20px; color: #333; }}
+        .header {{ background: #1e3a5f; color: white; padding: 30px; border-radius: 8px; margin-bottom: 30px; }}
+        h1 {{ margin: 0; font-size: 24px; }}
+        .summary-section {{ background: #f0f4f8; border-radius: 8px; padding: 25px; margin-bottom: 30px; border-left: 5px solid #2c5282; }}
+        h2 {{ color: #1e3a5f; border-bottom: 2px solid #e0e0e0; padding-bottom: 10px; margin-top: 0; }}
+        h3 {{ color: #2c5282; margin-top: 25px; }}
+        .meta-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-top: 15px; }}
+        .meta-item {{ font-size: 0.9em; }}
+        .meta-label {{ font-weight: bold; color: #555; }}
+        .doc-list {{ margin-top: 30px; }}
+        .doc {{ background: #fff; border: 1px solid #e0e0e0; border-left: 5px solid #1e3a5f; padding: 20px; border-radius: 5px; margin-bottom: 20px; }}
+        .doc:hover {{ transform: translateX(5px); border-color: #2c5282; }}
+        .doc-header {{ display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }}
+        .doc-title {{ font-weight: bold; font-size: 1.2em; color: #1e3a5f; flex-grow: 1; }}
+        .doc-score {{ background: #e6fffa; color: #234e52; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 0.85em; }}
+        .doc-meta {{ display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.9em; color: #666; margin-bottom: 15px; background: #fafafa; padding: 10px; border-radius: 4px; }}
+        .doc-content {{ background: #fdfdfd; padding: 12px; border: 1px dashed #ddd; font-style: italic; font-size: 0.95em; color: #444; }}
+        .footer {{ text-align: center; margin-top: 50px; padding: 20px; border-top: 1px solid #eee; font-size: 0.8em; color: #999; }}
+        .top-tag {{ background: #1e3a5f; color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.7em; margin-right: 8px; }}
+        .score-table {{ width: 100%; border-collapse: collapse; margin: 10px 0; }}
+        .score-table th, .score-table td {{ padding: 8px; text-align: left; border-bottom: 1px solid #ddd; }}
+        .score-table th {{ background: #f0f4f8; }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📚 {html_title}</h1>
+    </div>
+
+    <div class="summary-section">
+        <h2>📋 Ringkasan Hasil</h2>
+        <div class="meta-grid">
+            <div class="meta-item"><span class="meta-label">Total Dokumen:</span> {len(final_results)}</div>
+            <div class="meta-item"><span class="meta-label">Tingkat Konsensus:</span> {agreement:.0%}</div>
+            <div class="meta-item"><span class="meta-label">Waktu Proses:</span> {search_time:.2f}s</div>
+            <div class="meta-item"><span class="meta-label">Fase Penelitian:</span> {len(phase_metadata)}</div>
+        </div>
+    </div>
+
+    <div class="doc-list">
+        <h2>📚 Daftar Dokumen Lengkap</h2>
+"""]
+            
+            for i, doc in enumerate(final_results, 1):
+                record = doc.get('record', doc)
+                scores = doc.get('scores', {})
+                score = scores.get('final', doc.get('final_score', 0))
+                
+                chapter = record.get('chapter', record.get('bab', ''))
+                article = record.get('article', record.get('pasal', '')) or record.get('article_number', '')
+                location = " | ".join(filter(None, [chapter, article])) or "Dokumen Lengkap"
+                eff_date = record.get('effective_date', record.get('tanggal_penetapan', 'N/A'))
+                content = record.get('content', '')[:1200]
+                
+                top_tag = '<span class="top-tag">TOP</span>' if i <= 3 else ''
+                
+                lines.append(f"""
+    <div class="doc">
+        <div class="doc-header">
+            <div class="doc-title">{top_tag}{i}. {record.get('regulation_type', 'N/A')} No. {record.get('regulation_number', 'N/A')}/{record.get('year', 'N/A')}</div>
+            <div class="doc-score">Skor: {score:.4f}</div>
+        </div>
+        <div class="doc-meta">
+            <div><span class="meta-label">Tentang:</span> {record.get('about', 'N/A')}</div>
+            <div><span class="meta-label">Lokasi:</span> {location}</div>
+            <div><span class="meta-label">Tgl Penetapan:</span> {eff_date}</div>
+            <div><span class="meta-label">Lembaga:</span> {record.get('enacting_body', 'N/A')}</div>
+        </div>
+        <table class="score-table">
+            <tr><th>Komponen Skor</th><th>Nilai</th></tr>
+            <tr><td>Final Score</td><td><strong>{score:.4f}</strong></td></tr>
+            <tr><td>Semantic</td><td>{scores.get('semantic', 0):.4f}</td></tr>
+            <tr><td>Keyword</td><td>{scores.get('keyword', 0):.4f}</td></tr>
+            <tr><td>Knowledge Graph</td><td>{scores.get('kg', 0):.4f}</td></tr>
+        </table>
+        <div class="doc-content">
+            <div style='margin-bottom: 5px; font-weight: bold;'>Konten:</div>
+            {content}...
+        </div>
+    </div>
+""")
+            
+            # Add research process
+            research_detail = format_detailed_research_process(last_search_result, top_n_per_researcher=10, show_content=True)
+            research_html = research_detail.replace('\n', '<br>')
+            research_html = re.sub(r'### (.*?)<br>', r'<h3>\1</h3>', research_html)
+            research_html = re.sub(r'#### (.*?)<br>', r'<h4>\1</h4>', research_html)
+            research_html = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', research_html)
+            
+            lines.append(f"""
+    <div style="margin-top: 50px; background: #fafafa; padding: 30px; border-radius: 8px; border: 1px solid #e0e0e0;">
+        <h2>🔬 Proses Penelitian</h2>
+        {research_html}
+    </div>
+
+    <div class="footer">
+        &copy; {datetime.now().year} Indonesian Legal RAG System - AI Research Powered<br>
+        Generated: {timestamp}
+    </div>
+</body>
+</html>
+""")
+            content = "".join(lines)
+            filename = f"search_{timestamp}.html"
             
         else:  # Markdown
             lines = [f"# Hasil Pencarian Dokumen Hukum\n\n"]
             lines.append(f"**Query:** `{query}`\n")
             lines.append(f"**Timestamp:** {timestamp}\n")
-            lines.append(f"**Total Dokumen:** {len(docs)}\n\n---\n\n")
+            lines.append(f"**Total Dokumen:** {len(final_results)}\n")
+            agreement = consensus_data.get('agreement_level', 0) if consensus_data else 0
+            lines.append(f"**Tingkat Konsensus:** {agreement:.0%}\n")
+            lines.append(f"**Waktu Proses:** {search_time:.2f}s\n\n---\n\n")
             
-            for i, d in enumerate(docs, 1):
-                lines.append(f"## {i}. {getattr(d, 'regulation_type', '')} No. {getattr(d, 'regulation_number', '')}/{getattr(d, 'year', '')}\n\n")
-                lines.append(f"- **Tentang:** {getattr(d, 'about', '')}\n")
-                lines.append(f"- **Lokasi:** {getattr(d, 'location', '')}\n")
-                lines.append(f"- **Skor:** {getattr(d, 'score', 0):.4f}\n\n")
-                content_text = getattr(d, 'content', '')
+            # Documents with full details
+            lines.append("## 📚 Dokumen Ditemukan\n\n")
+            for i, doc in enumerate(final_results, 1):
+                record = doc.get('record', doc)
+                scores = doc.get('scores', {})
+                
+                chapter = record.get('chapter', record.get('bab', ''))
+                article = record.get('article', record.get('pasal', '')) or record.get('article_number', '')
+                location = " | ".join(filter(None, [chapter, article])) or "Dokumen Lengkap"
+                eff_date = record.get('effective_date', record.get('tanggal_penetapan', 'N/A'))
+                
+                lines.append(f"### {i}. {record.get('regulation_type', '')} No. {record.get('regulation_number', '')}/{record.get('year', '')}\n\n")
+                lines.append(f"- **Lokasi:** {location}\n")
+                lines.append(f"- **Tgl Penetapan:** {eff_date}\n")
+                lines.append(f"- **Tentang:** {record.get('about', '')}\n\n")
+                
+                lines.append("**Skor:**\n")
+                lines.append(f"- Final: {scores.get('final', 0):.4f}\n")
+                lines.append(f"- Semantic: {scores.get('semantic', 0):.4f}\n")
+                lines.append(f"- Keyword: {scores.get('keyword', 0):.4f}\n")
+                lines.append(f"- KG: {scores.get('kg', 0):.4f}\n\n")
+                
+                content_text = record.get('content', '')
                 if content_text:
-                    lines.append(f"**Konten:**\n{content_text[:800]}\n\n")
+                    lines.append(f"**Konten:**\n{content_text[:1000]}...\n\n")
                 lines.append("---\n\n")
+            
+            # Add research process
+            lines.append("## 🔬 Proses Penelitian\n\n")
+            research_detail = format_detailed_research_process(last_search_result, top_n_per_researcher=10, show_content=True)
+            lines.append(research_detail)
             
             content = "".join(lines)
             filename = f"search_{timestamp}.md"
@@ -777,7 +899,7 @@ def export_search_results(export_format: str):
             f.write(content)
             temp_path = f.name
         
-        return content[:3000] + "\n\n... (truncated for preview)", temp_path
+        return content[:5000] + "\n\n... (truncated for preview)", temp_path
         
     except Exception as e:
         import traceback
@@ -1131,7 +1253,7 @@ def create_gradio_interface():
                     gr.Markdown("### 📥 Export Hasil Pencarian")
                     with gr.Row():
                         search_export_format = gr.Radio(
-                            choices=["Markdown", "JSON", "CSV"],
+                            choices=["Markdown", "HTML", "JSON", "CSV"],
                             value="Markdown",
                             label="Format Export"
                         )
