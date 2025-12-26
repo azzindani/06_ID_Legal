@@ -68,7 +68,7 @@ class LegalRAGAPIClient:
         self, 
         base_url: str = "http://127.0.0.1:8000/api/v1",
         api_key: Optional[str] = None,
-        timeout: int = 300
+        timeout: int = 600
     ):
         """
         Initialize API client

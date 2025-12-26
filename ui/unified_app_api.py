@@ -309,7 +309,7 @@ def search_documents(query: str, num_results: int = 5) -> Tuple[str, str]:
 def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_sources=True, show_metadata=True):
     """
     Main chat function - uses API for processing
-    Formatting matches gradio_app.py exactly
+    Formatting matches gradio_app.py exactly with proper <think> tag parsing
     """
     if not message.strip():
         return history, ""
@@ -329,7 +329,7 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
         return
     
     try:
-        # Track progress (same as gradio_app.py)
+        # Track state (same as gradio_app.py)
         current_progress = []
         accumulated_text = ""
         thinking_content = []
@@ -340,23 +340,16 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
         thinking_header_shown = False
         result_data = None
         
-        def add_progress(msg):
-            """Helper to add progress updates"""
-            current_progress.append(msg)
-            progress_display = "\n".join([f"🔄 {m}" for m in current_progress])
-            return history + [
-                {"role": "user", "content": message},
-                {"role": "assistant", "content": f"**Mencari dan menganalisis...**\n\n{progress_display}"}
-            ]
-        
         # Get thinking mode from config
         thinking_mode = config_dict.get('thinking_mode', 'low')
         if isinstance(thinking_mode, str):
             thinking_mode = thinking_mode.lower()
         
-        yield add_progress("Menghubungkan ke server..."), ""
-        yield add_progress("Menganalisis query..."), ""
-        yield add_progress("Melakukan penelitian..."), ""
+        # Show initial progress
+        yield history + [
+            {"role": "user", "content": message},
+            {"role": "assistant", "content": "🔄 **Memproses permintaan...**"}
+        ], ""
         
         # Stream response from API
         for chunk in api_client.chat_stream(
@@ -368,32 +361,17 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
             content = chunk.get('content', chunk.get('message', ''))
             
             if chunk_type == 'progress':
-                yield add_progress(content), ""
-            
-            elif chunk_type == 'thinking':
-                # Thinking chunk
-                thinking_content.append(content)
-                if show_thinking:
-                    # Build progress header
-                    progress_header = '<details open><summary>📋 <b>Proses Penelitian</b></summary>\n\n'
-                    progress_header += "\n".join([f"🔄 {m}" for m in current_progress])
-                    progress_header += '\n</details>\n\n---\n\n'
-                    
-                    if not thinking_header_shown:
-                        live_output = [progress_header, '🧠 **Sedang berfikir...**\n\n']
-                        thinking_header_shown = True
-                    
-                    live_output.append(content)
-                    
-                    display_text = ''.join(live_output)
-                    yield history + [
-                        {"role": "user", "content": message},
-                        {"role": "assistant", "content": display_text}
-                    ], ""
+                # Progress update from API
+                current_progress.append(content)
+                progress_display = "\n".join([f"🔄 {m}" for m in current_progress])
+                yield history + [
+                    {"role": "user", "content": message},
+                    {"role": "assistant", "content": f"**Mencari dan menganalisis...**\n\n{progress_display}"}
+                ], ""
             
             elif chunk_type == 'chunk':
-                # Answer chunk
-                final_answer.append(content)
+                # Content chunk - parse <think> tags like gradio_app.py
+                new_text = content
                 accumulated_text += content
                 
                 # Build progress header
@@ -401,18 +379,67 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                 progress_header += "\n".join([f"🔄 {m}" for m in current_progress])
                 progress_header += '\n</details>\n\n---\n\n'
                 
-                if not thinking_header_shown:
-                    live_output = [progress_header]
-                    if thinking_content:
-                        live_output.append('🧠 **Sedang berfikir...**\n\n')
-                        live_output.extend(thinking_content)
+                # Process <think> tags in new text (like gradio_app.py)
+                if '<think>' in new_text:
+                    in_thinking_block = True
+                    saw_think_tag = True
+                    new_text = new_text.replace('<think>', '')
+                    if not thinking_header_shown and show_thinking:
+                        live_output = [progress_header, '🧠 **Sedang berfikir...**\n\n']
+                        thinking_header_shown = True
+                
+                if '</think>' in new_text:
+                    in_thinking_block = False
+                    new_text = new_text.replace('</think>', '')
+                    if show_thinking:
                         live_output.append('\n\n---\n\n✅ **Sedang menjawab...**\n\n')
+                
+                # Accumulate content based on current state
+                if saw_think_tag:
+                    if in_thinking_block:
+                        thinking_content.append(new_text)
+                        if show_thinking:
+                            live_output.append(new_text)
                     else:
-                        live_output.append('✅ **Sedang menjawab...**\n\n')
-                    thinking_header_shown = True
+                        final_answer.append(new_text)
+                        live_output.append(new_text)
+                else:
+                    # Check if <think> appeared anywhere in accumulated text
+                    if '<think>' in accumulated_text:
+                        saw_think_tag = True
+                        in_thinking_block = '</think>' not in accumulated_text
+                        if not thinking_header_shown and show_thinking:
+                            live_output = [progress_header, '🧠 **Sedang berfikir...**\n\n']
+                            thinking_header_shown = True
+                        # Extract thinking content so far
+                        think_start = accumulated_text.find('<think>') + 7
+                        if '</think>' in accumulated_text:
+                            think_end = accumulated_text.find('</think>')
+                            thinking_content = [accumulated_text[think_start:think_end]]
+                            final_answer.append(accumulated_text[think_end + 8:])
+                            if show_thinking:
+                                live_output.append(accumulated_text[think_start:think_end])
+                                live_output.append('\n\n---\n\n✅ **Sedang menjawab...**\n\n')
+                                live_output.append(accumulated_text[think_end + 8:])
+                        else:
+                            thinking_content = [accumulated_text[think_start:]]
+                            if show_thinking:
+                                live_output.append(accumulated_text[think_start:])
+                    elif len(accumulated_text) > 100 and not saw_think_tag:
+                        # After 100 chars with no think tag, assume direct answer
+                        if not thinking_header_shown:
+                            live_output = [progress_header, '⭐ **Jawaban langsung:**\n\n']
+                            thinking_header_shown = True
+                        final_answer.append(new_text)
+                        live_output.append(new_text)
+                    else:
+                        # Still waiting to see if think tag appears
+                        if not thinking_header_shown:
+                            live_output = [progress_header, f"🤖 Generating response...\n\n{accumulated_text}"]
+                        else:
+                            live_output.append(new_text)
                 
-                live_output.append(content)
-                
+                # Yield current state
                 display_text = ''.join(live_output)
                 yield history + [
                     {"role": "user", "content": message},
@@ -422,27 +449,32 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
             elif chunk_type == 'done':
                 # Final result
                 result_data = chunk
+                # Update session for context memory
+                if result_data.get('session_id'):
+                    current_session = result_data.get('session_id')
         
         # Format final output (same format as gradio_app.py)
         final_output = ""
         
-        # Get answer text
+        # Get answer text - parse think tags if not done during streaming
         if final_answer:
             response_text = ''.join(final_answer).strip()
         else:
             response_text = result_data.get('answer', accumulated_text) if result_data else accumulated_text
+            # If no streaming occurred, parse think tags from answer
+            if not thinking_content and response_text:
+                parsed_thinking, response_text = parse_think_tags(response_text)
+                if parsed_thinking:
+                    thinking_content = [parsed_thinking]
+        
+        # Clean any remaining think tags from response
+        response_text = response_text.replace('<think>', '').replace('</think>', '').strip()
         
         # Get thinking text
         thinking_text = ''.join(thinking_content).strip() if thinking_content else ""
+        thinking_text = thinking_text.replace('<think>', '').replace('</think>', '').strip()
         
-        # Add research process summary (what was done)
-        if current_progress:
-            final_output += '<details><summary>📋 <strong>Proses yang Sudah Dilakukan</strong></summary>\n\n'
-            for msg in current_progress:
-                final_output += f"✅ {msg}\n"
-            final_output += '\n</details>\n\n---\n\n'
-        
-        # Add thinking section if available
+        # Add thinking section if available (like gradio_app.py)
         if show_thinking and thinking_text:
             final_output += (
                 '<details><summary>🧠 <strong>Proses Berpikir</strong></summary>\n\n'
@@ -454,7 +486,7 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
         else:
             final_output += f"### ✅ Jawaban\n\n{response_text}"
         
-        # Add collapsible sections
+        # Add collapsible sections (like gradio_app.py)
         collapsible_sections = []
         
         # Add sources (legal references)
@@ -469,13 +501,6 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
             research_proc = result_data['research_process']
             collapsible_sections.append(
                 f'<details><summary>🔬 <strong>Detail Proses Penelitian</strong></summary>\n\n{research_proc}\n</details>'
-            )
-        
-        # Add all retrieved documents
-        if show_metadata and result_data and result_data.get('all_retrieved_documents'):
-            all_docs = result_data['all_retrieved_documents']
-            collapsible_sections.append(
-                f'<details><summary>📚 <strong>Semua Dokumen Ditemukan</strong></summary>\n\n{all_docs}\n</details>'
             )
         
         # Combine all sections
@@ -646,16 +671,53 @@ def export_conversation_handler(export_format, history):
             'turns': []
         }
         
-        # Build turns from history
-        for i in range(0, len(history), 2):
-            if i + 1 < len(history):
-                user_msg = history[i]
-                assistant_msg = history[i + 1]
+        # Build turns from history - handle both dict and tuple formats
+        i = 0
+        while i < len(history):
+            item = history[i]
+            
+            # Handle different Gradio history formats
+            if isinstance(item, dict):
+                # Dict format: {"role": "user", "content": "..."}
+                if item.get('role') == 'user' and i + 1 < len(history):
+                    user_content = item.get('content', '')
+                    next_item = history[i + 1]
+                    if isinstance(next_item, dict):
+                        assistant_content = next_item.get('content', '')
+                    else:
+                        assistant_content = str(next_item) if next_item else ''
+                    
+                    # Ensure content is string
+                    if isinstance(user_content, list):
+                        user_content = ' '.join(str(x) for x in user_content)
+                    if isinstance(assistant_content, list):
+                        assistant_content = ' '.join(str(x) for x in assistant_content)
+                    
+                    session_data['turns'].append({
+                        'query': str(user_content),
+                        'answer': str(assistant_content),
+                        'timestamp': datetime.now().isoformat()
+                    })
+                    i += 2
+                    continue
+            elif isinstance(item, (list, tuple)) and len(item) >= 2:
+                # Tuple format: (user_msg, assistant_msg)
+                user_content = item[0] if item[0] else ''
+                assistant_content = item[1] if item[1] else ''
+                
+                # Ensure content is string
+                if isinstance(user_content, list):
+                    user_content = ' '.join(str(x) for x in user_content)
+                if isinstance(assistant_content, list):
+                    assistant_content = ' '.join(str(x) for x in assistant_content)
+                
                 session_data['turns'].append({
-                    'query': user_msg.get('content', ''),
-                    'answer': assistant_msg.get('content', ''),
+                    'query': str(user_content),
+                    'answer': str(assistant_content),
                     'timestamp': datetime.now().isoformat()
                 })
+            
+            i += 1
         
         # Use appropriate exporter (same as gradio_app.py)
         exporters = {
