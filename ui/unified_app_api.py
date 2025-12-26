@@ -251,6 +251,7 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
         thinking_buffer = ""
         answer_buffer = ""
         sources = []
+        legal_refs = ""
         
         yield add_progress("Melakukan penelitian..."), ""
         
@@ -262,10 +263,13 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
             chunk_type = chunk.get('type', '')
             content = chunk.get('content', '')
             
-            if chunk_type == 'session_id':
-                current_session = content
+            if chunk_type == 'progress':
+                # Progress update
+                msg = chunk.get('message', content)
+                yield add_progress(msg), ""
             
             elif chunk_type == 'thinking':
+                # Thinking process
                 thinking_buffer += content
                 if show_thinking:
                     display = f"💭 **Proses Berpikir:**\n\n{thinking_buffer}"
@@ -275,7 +279,8 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                     history_copy.append({"role": "assistant", "content": display})
                     yield history_copy, ""
             
-            elif chunk_type == 'content':
+            elif chunk_type == 'chunk':
+                # Content chunk (API sends 'chunk', not 'content')
                 answer_buffer += content
                 if show_thinking and thinking_buffer:
                     display = f"💭 **Proses Berpikir:**\n\n{thinking_buffer}\n\n---\n\n**Jawaban:**\n\n{answer_buffer}"
@@ -285,8 +290,10 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                 history_copy.append({"role": "assistant", "content": display})
                 yield history_copy, ""
             
-            elif chunk_type == 'complete':
-                sources = chunk.get('sources', [])
+            elif chunk_type == 'done':
+                # Final message (API sends 'done', not 'complete')
+                answer_buffer = chunk.get('answer', answer_buffer)
+                legal_refs = chunk.get('legal_references', '')
         
         # Build final response
         final_content = ""
@@ -296,16 +303,9 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
         
         final_content += f"**Jawaban:**\n\n{answer_buffer}"
         
-        # Add sources if available
-        if show_sources and sources:
-            final_content += "\n\n---\n\n### 📚 Referensi Hukum\n\n"
-            for i, src in enumerate(sources[:5], 1):
-                reg_type = src.get('regulation_type', 'N/A')
-                reg_num = src.get('regulation_number', 'N/A')
-                year = src.get('year', 'N/A')
-                about = src.get('about', '')[:100]
-                final_content += f"{i}. **{reg_type} No. {reg_num}/{year}**\n"
-                final_content += f"   _{about}_\n\n"
+        # Add legal references from API
+        if show_sources and legal_refs:
+            final_content += f"\n\n---\n\n### 📚 Referensi Hukum\n\n{legal_refs}"
         
         history.append({"role": "assistant", "content": final_content})
         yield history, ""

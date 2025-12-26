@@ -1587,6 +1587,7 @@ import os
 
 # Setup paths
 os.environ["PYTHONPATH"] = "/kaggle/working/06_ID_Legal"
+os.environ['LEGAL_API_KEY'] = 'kaggle_demo_key_2024'
 sys.path.insert(0, "/kaggle/working/06_ID_Legal")
 
 print("=" * 60)
