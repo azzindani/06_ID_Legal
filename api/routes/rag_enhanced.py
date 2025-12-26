@@ -68,6 +68,11 @@ class ChatRequest(BaseModel):
     session_id: Optional[str] = Field(None, max_length=100, description="Session ID for context")
     thinking_level: str = Field('low', description="Thinking depth: low, medium, high")
     stream: bool = Field(False, description="Enable streaming response")
+    # Config parameters from UI
+    top_k: int = Field(3, ge=1, le=30, description="Number of documents to retrieve")
+    temperature: float = Field(0.7, ge=0.0, le=2.0, description="LLM temperature")
+    max_tokens: int = Field(2048, ge=256, le=8192, description="Max tokens to generate")
+    team_size: int = Field(3, ge=1, le=5, description="Research team size")
     
     @validator('query')
     def validate_query_field(cls, v):
@@ -378,10 +383,19 @@ async def conversational_rag(req: ChatRequest, request: Request):
                 full_answer = ""
                 final_result = None
                 
+                # Build config dict with ALL parameters from request
+                config_dict = {
+                    'thinking_mode': req.thinking_level,
+                    'final_top_k': req.top_k,
+                    'temperature': req.temperature,
+                    'max_new_tokens': req.max_tokens,
+                    'research_team_size': req.team_size
+                }
+                
                 for event in service.process_query(
                     message=req.query,
                     session_id=req.session_id or 'default',
-                    config_dict={'thinking_mode': req.thinking_level},
+                    config_dict=config_dict,
                     thinking_mode=req.thinking_level
                 ):
                     event_type = event.get('type')
@@ -422,7 +436,14 @@ async def conversational_rag(req: ChatRequest, request: Request):
             return StreamingResponse(generate(), media_type="text/event-stream")
         
         else:
-            # Non-streaming
+            # Non-streaming - update pipeline config first
+            pipeline.update_config(
+                final_top_k=req.top_k,
+                temperature=req.temperature,
+                max_new_tokens=req.max_tokens,
+                research_team_size=req.team_size
+            )
+            
             result = pipeline.query(
                 question=req.query,
                 conversation_history=context,
