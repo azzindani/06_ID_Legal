@@ -88,6 +88,21 @@ TEST_QUESTIONS = [
     "Terakhir, jelaskan secara ringkas PP No. 8 Tahun 2007, termasuk fokus pengaturannya."
 ]
 
+# 8 Search-specific examples (same as search_app.py)
+SEARCH_EXAMPLES = [
+    "Apa saja syarat pendirian PT menurut UU Perseroan Terbatas?",
+    "Bagaimana prosedur pendaftaran merek dagang di Indonesia?",
+    "Apa sanksi pelanggaran UU Perlindungan Data Pribadi?",
+    "Ketentuan cuti karyawan menurut UU Ketenagakerjaan",
+    "Syarat dan prosedur perceraian menurut hukum Indonesia",
+    "Regulasi tentang investasi asing di Indonesia",
+    "Ketentuan pajak penghasilan untuk UMKM",
+    "Prosedur penyelesaian sengketa konsumen",
+]
+
+# Global for last search result (for export)
+last_search_result = None
+
 # =============================================================================
 # CORE FUNCTIONS
 # =============================================================================
@@ -347,60 +362,69 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
 
 
 # =============================================================================
-# SEARCH FUNCTION - Matching search_app.py style
+# SEARCH FUNCTION - Matching search_app.py style with detailed outputs
 # =============================================================================
 
-def search_documents(query: str, num_results: int = 5):
-    """Search documents without LLM generation - detailed output like search_app.py"""
-    global api_client
-    if not query.strip():
-        return "⚠️ Masukkan query pencarian", ""
-    if api_client is None:
-        initialize_api()
-    if api_client is None:
-        return "❌ API tidak terhubung", ""
-    
-    try:
-        result = api_client.retrieve(query=query, top_k=int(num_results))
-        if not result or not result.get('documents'):
-            return "📭 Tidak ada dokumen ditemukan", ""
-        
-        docs = result['documents']
-        search_time = result.get('search_time', 0)
-        
-        # Format header
-        output = f"""## � Hasil Pencarian Dokumen
+def format_search_summary(query: str, docs: list, search_time: float) -> str:
+    """Format search summary like search_app.py"""
+    output = [f"""## 📋 Ringkasan Hasil Pencarian
 
-**Query:** {query}
-**Total Dokumen:** {len(docs)}
+**Query:** `{query}`
+**Dokumen Ditemukan:** {len(docs)}
 **Waktu Pencarian:** {search_time:.3f} detik
 
 ---
 
-"""
+### ⭐ Hasil Relevan ({len(docs)} dokumen)
+
+"""]
+    
+    for i, d in enumerate(docs, 1):
+        reg_type = getattr(d, 'regulation_type', 'N/A')
+        reg_num = getattr(d, 'regulation_number', '?')
+        year = getattr(d, 'year', '?')
+        about = getattr(d, 'about', 'N/A')
+        location = getattr(d, 'location', 'Dokumen Lengkap')
+        effective_date = getattr(d, 'effective_date', 'N/A')
+        content = getattr(d, 'content', '')
+        preview = content[:300].replace('\n', ' ') + '...' if len(content) > 300 else content
         
-        # Format each document with detailed info (like search_app.py)
-        for i, d in enumerate(docs, 1):
-            # Basic info
-            reg_type = getattr(d, 'regulation_type', 'Unknown')
-            reg_num = getattr(d, 'regulation_number', '?')
-            year = getattr(d, 'year', '?')
-            about = getattr(d, 'about', 'N/A')
-            location = getattr(d, 'location', 'N/A')
-            score = getattr(d, 'score', 0)
-            global_id = getattr(d, 'global_id', 'N/A')
-            effective_date = getattr(d, 'effective_date', 'N/A')
-            content = getattr(d, 'content', '')
-            
-            # Truncate about and content for display
-            about_display = about[:200] + '...' if len(about) > 200 else about
-            content_preview = content[:300] + '...' if len(content) > 300 else content
-            
-            output += f"""### 📄 {i}. {reg_type} No. {reg_num} Tahun {year}
+        output.append(f"""{i}. **{reg_type} No. {reg_num}/{year}**
+   - **Lokasi:** {location}
+   - **Tgl Penetapan:** {effective_date}
+   - **Tentang:** _{about}_
+   - **Konten:** {preview}
+
+""")
+    
+    return "".join(output)
+
+
+def format_all_documents(docs: list) -> str:
+    """Format all documents as detailed cards like search_app.py"""
+    if not docs:
+        return "❌ Tidak ada dokumen yang ditemukan."
+    
+    output = [f"## 📚 Semua Dokumen Ditemukan ({len(docs)} dokumen)\n\n"]
+    
+    for i, d in enumerate(docs, 1):
+        reg_type = getattr(d, 'regulation_type', 'N/A')
+        reg_num = getattr(d, 'regulation_number', '?')
+        year = getattr(d, 'year', '?')
+        about = getattr(d, 'about', 'N/A')
+        location = getattr(d, 'location', 'N/A')
+        score = getattr(d, 'score', 0)
+        global_id = getattr(d, 'global_id', 'N/A')
+        effective_date = getattr(d, 'effective_date', 'N/A')
+        content = getattr(d, 'content', '')
+        
+        content_preview = content[:500] + '...' if len(content) > 500 else content
+        
+        output.append(f"""### 📄 {i}. {reg_type} No. {reg_num} Tahun {year}
 
 **Global ID:** `{global_id}`
 
-**Tentang:** {about_display}
+**Tentang:** {about}
 
 **Tanggal Penetapan:** {effective_date}
 
@@ -417,13 +441,151 @@ def search_documents(query: str, num_results: int = 5):
 
 ---
 
+""")
+    
+    return "".join(output)
+
+
+def search_documents(query: str, num_results: int = 10):
+    """Search documents - returns 3 outputs matching search_app.py style"""
+    global api_client, last_search_result
+    
+    if not query.strip():
+        return "⚠️ Masukkan query pencarian", "", ""
+    
+    if api_client is None:
+        initialize_api()
+    if api_client is None:
+        return "❌ API tidak terhubung", "", ""
+    
+    try:
+        result = api_client.retrieve(query=query, top_k=int(num_results))
+        if not result or not result.get('documents'):
+            return "📭 Tidak ada dokumen ditemukan", "", ""
+        
+        docs = result['documents']
+        search_time = result.get('search_time', 0)
+        
+        # Store for export
+        last_search_result = {
+            'query': query,
+            'documents': docs,
+            'search_time': search_time,
+            'metadata': result.get('metadata', {})
+        }
+        
+        # Format outputs
+        summary = format_search_summary(query, docs, search_time)
+        all_docs = format_all_documents(docs)
+        
+        # Research process (simplified since we use API)
+        research = f"""### 📋 Proses yang Sudah Dilakukan
+
+✅ Query terkirim ke API
+✅ Pencarian dokumen selesai
+✅ {len(docs)} dokumen ditemukan
+✅ Hasil diurutkan berdasarkan relevansi
+
+---
+
+**Waktu Proses:** {search_time:.3f} detik
+**Top-K:** {num_results}
 """
         
-        return output, ""
+        return summary, all_docs, research
+        
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return f"❌ Error: {e}", ""
+        return f"❌ Error: {e}", "", ""
+
+
+def export_search_results(export_format: str):
+    """Export search results to specified format"""
+    global last_search_result
+    
+    if last_search_result is None:
+        return "⚠️ Tidak ada hasil pencarian untuk di-export.", None
+    
+    try:
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        query = last_search_result.get('query', 'search')
+        docs = last_search_result.get('documents', [])
+        
+        if export_format == "JSON":
+            import json
+            data = {
+                'query': query,
+                'timestamp': timestamp,
+                'total_documents': len(docs),
+                'documents': []
+            }
+            for d in docs:
+                data['documents'].append({
+                    'regulation_type': getattr(d, 'regulation_type', ''),
+                    'regulation_number': getattr(d, 'regulation_number', ''),
+                    'year': getattr(d, 'year', ''),
+                    'about': getattr(d, 'about', ''),
+                    'location': getattr(d, 'location', ''),
+                    'score': getattr(d, 'score', 0),
+                    'content': getattr(d, 'content', '')[:1000]
+                })
+            content = json.dumps(data, indent=2, ensure_ascii=False)
+            filename = f"search_{timestamp}.json"
+            
+        elif export_format == "CSV":
+            import csv
+            import io
+            output = io.StringIO()
+            writer = csv.writer(output)
+            writer.writerow(['No', 'Jenis', 'Nomor', 'Tahun', 'Tentang', 'Lokasi', 'Skor', 'Konten'])
+            for i, d in enumerate(docs, 1):
+                writer.writerow([
+                    i,
+                    getattr(d, 'regulation_type', ''),
+                    getattr(d, 'regulation_number', ''),
+                    getattr(d, 'year', ''),
+                    getattr(d, 'about', '')[:200],
+                    getattr(d, 'location', ''),
+                    f"{getattr(d, 'score', 0):.4f}",
+                    getattr(d, 'content', '')[:500]
+                ])
+            content = output.getvalue()
+            filename = f"search_{timestamp}.csv"
+            
+        else:  # Markdown
+            lines = [f"# Hasil Pencarian Dokumen Hukum\n\n"]
+            lines.append(f"**Query:** `{query}`\n")
+            lines.append(f"**Timestamp:** {timestamp}\n")
+            lines.append(f"**Total Dokumen:** {len(docs)}\n\n---\n\n")
+            
+            for i, d in enumerate(docs, 1):
+                lines.append(f"## {i}. {getattr(d, 'regulation_type', '')} No. {getattr(d, 'regulation_number', '')}/{getattr(d, 'year', '')}\n\n")
+                lines.append(f"- **Tentang:** {getattr(d, 'about', '')}\n")
+                lines.append(f"- **Lokasi:** {getattr(d, 'location', '')}\n")
+                lines.append(f"- **Skor:** {getattr(d, 'score', 0):.4f}\n\n")
+                content_text = getattr(d, 'content', '')
+                if content_text:
+                    lines.append(f"**Konten:**\n{content_text[:800]}\n\n")
+                lines.append("---\n\n")
+            
+            content = "".join(lines)
+            filename = f"search_{timestamp}.md"
+        
+        # Save to temp file
+        import tempfile
+        ext = filename.split('.')[-1]
+        with tempfile.NamedTemporaryFile(mode='w', suffix=f'.{ext}', delete=False, encoding='utf-8') as f:
+            f.write(content)
+            temp_path = f.name
+        
+        return content[:3000] + "\n\n... (truncated for preview)", temp_path
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return f"❌ Export error: {e}", None
 
 
 # =============================================================================
@@ -431,10 +593,14 @@ def search_documents(query: str, num_results: int = 5):
 # =============================================================================
 
 def run_conversational_test(history, config_dict, show_thinking, show_sources, show_metadata):
-    """Run full conversational test with 8 questions - with error handling"""
+    """Run full conversational test with 8 questions - with error handling and debug logging"""
     total_questions = len(TEST_QUESTIONS)
     completed = 0
     errors = []
+    
+    print(f"\n{'='*60}")
+    print(f"🧪 CONVERSATIONAL TEST STARTING - {total_questions} Questions")
+    print(f"{'='*60}\n")
     
     # Initial message
     history = history + [{
@@ -446,6 +612,8 @@ def run_conversational_test(history, config_dict, show_thinking, show_sources, s
     
     # Process each question with error handling
     for i, question in enumerate(TEST_QUESTIONS, 1):
+        print(f"\n[TEST Q{i}/{total_questions}] Starting: {question[:60]}...")
+        
         try:
             # Add progress indicator
             history = history + [{
@@ -458,17 +626,24 @@ def run_conversational_test(history, config_dict, show_thinking, show_sources, s
             history = history[:-1]
             
             # Process question - consume generator fully
+            print(f"[TEST Q{i}] Calling chat_with_legal_rag...")
             updated_history = history
+            chunk_count = 0
             for updated_history, cleared_input in chat_with_legal_rag(
                 question, history, config_dict, show_thinking, show_sources, show_metadata
             ):
+                chunk_count += 1
+                if chunk_count % 10 == 0:
+                    print(f"[TEST Q{i}] Received {chunk_count} chunks...")
                 yield updated_history, cleared_input
             
+            print(f"[TEST Q{i}] ✅ Completed with {chunk_count} total chunks")
             history = updated_history
             completed += 1
             
         except Exception as e:
             import traceback
+            print(f"[TEST Q{i}] ❌ ERROR: {e}")
             traceback.print_exc()
             errors.append(f"Q{i}: {str(e)[:50]}")
             history = history + [{
@@ -476,6 +651,10 @@ def run_conversational_test(history, config_dict, show_thinking, show_sources, s
                 "content": f"⚠️ **Question {i} Error:** {e}\n\nContinuing to next question..."
             }]
             yield history, ""
+    
+    print(f"\n{'='*60}")
+    print(f"🏁 TEST COMPLETE: {completed}/{total_questions} successful, {len(errors)} errors")
+    print(f"{'='*60}\n")
     
     # Completion message
     status = "✅ Complete" if len(errors) == 0 else f"⚠️ Completed with {len(errors)} errors"
@@ -708,21 +887,53 @@ def create_gradio_interface():
                             )
                 
                 # =====================================================================
-                # SEARCH TAB
+                # SEARCH TAB - Matching search_app.py
                 # =====================================================================
                 with gr.TabItem("🔍 Pencarian Dokumen"):
+                    # Search input section
                     with gr.Row():
-                        with gr.Column(scale=3):
-                            search_query = gr.Textbox(
-                                label="Query Pencarian",
-                                placeholder="Cari dokumen hukum...",
-                                lines=2
-                            )
-                            search_num = gr.Slider(1, 20, value=5, step=1, label="Jumlah Hasil")
-                            search_btn = gr.Button("🔍 Cari Dokumen", variant="primary")
+                        search_query = gr.Textbox(
+                            label="Query Pencarian",
+                            placeholder="Masukkan query pencarian hukum dalam Bahasa Indonesia...",
+                            lines=3
+                        )
+                    
+                    with gr.Row():
+                        search_num = gr.Slider(5, 50, value=10, step=5, label="Jumlah Hasil Maksimum")
+                        search_btn = gr.Button("🔍 Cari", variant="primary")
+                    
+                    # Results in tabs (like search_app.py)
+                    with gr.Tabs():
+                        with gr.TabItem("📋 Ringkasan"):
+                            search_summary = gr.Markdown(label="Ringkasan Hasil")
                         
-                        with gr.Column(scale=7):
-                            search_result = gr.Markdown(label="Hasil Pencarian")
+                        with gr.TabItem("📚 Semua Dokumen"):
+                            search_all_docs = gr.Markdown(label="Detail Dokumen")
+                        
+                        with gr.TabItem("🔬 Proses Penelitian"):
+                            search_research = gr.Markdown(label="Proses Penelitian")
+                    
+                    # Examples (8 queries like search_app.py)
+                    gr.Examples(
+                        examples=SEARCH_EXAMPLES,
+                        inputs=search_query,
+                        label="Contoh Query"
+                    )
+                    
+                    # Export section
+                    gr.Markdown("---")
+                    gr.Markdown("### 📥 Export Hasil Pencarian")
+                    with gr.Row():
+                        search_export_format = gr.Radio(
+                            choices=["Markdown", "JSON", "CSV"],
+                            value="Markdown",
+                            label="Format Export"
+                        )
+                        search_export_btn = gr.Button("📥 Export Hasil", variant="secondary")
+                    
+                    with gr.Row():
+                        search_export_preview = gr.Textbox(label="Preview Export", lines=10, max_lines=15)
+                        search_export_file = gr.File(label="Download File")
                 
                 # =====================================================================
                 # SETTINGS TAB - Full settings matching gradio_app.py
@@ -829,9 +1040,24 @@ def create_gradio_interface():
                 [chatbot, msg_input]
             )
             
-            # Search handlers
-            search_btn.click(search_documents, [search_query, search_num], [search_result])
-            search_query.submit(search_documents, [search_query, search_num], [search_result])
+            # Search handlers (outputs to 3 tabs)
+            search_btn.click(
+                search_documents, 
+                [search_query, search_num], 
+                [search_summary, search_all_docs, search_research]
+            )
+            search_query.submit(
+                search_documents, 
+                [search_query, search_num], 
+                [search_summary, search_all_docs, search_research]
+            )
+            
+            # Search export handler
+            search_export_btn.click(
+                export_search_results,
+                [search_export_format],
+                [search_export_preview, search_export_file]
+            )
             
             # Test runners
             test_btn.click(
