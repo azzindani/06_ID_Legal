@@ -1568,3 +1568,92 @@ chmod +x quick_validation.sh
 ```
 
 This comprehensive testing approach will verify that all 7 critical bugs have been fixed correctly!
+
+---
+
+## ☁️ Running on Kaggle
+
+### Unified Kaggle Launcher Cell
+
+Copy this single cell to run the full system on Kaggle with a public share link:
+
+```python
+# Unified Kaggle Launcher - Run this single cell
+import subprocess
+import time
+import requests
+import sys
+import os
+
+# Setup paths
+os.environ["PYTHONPATH"] = "/kaggle/working/06_ID_Legal"
+sys.path.insert(0, "/kaggle/working/06_ID_Legal")
+
+print("=" * 60)
+print("🏛️ LEGAL RAG INDONESIA - KAGGLE LAUNCHER")
+print("=" * 60)
+
+# Step 1: Start API in background
+print("\n🚀 Starting API server...")
+api_proc = subprocess.Popen(
+    [sys.executable, "-m", "uvicorn", "api.server:app", "--host", "127.0.0.1", "--port", "8000"],
+    cwd="/kaggle/working/06_ID_Legal",
+    stdout=subprocess.PIPE,
+    stderr=subprocess.STDOUT
+)
+
+# Step 2: Wait for API to be ready (up to 10 minutes)
+print("⏳ Waiting for models to load (this takes ~5-8 minutes)...")
+max_wait = 600  # 10 minutes
+start_time = time.time()
+
+while time.time() - start_time < max_wait:
+    try:
+        r = requests.get("http://127.0.0.1:8000/api/v1/ready", timeout=5)
+        data = r.json()
+        if data.get("ready"):
+            print(f"\n✅ API is ready! (took {int(time.time() - start_time)}s)")
+            break
+        else:
+            elapsed = int(time.time() - start_time)
+            print(f"   [{elapsed}s] Loading: {data.get('message', '...')}")
+    except requests.exceptions.ConnectionError:
+        elapsed = int(time.time() - start_time)
+        print(f"   [{elapsed}s] API starting...")
+    except Exception as e:
+        pass
+    time.sleep(30)  # Check every 30 seconds
+else:
+    print("❌ API failed to start within 10 minutes")
+    api_proc.terminate()
+    raise Exception("API startup timeout")
+
+# Step 3: Launch UI with share link
+print("\n🎨 Launching Unified UI with public share link...")
+print("=" * 60)
+
+from ui.unified_app_api import launch_unified_app
+launch_unified_app(share=True, server_name="0.0.0.0")
+```
+
+### What to Expect
+
+1. **Model Loading (~5-8 minutes)**
+   - Embedding model: Qwen3-Embedding-0.6B
+   - Reranker model: Qwen3-Reranker-0.6B
+   - LLM model: Deepseek_ID_Legal_Preview
+   - Dataset: 200K legal documents
+
+2. **Share Link**
+   - After loading, a public URL like `https://xxxxx.gradio.live` will appear
+   - Share this link with anyone to access your UI
+
+3. **Demo Login**
+   - Username: `demo` / Password: `demo123`
+   - Username: `admin` / Password: `admin123`
+
+### Requirements
+- Kaggle notebook with **GPU enabled** (T4 x2 or P100)
+- At least 16GB RAM
+- Internet access (for model downloads)
+
