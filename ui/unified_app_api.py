@@ -679,7 +679,7 @@ def create_gradio_interface():
 # LAUNCHER
 # =============================================================================
 
-def launch_app(share: bool = False, server_port: int = 7860):
+def launch_app(share: bool = False, server_port: int = 7860, server_name: str = "0.0.0.0"):
     """Launch Gradio app"""
     print("\n" + "=" * 60)
     print("🏛️ LEGAL RAG INDONESIA - UNIFIED API UI")
