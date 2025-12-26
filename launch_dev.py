@@ -7,7 +7,8 @@ Includes auto-reload and debug logging.
 File: launch_dev.py
 
 Usage:
-    python launch_dev.py
+    python launch_dev.py           # Local only
+    python launch_dev.py --share   # With public share link
 """
 
 import os
@@ -16,6 +17,7 @@ import time
 import signal
 import subprocess
 import threading
+import argparse
 from pathlib import Path
 
 # Ensure project root is in path
@@ -49,14 +51,16 @@ def run_api_server(host: str = "127.0.0.1", port: int = 8000):
     )
 
 
-def run_gradio_ui(host: str = "127.0.0.1", port: int = 7860):
+def run_gradio_ui(host: str = "127.0.0.1", port: int = 7860, share: bool = False):
     """Start Gradio UI"""
-    print(f"🎨 Starting Unified UI on {host}:{port}...")
+    mode = "with PUBLIC SHARE LINK" if share else f"on {host}:{port}"
+    print(f"🎨 Starting Unified UI {mode}...")
     
     env = os.environ.copy()
     env["PYTHONPATH"] = str(PROJECT_ROOT)
     env["GRADIO_SERVER_NAME"] = host
     env["GRADIO_SERVER_PORT"] = str(port)
+    env["GRADIO_SHARE"] = "true" if share else "false"
     
     cmd = [
         sys.executable, "-m", "ui.unified_app_api"
@@ -104,10 +108,12 @@ def wait_for_api_ready(url: str = "http://127.0.0.1:8000/api/v1/ready", timeout:
     return False
 
 
-def main():
+def main(share: bool = False):
     """Main entry point"""
     print("\n" + "=" * 60)
     print("🔧 LEGAL RAG - DEVELOPMENT MODE")
+    if share:
+        print("📡 SHARE MODE ENABLED - Will generate public link")
     print("=" * 60)
     print("Starting services...")
     print("=" * 60 + "\n")
@@ -130,8 +136,8 @@ def main():
         # Wait for API to load (model loading takes time)
         time.sleep(10)
         
-        # Start UI
-        ui_process = run_gradio_ui()
+        # Start UI with share option
+        ui_process = run_gradio_ui(share=share)
         processes.append(ui_process)
         
         # Stream UI output in background
@@ -146,6 +152,8 @@ def main():
         print("✅ Services started!")
         print("   API:  http://127.0.0.1:8000")
         print("   UI:   http://127.0.0.1:7860")
+        if share:
+            print("   📡 Share link will appear in [UI] output above")
         print("   Docs: http://127.0.0.1:8000/docs")
         print("=" * 60)
         print("Press Ctrl+C to stop...\n")
@@ -170,4 +178,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Legal RAG Development Launcher")
+    parser.add_argument("--share", action="store_true", help="Generate public share link")
+    args = parser.parse_args()
+    
+    main(share=args.share)
