@@ -241,6 +241,11 @@ class StressTester:
                     print(token, end='', flush=True)
                     full_answer += token
                     chunk_count += 1
+                elif chunk.get('type') == 'thinking':
+                    # Thinking chunk - print CoT content
+                    token = chunk.get('token', '')
+                    print(token, end='', flush=True)
+                    chunk_count += 1
                 elif chunk.get('type') == 'complete':
                     result = chunk
                     break

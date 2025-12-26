@@ -396,6 +396,12 @@ class CompleteOutputTester:
                     full_answer += token
                     chunk_count += 1
 
+                elif chunk_type == 'thinking':
+                    # Thinking chunk - print CoT content
+                    token = chunk.get('token', '')
+                    print(token, end='', flush=True)
+                    chunk_count += 1
+
                 elif chunk_type == 'complete':
                     full_answer = chunk.get('answer', full_answer)
                     final_metadata = chunk.get('metadata', {})
