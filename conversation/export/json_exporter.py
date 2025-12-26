@@ -69,17 +69,28 @@ class JSONExporter(BaseExporter):
                 'turn_number': turn.get('turn_number'),
                 'timestamp': turn.get('timestamp'),
                 'query': turn.get('query'),
-                'thinking': turn.get('thinking', ''),  # Include thinking process
+                'thinking': turn.get('thinking', ''),
                 'answer': turn.get('answer'),
+                'sources': turn.get('sources_text', ''),  # Full formatted sources text
+                'research_process': turn.get('research_text', ''),  # Full formatted research text
             }
 
-            # Include metadata if enabled
+            # Include additional metadata if enabled
             if self.include_metadata:
-                turn_data['metadata'] = self._prepare_turn_metadata(turn.get('metadata', {}))
-                # Also include research_log at top level for convenience
-                research_log = turn.get('metadata', {}).get('research_log', {})
-                if research_log:
-                    turn_data['research_process'] = research_log.get('details', '')
+                meta = turn.get('metadata', {})
+                turn_data['metadata'] = {
+                    'timing': {},
+                    'stats': {}
+                }
+                # Timing info
+                if self.include_timing:
+                    for key in ['total_time', 'retrieval_time', 'generation_time']:
+                        if key in meta:
+                            turn_data['metadata']['timing'][key] = meta[key]
+                # Stats
+                for key in ['tokens_generated', 'query_type', 'results_count']:
+                    if key in meta:
+                        turn_data['metadata']['stats'][key] = meta[key]
 
             prepared['turns'].append(turn_data)
 

@@ -106,29 +106,27 @@ class MarkdownExporter(BaseExporter):
         lines.append(turn.get('answer', ''))
         lines.append("")
 
-        # Sources/Citations
-        meta = turn.get('metadata', {})
-        if self.include_sources and meta.get('citations'):
-            lines.append("### 📖 Sumber Hukum")
+        # Sources - use full formatted sources_text
+        sources_text = turn.get('sources_text', '') or turn.get('metadata', {}).get('sources_text', '')
+        if self.include_sources and sources_text:
+            lines.append("<details>")
+            lines.append("<summary>📖 Sumber Hukum</summary>")
             lines.append("")
-            for i, citation in enumerate(meta['citations'], 1):
-                cite_text = citation.get('citation_text', '')
-                if not cite_text:
-                    cite_text = f"{citation.get('regulation_type', '')} No. {citation.get('regulation_number', '')}/{citation.get('year', '')}"
-                lines.append(f"{i}. {cite_text}")
+            lines.append(sources_text)
+            lines.append("")
+            lines.append("</details>")
             lines.append("")
 
-        # Research Process Details
-        if self.include_metadata and meta.get('research_log'):
-            research_details = meta['research_log'].get('details', '')
-            if research_details:
-                lines.append("<details>")
-                lines.append("<summary>🔬 Detail Proses Penelitian</summary>")
-                lines.append("")
-                lines.append(research_details)
-                lines.append("")
-                lines.append("</details>")
-                lines.append("")
+        # Research Process Details - use full formatted research_text
+        research_text = turn.get('research_text', '') or turn.get('metadata', {}).get('research_log', {}).get('details', '')
+        if self.include_metadata and research_text:
+            lines.append("<details>")
+            lines.append("<summary>🔬 Detail Proses Penelitian</summary>")
+            lines.append("")
+            lines.append(research_text)
+            lines.append("")
+            lines.append("</details>")
+            lines.append("")
 
         # Other Metadata (collapsible)
         if self.include_metadata and meta:

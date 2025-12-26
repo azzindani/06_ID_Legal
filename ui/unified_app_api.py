@@ -562,7 +562,7 @@ def create_gradio_interface():
     with gr.Blocks(title="Indonesian Legal Assistant") as interface:
         
         # =====================================================================
-        # LOGIN PANEL - Centered with CSS flexbox
+        # LOGIN PANEL - Centered with CSS flexbox, no top banner
         # =====================================================================
         with gr.Column(visible=True, elem_id="login-panel") as login_panel:
             gr.HTML("""
@@ -574,40 +574,23 @@ def create_gradio_interface():
                     align-items: center !important;
                     min-height: 80vh !important;
                 }
-                .login-box {
-                    max-width: 400px;
-                    width: 100%;
-                    padding: 40px;
-                    text-align: center;
-                    background: white;
-                    border-radius: 12px;
-                    box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-                }
-                .login-box h1 {
-                    color: #1e3a5f;
-                    margin-bottom: 10px;
-                }
-                .login-box p {
-                    color: #666;
-                    margin-bottom: 20px;
-                }
-                .login-box code {
-                    background: #f0f0f0;
-                    padding: 2px 6px;
-                    border-radius: 4px;
+                #login-panel > div {
+                    max-width: 350px !important;
+                    width: 100% !important;
                 }
             </style>
-            <div class="login-box">
-                <h1>🏛️ Indonesian Legal Assistant</h1>
-                <p>Production API-Based UI</p>
-                <p style="font-size: 14px; color: #888;">Demo: <code>demo</code>/<code>demo123</code> or <code>admin</code>/<code>admin123</code></p>
+            """)
+            gr.Markdown("""
+            <div style="text-align: center; margin-bottom: 20px;">
+                <span style="font-size: 2em;">🏛️</span><br>
+                <strong style="color: #1e3a5f;">Indonesian Legal Assistant</strong>
             </div>
             """)
-            with gr.Column(scale=1):
-                username_input = gr.Textbox(label="Username", placeholder="Enter username")
-                password_input = gr.Textbox(label="Password", type="password", placeholder="Enter password")
-                login_btn = gr.Button("🔓 Login", variant="primary", size="lg")
-                login_error = gr.Markdown("")
+            username_input = gr.Textbox(label="Username", placeholder="demo")
+            password_input = gr.Textbox(label="Password", type="password", placeholder="demo123")
+            login_btn = gr.Button("🔓 Login", variant="primary", size="lg")
+            login_error = gr.Markdown("")
+            gr.Markdown("<p style='text-align: center; color: #888; font-size: 12px; margin-top: 10px;'>Demo: demo/demo123 or admin/admin123</p>")
         
         # =====================================================================
         # MAIN APP

@@ -163,30 +163,17 @@ def history_to_session_data(
             # Parse the assistant content for structured data
             parsed = parse_gradio_content(assistant_content)
             
-            # Build citations from sources if available
-            citations = []
-            if parsed['sources']:
-                # Extract regulation references from sources text
-                reg_matches = re.findall(
-                    r'(\w+(?:\s+\w+)*)\s+No\.?\s*(\d+)\s*/?\s*(?:Tahun\s+)?(\d{4})',
-                    parsed['sources']
-                )
-                for reg_type, reg_num, year in reg_matches:
-                    citations.append({
-                        'regulation_type': reg_type,
-                        'regulation_number': reg_num,
-                        'year': year,
-                        'about': ''
-                    })
-            
+            # Store turn data with FULL formatted text for sources and research
             session_data['turns'].append({
                 'turn_number': turn_num,
                 'query': user_content,
                 'answer': parsed['answer'] or assistant_content,
                 'thinking': parsed['thinking'],
+                'sources_text': parsed['sources'],  # Full formatted sources text
+                'research_text': parsed['research_process'],  # Full formatted research text
                 'timestamp': datetime.now().isoformat(),
                 'metadata': {
-                    'citations': citations,
+                    'sources_text': parsed['sources'],  # Also in metadata for compatibility
                     'research_log': {'details': parsed['research_process']} if parsed['research_process'] else {}
                 }
             })
@@ -199,3 +186,4 @@ def history_to_session_data(
     session_data['metadata']['total_queries'] = len(session_data['turns'])
     
     return session_data
+
