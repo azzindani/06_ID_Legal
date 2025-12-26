@@ -565,32 +565,35 @@ def create_gradio_interface():
         # LOGIN PANEL - Properly centered
         # =====================================================================
         with gr.Column(visible=True) as login_panel:
-            gr.HTML("""
-            <div style="display: flex; justify-content: center; align-items: center; min-height: 70vh;">
-                <div style="max-width: 400px; width: 100%; padding: 40px; text-align: center;">
-                    <h1 style="color: #1e3a5f; margin-bottom: 10px;">🏛️ Indonesian Legal Assistant</h1>
-                    <p style="color: #666; margin-bottom: 30px;">Production API-Based UI</p>
-                    <p style="color: #888; font-size: 14px;">Demo: <code>demo</code>/<code>demo123</code> or <code>admin</code>/<code>admin123</code></p>
-                </div>
-            </div>
-            """)
+            # Centered login using Gradio layout
+            gr.Markdown("")
+            gr.Markdown("")
+            gr.Markdown("")
             with gr.Row():
                 gr.Column(scale=1)
-                with gr.Column(scale=2):
+                with gr.Column(scale=1):
+                    gr.Markdown("""
+                    <div style="text-align: center; padding: 20px;">
+                        <h1 style="color: #1e3a5f;">🏛️ Indonesian Legal Assistant</h1>
+                        <p style="color: #666;">Production API-Based UI</p>
+                        <p style="color: #888; font-size: 14px;">Demo: <code>demo</code>/<code>demo123</code> or <code>admin</code>/<code>admin123</code></p>
+                    </div>
+                    """)
                     username_input = gr.Textbox(label="Username", placeholder="Enter username")
                     password_input = gr.Textbox(label="Password", type="password", placeholder="Enter password")
                     login_btn = gr.Button("🔓 Login", variant="primary", size="lg")
                     login_error = gr.Markdown("")
                 gr.Column(scale=1)
+            gr.Markdown("")
+            gr.Markdown("")
         
         # =====================================================================
         # MAIN APP
         # =====================================================================
         with gr.Column(visible=False) as main_app:
-            # Header with logout
+            # Logout button only (no header)
             with gr.Row():
-                gr.Markdown("## 🏛️ Indonesian Legal Assistant")
-                gr.Column(scale=8)
+                gr.Column(scale=9)
                 logout_btn = gr.Button("🚪 Logout", size="sm")
             
             with gr.Tabs():
@@ -599,31 +602,33 @@ def create_gradio_interface():
                 # =====================================================================
                 with gr.TabItem("💬 Konsultasi Hukum"):
                     chatbot = gr.Chatbot(
-                        height="70vh",
+                        height="75vh",
                         show_label=False,
                         autoscroll=True
                     )
                     
+                    # Input row (same style as gradio_app.py)
                     with gr.Row():
                         msg_input = gr.Textbox(
                             placeholder="Tanyakan tentang hukum Indonesia...",
                             show_label=False,
+                            container=False,
                             scale=10,
+                            submit_btn=True,
                             lines=1,
-                            max_lines=3
+                            max_lines=3,
+                            interactive=True
                         )
-                        send_btn = gr.Button("📤 Kirim", variant="primary", scale=1)
-                    
-                    with gr.Row():
-                        clear_btn = gr.Button("🗑️ Hapus Chat")
                     
                     # 8 Examples with 2 per page
-                    gr.Examples(
-                        examples=EXAMPLE_QUERIES,
-                        inputs=msg_input,
-                        examples_per_page=2,
-                        label=""
-                    )
+                    with gr.Row():
+                        with gr.Column():
+                            gr.Examples(
+                                examples=EXAMPLE_QUERIES,
+                                inputs=msg_input,
+                                examples_per_page=2,
+                                label=""
+                            )
                 
                 # =====================================================================
                 # SEARCH TAB
@@ -740,18 +745,12 @@ def create_gradio_interface():
             info_btn.click(get_system_info, outputs=system_output)
             health_btn.click(format_health_report, outputs=system_output)
             
-            # Chat handlers
+            # Chat handlers (submit_btn is built into Textbox)
             msg_input.submit(
                 chat_with_legal_rag,
                 [msg_input, chatbot, config_state, show_thinking, show_sources, show_metadata],
                 [chatbot, msg_input]
             )
-            send_btn.click(
-                chat_with_legal_rag,
-                [msg_input, chatbot, config_state, show_thinking, show_sources, show_metadata],
-                [chatbot, msg_input]
-            )
-            clear_btn.click(clear_conversation, outputs=[chatbot, msg_input])
             
             # Search handlers
             search_btn.click(search_documents, [search_query, search_num], [search_result])

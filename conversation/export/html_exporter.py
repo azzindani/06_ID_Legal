@@ -363,17 +363,53 @@ class HTMLExporter(BaseExporter):
 
         html = f'''<div class="turn">
     <div class="question">
-        <div class="question-label">Pertanyaan {turn_num}</div>
+        <div class="question-label">❓ Pertanyaan {turn_num}</div>
         <div>{turn.get('query', '')}</div>
-    </div>
+    </div>'''
+
+        # Thinking process (if available and include_thinking is True)
+        thinking = turn.get('thinking', '')
+        if self.include_thinking and thinking:
+            html += f'''
+    <div style="background: #fff3e0; padding: 15px; border-radius: 8px; border-left: 4px solid #f57c00; margin: 15px 0;">
+        <div style="font-weight: bold; color: #f57c00; margin-bottom: 8px;">🧠 Proses Berpikir</div>
+        <div style="white-space: pre-wrap;">{thinking}</div>
+    </div>'''
+
+        # Answer section
+        html += f'''
     <div class="answer">
-        <div class="answer-label">Jawaban {turn_num}</div>
+        <div class="answer-label">✅ Jawaban {turn_num}</div>
         <div>{self._format_answer_text(turn.get('answer', ''))}</div>
     </div>'''
 
-        # Add metadata details
-        if self.include_metadata and turn.get('metadata'):
-            html += self._format_turn_details(turn['metadata'], timestamp)
+        # Sources/Citations
+        meta = turn.get('metadata', {})
+        if self.include_sources and meta.get('citations'):
+            html += '''
+    <div style="background: #f3e5f5; padding: 15px; border-radius: 8px; border-left: 4px solid #7b1fa2; margin: 15px 0;">
+        <div style="font-weight: bold; color: #7b1fa2; margin-bottom: 8px;">📖 Sumber Hukum</div>
+        <ul>'''
+            for i, citation in enumerate(meta['citations'], 1):
+                cite_text = citation.get('citation_text', '')
+                if not cite_text:
+                    cite_text = f"{citation.get('regulation_type', '')} No. {citation.get('regulation_number', '')}/{citation.get('year', '')}"
+                html += f'<li>{cite_text}</li>'
+            html += '</ul></div>'
+
+        # Research Process Details
+        if self.include_metadata and meta.get('research_log'):
+            research_details = meta['research_log'].get('details', '')
+            if research_details:
+                html += f'''
+    <details style="background: #e0f7fa; padding: 15px; border-radius: 8px; border-left: 4px solid #0097a7; margin: 15px 0;">
+        <summary style="font-weight: bold; color: #0097a7; cursor: pointer;">🔬 Detail Proses Penelitian</summary>
+        <div style="white-space: pre-wrap; margin-top: 10px;">{research_details}</div>
+    </details>'''
+
+        # Additional metadata details
+        if self.include_metadata and meta:
+            html += self._format_turn_details(meta, timestamp)
 
         html += '</div>'
         return html
