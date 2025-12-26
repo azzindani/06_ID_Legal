@@ -35,7 +35,7 @@ router = APIRouter()
 class RetrievalRequest(BaseModel):
     """Request for pure retrieval (no LLM generation)"""
     query: str = Field(..., min_length=1, max_length=2000, description="Search query")
-    top_k: int = Field(3, ge=1, le=10, description="Number of results to return")
+    top_k: int = Field(10, ge=1, le=50, description="Number of results to return")
     min_score: float = Field(0.0, ge=0.0, le=1.0, description="Minimum relevance score")
     
     @validator('query')

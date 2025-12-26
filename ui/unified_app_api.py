@@ -200,13 +200,20 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
     Main chat function with streaming and think tag parsing.
     Matches gradio_app.py behavior exactly.
     """
+    print(f"\n[CHAT] === New chat request: {message[:50]}... ===")
+    
     if not message.strip():
+        print("[CHAT] Empty message, returning")
         return history, ""
     
     global api_client, current_session
+    print(f"[CHAT] api_client is {'set' if api_client else 'None'}, current_session={current_session}")
+    
     if api_client is None:
+        print("[CHAT] Initializing API...")
         initialize_api()
     if api_client is None:
+        print("[CHAT] API still None after init, returning error")
         history.append({"role": "user", "content": message})
         history.append({"role": "assistant", "content": "❌ API not connected. Please refresh and try again."})
         yield history, ""
@@ -230,13 +237,18 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
         max_tokens = int(config_dict.get('max_new_tokens', 2048))
         team_size = int(config_dict.get('research_team_size', 3))
         
+        print(f"[CHAT] Config: top_k={top_k}, temp={temperature}, tokens={max_tokens}, team={team_size}, think={thinking_mode}")
+        
         # Initial processing message
         yield history + [
             {"role": "user", "content": message},
             {"role": "assistant", "content": f"🔄 **Memproses permintaan...**\n_Settings: Top-K={top_k}, Temp={temperature}, Tokens={max_tokens}, Team={team_size}, Thinking={thinking_mode}_"}
         ], ""
         
+        print("[CHAT] Calling api_client.chat_stream()...")
+        
         # Stream response from API with ALL settings
+        chunk_count = 0
         for chunk in api_client.chat_stream(
             query=message,
             session_id=current_session,
@@ -246,6 +258,10 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
             max_tokens=max_tokens,
             team_size=team_size
         ):
+            chunk_count += 1
+            if chunk_count == 1:
+                print(f"[CHAT] First chunk received: {chunk.get('type', 'unknown')}")
+            
             chunk_type = chunk.get('type', '')
             content = chunk.get('content', chunk.get('message', ''))
             
@@ -447,21 +463,55 @@ def format_all_documents(docs: list) -> str:
 
 
 def search_documents(query: str, num_results: int = 10):
-    """Search documents - returns 3 outputs matching search_app.py style"""
+    """Search documents - generator with loading process, returns 4 outputs like search_app.py"""
     global api_client, last_search_result
+    import pandas as pd
+    
+    empty_df = pd.DataFrame()
     
     if not query.strip():
-        return "⚠️ Masukkan query pencarian", "", ""
+        yield "⚠️ Masukkan query pencarian", empty_df, "", ""
+        return
+    
+    # Show initial loading state
+    loading_md = """### 🔄 Sedang mencari...
+
+Mohon tunggu sejenak, sistem sedang menganalisis query Anda.
+
+**Langkah-langkah:**
+- 🔍 Mengirim query ke API...
+- ⏳ Mencari dokumen relevan...
+"""
+    loading_df = pd.DataFrame([{"Status": "Mencari dokumen..."}])
+    yield loading_md, loading_df, loading_md, loading_md
     
     if api_client is None:
         initialize_api()
     if api_client is None:
-        return "❌ API tidak terhubung", "", ""
+        yield "❌ API tidak terhubung", empty_df, "", ""
+        return
     
     try:
+        # Progress: Connecting to API
+        yield """### 🔄 Sedang mencari...
+
+✅ Koneksi API berhasil
+🔍 Mencari dokumen relevan...
+""", loading_df, "", ""
+        
         result = api_client.retrieve(query=query, top_k=int(num_results))
+        
         if not result or not result.get('documents'):
-            return "📭 Tidak ada dokumen ditemukan", "", ""
+            yield "📭 Tidak ada dokumen ditemukan", empty_df, "", ""
+            return
+        
+        # Progress: Formatting results
+        yield """### 🔄 Sedang mencari...
+
+✅ Koneksi API berhasil
+✅ Dokumen ditemukan
+✨ Memformat hasil...
+""", loading_df, "", ""
         
         docs = result['documents']
         search_time = result.get('search_time', 0)
@@ -478,26 +528,43 @@ def search_documents(query: str, num_results: int = 10):
         summary = format_search_summary(query, docs, search_time)
         all_docs = format_all_documents(docs)
         
-        # Research process (simplified since we use API)
+        # Create DataFrame for table (like search_app.py)
+        table_rows = []
+        for i, d in enumerate(docs, 1):
+            table_rows.append({
+                "No": i,
+                "Jenis": getattr(d, 'regulation_type', ''),
+                "Nomor": getattr(d, 'regulation_number', ''),
+                "Tahun": getattr(d, 'year', ''),
+                "Tentang": getattr(d, 'about', '')[:100] + '...' if len(getattr(d, 'about', '')) > 100 else getattr(d, 'about', ''),
+                "Lokasi": getattr(d, 'location', 'N/A'),
+                "Skor": f"{getattr(d, 'score', 0):.4f}"
+            })
+        table_df = pd.DataFrame(table_rows)
+        
+        # Research process (with checklist like search_app.py)
         research = f"""### 📋 Proses yang Sudah Dilakukan
 
 ✅ Query terkirim ke API
 ✅ Pencarian dokumen selesai
 ✅ {len(docs)} dokumen ditemukan
 ✅ Hasil diurutkan berdasarkan relevansi
+✅ Format hasil selesai
 
 ---
 
-**Waktu Proses:** {search_time:.3f} detik
-**Top-K:** {num_results}
+**Statistik:**
+- **Waktu Proses:** {search_time:.3f} detik
+- **Top-K:** {num_results}
+- **Dokumen Ditemukan:** {len(docs)}
 """
         
-        return summary, all_docs, research
+        yield summary, table_df, all_docs, research
         
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return f"❌ Error: {e}", "", ""
+        yield f"❌ Error: {e}", empty_df, "", ""
 
 
 def export_search_results(export_format: str):
@@ -908,7 +975,16 @@ def create_gradio_interface():
                             search_summary = gr.Markdown(label="Ringkasan Hasil")
                         
                         with gr.TabItem("📚 Semua Dokumen"):
-                            search_all_docs = gr.Markdown(label="Detail Dokumen")
+                            with gr.Tabs():
+                                with gr.TabItem("📊 Tabel Ikhtisar"):
+                                    search_table = gr.Dataframe(
+                                        headers=["No", "Jenis", "Nomor", "Tahun", "Tentang", "Lokasi", "Skor"],
+                                        datatype=["number", "str", "str", "str", "str", "str", "str"],
+                                        interactive=False,
+                                        wrap=True
+                                    )
+                                with gr.TabItem("📄 Kartu Detail"):
+                                    search_all_docs = gr.Markdown(label="Detail Dokumen")
                         
                         with gr.TabItem("🔬 Proses Penelitian"):
                             search_research = gr.Markdown(label="Proses Penelitian")
@@ -1040,16 +1116,16 @@ def create_gradio_interface():
                 [chatbot, msg_input]
             )
             
-            # Search handlers (outputs to 3 tabs)
+            # Search handlers (outputs to 4 tabs: summary, table, all_docs, research)
             search_btn.click(
                 search_documents, 
                 [search_query, search_num], 
-                [search_summary, search_all_docs, search_research]
+                [search_summary, search_table, search_all_docs, search_research]
             )
             search_query.submit(
                 search_documents, 
                 [search_query, search_num], 
-                [search_summary, search_all_docs, search_research]
+                [search_summary, search_table, search_all_docs, search_research]
             )
             
             # Search export handler
