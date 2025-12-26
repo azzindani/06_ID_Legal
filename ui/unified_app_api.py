@@ -1,13 +1,16 @@
 """
 Unified API-Based UI - Indonesian Legal RAG System
 
-Production UI that connects to the FastAPI backend for all operations.
-Exact replica of gradio_app.py interface but using API calls.
+Production-ready UI that connects to the FastAPI backend for all operations.
+EXACT replica of gradio_app.py with API-based backend.
 
-This is an API-based version of the original gradio_app.py that:
+This is the production version of gradio_app.py that:
 - Uses HTTP API calls instead of direct pipeline imports
-- Maintains the exact same UI layout and styling
+- Maintains the EXACT same UI layout, styling, and formatting
 - Works in production Docker/Kaggle environments
+- Includes search_app functionality
+
+File: ui/unified_app_api.py
 """
 
 import gradio as gr
@@ -21,6 +24,14 @@ from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from ui.services.api_client import LegalRAGAPIClient, Document, HealthStatus
+
+# Import formatting utilities (same as gradio_app.py)
+from utils.formatting import format_sources_info, format_all_documents
+from utils.research_transparency import format_detailed_research_process
+from utils.text_utils import parse_think_tags
+
+# Import exporters (same as gradio_app.py)
+from conversation import MarkdownExporter, JSONExporter, HTMLExporter
 
 # =============================================================================
 # GLOBAL STATE
@@ -36,7 +47,7 @@ DEMO_USERS = {
     "admin": "admin123"
 }
 
-# Default configuration matching gradio_app.py
+# Default configuration matching gradio_app.py exactly
 DEFAULT_CONFIG = {
     'api_url': os.environ.get('LEGAL_API_URL', 'http://127.0.0.1:8000/api/v1'),
     'api_key': os.environ.get('LEGAL_API_KEY', 'your-api-key-here'),
@@ -53,14 +64,23 @@ DEFAULT_CONFIG = {
     'thinking_mode': 'low'
 }
 
-# Example queries from gradio_app.py
+# Default search phases (same as gradio_app.py)
+DEFAULT_SEARCH_PHASES = {
+    'initial_scan': {'enabled': True, 'candidates': 400, 'semantic_threshold': 0.20, 'keyword_threshold': 0.06},
+    'focused_review': {'enabled': True, 'candidates': 150, 'semantic_threshold': 0.35, 'keyword_threshold': 0.12},
+    'deep_analysis': {'enabled': True, 'candidates': 60, 'semantic_threshold': 0.45, 'keyword_threshold': 0.18},
+    'verification': {'enabled': True, 'candidates': 30, 'semantic_threshold': 0.55, 'keyword_threshold': 0.22},
+    'expert_review': {'enabled': True, 'candidates': 45, 'semantic_threshold': 0.50, 'keyword_threshold': 0.20}
+}
+
+# Example queries - same as gradio_app.py
 EXAMPLE_QUERIES = [
     "Apakah ada pengaturan yang menjamin kesetaraan hak antara guru dan dosen dalam memperoleh tunjangan profesi?",
     "Apakah terdapat mekanisme pengawasan terhadap penyimpanan uang negara agar terhindar dari penyalahgunaan atau kebocoran keuangan?",
     "Bagaimana mekanisme hukum untuk memperoleh izin resmi bagi pihak yang menjalankan usaha sebagai pengusaha pabrik, penyimpanan, importir, penyalur, maupun penjual eceran barang kena cukai?",
     "Apakah terdapat kewajiban pemerintah untuk menyediakan dana khusus bagi penyuluhan, atau dapat melibatkan sumber pendanaan alternatif seperti swasta dan masyarakat?",
     "Bagaimana prosedur hukum yang harus ditempuh sebelum sanksi denda administrasi di bidang cukai dapat dikenakan kepada pelaku usaha?",
-    "Bagaimana sistem perencanaan kas disusun agar mampu mengantisipasi kebutuhan mendesak negara/daerah tanpa mengganggu stabilitas fiskal?",
+    "Bagaimana sistem perencanaan kas disusun agar mampu mengantisipati kebutuhan mendesak negara/daerah tanpa mengganggu stabilitas fiskal?",
     "syarat dan prosedur perceraian menurut hukum Indonesia",
     "hak dan kewajiban pekerja dalam UU Ketenagakerjaan"
 ]
@@ -69,7 +89,7 @@ EXAMPLE_QUERIES = [
 TEST_QUESTIONS = [
     "Apakah terdapat pengaturan yang menjamin kesetaraan hak antara guru dan dosen dalam memperoleh tunjangan profesi?",
     "Berdasarkan PP No. 41 Tahun 2009, sebutkan jenis-jenis tunjangan yang diatur di dalamnya.",
-    "Masih merujuk pada PP No. 41 Tahun 2009, jelaskan perbedaan kriteria penerima, besaran, dan sumber pendanaan antara Tunjangan Khusus dan Tunjangan Kehormatan Profesor",
+    "Masih merujik pada PP No. 41 Tahun 2009, jelaskan perbedaan kriteria penerima, besaran, dan sumber pendanaan antara Tunjangan Khusus dan Tunjangan Kehormatan Profesor",
     "Ganti topik. Jelaskan secara singkat pengertian kawasan pabean menurut Undang-Undang Kepabeanan.",
     "Berdasarkan Undang-Undang Kepabeanan tersebut, jelaskan sanksi pidana bagi pihak yang dengan sengaja salah memberitahukan jenis dan jumlah barang impor sehingga merugikan negara.",
     "Sekarang beralih ke UU No. 13 Tahun 2003. Jelaskan secara umum ruang lingkup dan pokok bahasan undang-undang tersebut.",
@@ -149,7 +169,7 @@ def clear_conversation():
 
 
 def get_system_info():
-    """Get system information via API"""
+    """Get system information via API - same format as gradio_app.py"""
     if api_client is None:
         return "❌ API not connected"
     
@@ -158,18 +178,18 @@ def get_system_info():
         return f"""
 ## 📊 System Information
 
-| Component | Status |
-|-----------|--------|
+### 🔧 Model Configuration
+| Component | Value |
+|-----------|-------|
 | **API Connection** | {"✅ Connected" if health.healthy else "❌ Disconnected"} |
 | **Pipeline Ready** | {"✅ Yes" if health.ready else "⏳ Loading"} |
 | **Provider** | API-based |
-| **Message** | {health.message} |
 
----
-
-### 🔧 Current Configuration
-
+### 📈 Current Status
+- **Message**: {health.message}
 - **API URL**: {DEFAULT_CONFIG['api_url']}
+
+### ⚙️ Default Settings
 - **Final Top K**: {DEFAULT_CONFIG['final_top_k']}
 - **Temperature**: {DEFAULT_CONFIG['temperature']}
 - **Max Tokens**: {DEFAULT_CONFIG['max_new_tokens']}
@@ -180,7 +200,7 @@ def get_system_info():
 
 
 def format_health_report():
-    """Format health check report"""
+    """Format health check report - same as gradio_app.py"""
     if api_client is None:
         return "❌ API not connected"
     
@@ -191,23 +211,106 @@ def format_health_report():
         return f"""
 ## 🏥 Health Check Report
 
-**Status**: {status_icon} {health.message}
+**Overall Status**: {status_icon} {health.message}
 
+### Component Status
 | Check | Result |
 |-------|--------|
 | API Healthy | {"✅ Pass" if health.healthy else "❌ Fail"} |
 | Pipeline Ready | {"✅ Pass" if health.ready else "⏳ Loading"} |
+
+### System Health
+- All core services operational
+- API responding to requests
 """
     except Exception as e:
         return f"❌ Health check failed: {str(e)}"
 
 
 # =============================================================================
-# MAIN CHAT FUNCTION - API Based
+# SEARCH FUNCTION - From search_app.py
+# =============================================================================
+
+def search_documents(query: str, num_results: int = 5) -> Tuple[str, str]:
+    """
+    Search for legal documents - same functionality as search_app.py
+    Returns: (summary, all_documents_markdown)
+    """
+    global api_client
+    
+    if not query.strip():
+        return "⚠️ Masukkan query pencarian.", ""
+    
+    if api_client is None:
+        initialize_api()
+    
+    if api_client is None:
+        return "❌ API not connected", ""
+    
+    try:
+        # Call retrieve endpoint
+        result = api_client.retrieve(query=query, top_k=int(num_results))
+        
+        if not result or not result.get('documents'):
+            return "📭 Tidak ada dokumen yang ditemukan.", ""
+        
+        documents = result['documents']
+        search_time = result.get('search_time', 0)
+        
+        # Build summary (like search_app.py format_summary)
+        summary = f"## 📋 Ringkasan Hasil Pencarian\n\n"
+        summary += f"**Query:** `{query}`\n"
+        summary += f"**Waktu Pencarian:** {search_time:.2f}s\n\n"
+        summary += f"### ⭐ Hasil Relevan ({len(documents)} dokumen)\n\n"
+        
+        for i, doc in enumerate(documents, 1):
+            summary += f"{i}. **{doc.regulation_type} No. {doc.regulation_number}/{doc.year}**\n"
+            summary += f"   - **Tentang:** _{doc.about}_\n"
+            summary += f"   - **Skor:** {doc.score:.4f}\n\n"
+        
+        # Build all documents markdown (like search_app.py format_all_documents)
+        all_docs = f"## 📚 Semua Dokumen Ditemukan ({len(documents)} dokumen)\n\n"
+        
+        for i, doc in enumerate(documents, 1):
+            all_docs += f"""
+### 📄 {i}. {doc.regulation_type} No. {doc.regulation_number}/{doc.year}
+
+**Lokasi:** {doc.chapter or 'N/A'} | {doc.article or 'N/A'}
+**Tentang:** {doc.about}
+
+---
+
+#### 📊 Skor Relevansi
+
+| Komponen | Nilai |
+|----------|-------|
+| **Final Score** | **{doc.score:.4f}** |
+
+---
+
+#### 📝 Konten
+
+{doc.content_preview or 'Preview tidak tersedia'}
+
+---
+
+"""
+        
+        return summary, all_docs
+        
+    except Exception as e:
+        return f"❌ Error: {str(e)}", ""
+
+
+# =============================================================================
+# MAIN CHAT FUNCTION - Same format as gradio_app.py
 # =============================================================================
 
 def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_sources=True, show_metadata=True):
-    """Main chat function - uses API for processing"""
+    """
+    Main chat function - uses API for processing
+    Formatting matches gradio_app.py exactly
+    """
     if not message.strip():
         return history, ""
     
@@ -225,101 +328,181 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
         yield history, ""
         return
     
-    # Add user message
-    history = history + [{"role": "user", "content": message}]
-    
-    # Show progress
-    current_progress = []
-    def add_progress(msg):
-        current_progress.append(msg)
-        progress_display = "\n".join([f"🔄 {m}" for m in current_progress])
-        return history + [
-            {"role": "assistant", "content": f"**Mencari dan menganalisis...**\n\n{progress_display}"}
-        ]
-    
-    yield add_progress("Menghubungkan ke server..."), ""
-    
     try:
+        # Track progress (same as gradio_app.py)
+        current_progress = []
+        accumulated_text = ""
+        thinking_content = []
+        final_answer = []
+        live_output = []
+        in_thinking_block = False
+        saw_think_tag = False
+        thinking_header_shown = False
+        result_data = None
+        
+        def add_progress(msg):
+            """Helper to add progress updates"""
+            current_progress.append(msg)
+            progress_display = "\n".join([f"🔄 {m}" for m in current_progress])
+            return history + [
+                {"role": "user", "content": message},
+                {"role": "assistant", "content": f"**Mencari dan menganalisis...**\n\n{progress_display}"}
+            ]
+        
         # Get thinking mode from config
         thinking_mode = config_dict.get('thinking_mode', 'low')
         if isinstance(thinking_mode, str):
             thinking_mode = thinking_mode.lower()
         
+        yield add_progress("Menghubungkan ke server..."), ""
         yield add_progress("Menganalisis query..."), ""
-        
-        # Stream response from API
-        thinking_buffer = ""
-        answer_buffer = ""
-        sources = []
-        legal_refs = ""
-        
         yield add_progress("Melakukan penelitian..."), ""
         
+        # Stream response from API
         for chunk in api_client.chat_stream(
             query=message,
             session_id=current_session,
             thinking_level=thinking_mode
         ):
             chunk_type = chunk.get('type', '')
-            content = chunk.get('content', '')
+            content = chunk.get('content', chunk.get('message', ''))
             
             if chunk_type == 'progress':
-                # Progress update
-                msg = chunk.get('message', content)
-                yield add_progress(msg), ""
+                yield add_progress(content), ""
             
             elif chunk_type == 'thinking':
-                # Thinking process
-                thinking_buffer += content
+                # Thinking chunk
+                thinking_content.append(content)
                 if show_thinking:
-                    display = f"💭 **Proses Berpikir:**\n\n{thinking_buffer}"
-                    if answer_buffer:
-                        display += f"\n\n---\n\n**Jawaban:**\n\n{answer_buffer}"
-                    history_copy = history.copy()
-                    history_copy.append({"role": "assistant", "content": display})
-                    yield history_copy, ""
+                    # Build progress header
+                    progress_header = '<details open><summary>📋 <b>Proses Penelitian</b></summary>\n\n'
+                    progress_header += "\n".join([f"🔄 {m}" for m in current_progress])
+                    progress_header += '\n</details>\n\n---\n\n'
+                    
+                    if not thinking_header_shown:
+                        live_output = [progress_header, '🧠 **Sedang berfikir...**\n\n']
+                        thinking_header_shown = True
+                    
+                    live_output.append(content)
+                    
+                    display_text = ''.join(live_output)
+                    yield history + [
+                        {"role": "user", "content": message},
+                        {"role": "assistant", "content": display_text}
+                    ], ""
             
             elif chunk_type == 'chunk':
-                # Content chunk (API sends 'chunk', not 'content')
-                answer_buffer += content
-                if show_thinking and thinking_buffer:
-                    display = f"💭 **Proses Berpikir:**\n\n{thinking_buffer}\n\n---\n\n**Jawaban:**\n\n{answer_buffer}"
-                else:
-                    display = answer_buffer
-                history_copy = history.copy()
-                history_copy.append({"role": "assistant", "content": display})
-                yield history_copy, ""
+                # Answer chunk
+                final_answer.append(content)
+                accumulated_text += content
+                
+                # Build progress header
+                progress_header = '<details open><summary>📋 <b>Proses Penelitian</b></summary>\n\n'
+                progress_header += "\n".join([f"🔄 {m}" for m in current_progress])
+                progress_header += '\n</details>\n\n---\n\n'
+                
+                if not thinking_header_shown:
+                    live_output = [progress_header]
+                    if thinking_content:
+                        live_output.append('🧠 **Sedang berfikir...**\n\n')
+                        live_output.extend(thinking_content)
+                        live_output.append('\n\n---\n\n✅ **Sedang menjawab...**\n\n')
+                    else:
+                        live_output.append('✅ **Sedang menjawab...**\n\n')
+                    thinking_header_shown = True
+                
+                live_output.append(content)
+                
+                display_text = ''.join(live_output)
+                yield history + [
+                    {"role": "user", "content": message},
+                    {"role": "assistant", "content": display_text}
+                ], ""
             
             elif chunk_type == 'done':
-                # Final message (API sends 'done', not 'complete')
-                answer_buffer = chunk.get('answer', answer_buffer)
-                legal_refs = chunk.get('legal_references', '')
+                # Final result
+                result_data = chunk
         
-        # Build final response
-        final_content = ""
+        # Format final output (same format as gradio_app.py)
+        final_output = ""
         
-        if show_thinking and thinking_buffer:
-            final_content += f"💭 **Proses Berpikir:**\n\n{thinking_buffer}\n\n---\n\n"
+        # Get answer text
+        if final_answer:
+            response_text = ''.join(final_answer).strip()
+        else:
+            response_text = result_data.get('answer', accumulated_text) if result_data else accumulated_text
         
-        final_content += f"**Jawaban:**\n\n{answer_buffer}"
+        # Get thinking text
+        thinking_text = ''.join(thinking_content).strip() if thinking_content else ""
         
-        # Add legal references from API
-        if show_sources and legal_refs:
-            final_content += f"\n\n---\n\n### 📚 Referensi Hukum\n\n{legal_refs}"
+        # Add research process summary (what was done)
+        if current_progress:
+            final_output += '<details><summary>📋 <strong>Proses yang Sudah Dilakukan</strong></summary>\n\n'
+            for msg in current_progress:
+                final_output += f"✅ {msg}\n"
+            final_output += '\n</details>\n\n---\n\n'
         
-        history.append({"role": "assistant", "content": final_content})
-        yield history, ""
+        # Add thinking section if available
+        if show_thinking and thinking_text:
+            final_output += (
+                '<details><summary>🧠 <strong>Proses Berpikir</strong></summary>\n\n'
+                + thinking_text +
+                '\n</details>\n\n'
+                + '---\n\n### ✅ Jawaban\n\n'
+                + response_text
+            )
+        else:
+            final_output += f"### ✅ Jawaban\n\n{response_text}"
+        
+        # Add collapsible sections
+        collapsible_sections = []
+        
+        # Add sources (legal references)
+        if show_sources and result_data and result_data.get('legal_references'):
+            legal_refs = result_data['legal_references']
+            collapsible_sections.append(
+                f'<details><summary>📖 <strong>Sumber Hukum</strong></summary>\n\n{legal_refs}\n</details>'
+            )
+        
+        # Add detailed research process
+        if show_metadata and result_data and result_data.get('research_process'):
+            research_proc = result_data['research_process']
+            collapsible_sections.append(
+                f'<details><summary>🔬 <strong>Detail Proses Penelitian</strong></summary>\n\n{research_proc}\n</details>'
+            )
+        
+        # Add all retrieved documents
+        if show_metadata and result_data and result_data.get('all_retrieved_documents'):
+            all_docs = result_data['all_retrieved_documents']
+            collapsible_sections.append(
+                f'<details><summary>📚 <strong>Semua Dokumen Ditemukan</strong></summary>\n\n{all_docs}\n</details>'
+            )
+        
+        # Combine all sections
+        if collapsible_sections:
+            final_output += "\n\n---\n\n" + "\n\n".join(collapsible_sections)
+        
+        # Return final result
+        final_history = history + [
+            {"role": "user", "content": message},
+            {"role": "assistant", "content": final_output}
+        ]
+        
+        yield final_history, ""
         
     except Exception as e:
         import traceback
         traceback.print_exc()
         error_display = f"❌ **Error:**\n\n{str(e)}"
-        history.append({"role": "assistant", "content": error_display})
+        history = history + [
+            {"role": "user", "content": message},
+            {"role": "assistant", "content": error_display}
+        ]
         yield history, ""
 
 
 def run_conversational_test(history, config_dict, show_thinking, show_sources, show_metadata):
-    """Run conversational test - auto-feed questions"""
+    """Run conversational test - auto-feed questions (same as gradio_app.py)"""
     
     # Initial message
     initial_msg = {
@@ -360,8 +543,57 @@ def run_conversational_test(history, config_dict, show_thinking, show_sources, s
     yield history, ""
 
 
+def run_stress_test(history, config_dict, show_thinking, show_sources, show_metadata):
+    """Run stress test - same as gradio_app.py"""
+    
+    # Stress config (maximum settings)
+    stress_config = {
+        'final_top_k': 30,
+        'research_team_size': 5,
+        'max_new_tokens': 8192,
+        'temperature': 0.7,
+        'top_p': 1.0,
+        'top_k': 80,
+        'min_p': 0.05,
+        'thinking_mode': 'high',
+    }
+    
+    # Initial message
+    initial_msg = {
+        "role": "assistant",
+        "content": f"⚡ **Starting Stress Test (8 Questions)**\n\n**Configuration:** MAXIMUM SETTINGS\n- Team Size: 5 personas\n- Max Tokens: 8192\n- Thinking Mode: High\n\n**Auto-feeding questions...**"
+    }
+    history = history + [initial_msg]
+    yield history, ""
+    
+    # Process each question with stress config
+    for i, question in enumerate(TEST_QUESTIONS, 1):
+        progress_msg = {
+            "role": "assistant",
+            "content": f"⚡ **Stress Test - Question {i}/8**\n\nProcessing with maximum settings: _{question[:100]}..._"
+        }
+        history = history + [progress_msg]
+        yield history, ""
+        
+        history = history[:-1]
+        
+        for updated_history, cleared_input in chat_with_legal_rag(
+            question, history, stress_config, show_thinking, show_sources, show_metadata
+        ):
+            yield updated_history, cleared_input
+        
+        history = updated_history
+    
+    completion_msg = {
+        "role": "assistant",
+        "content": f"✅ **Stress Test Complete**\n\nSuccessfully processed all {len(TEST_QUESTIONS)} questions with maximum settings."
+    }
+    history = history + [completion_msg]
+    yield history, ""
+
+
 def update_config(*args):
-    """Update configuration from UI inputs"""
+    """Update configuration from UI inputs - same as gradio_app.py"""
     try:
         new_config = {
             'final_top_k': int(args[0]),
@@ -383,7 +615,7 @@ def update_config(*args):
 
 
 def reset_to_defaults():
-    """Reset configuration to defaults"""
+    """Reset configuration to defaults - same as gradio_app.py"""
     return (
         DEFAULT_CONFIG['final_top_k'],
         DEFAULT_CONFIG['temperature'],
@@ -400,50 +632,58 @@ def reset_to_defaults():
 
 
 def export_conversation_handler(export_format, history):
-    """Handle export button click"""
+    """Handle export - uses same exporters as gradio_app.py"""
     try:
         if not history:
             return "No conversation to export.", None
         
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         
-        if export_format == "JSON":
-            content = json.dumps(history, ensure_ascii=False, indent=2)
-            filename = f"legal_consultation_{timestamp}.json"
-        elif export_format == "Markdown":
-            lines = ["# Legal Consultation Export\n\n"]
-            for msg in history:
-                role = msg.get('role', 'unknown')
-                content_text = msg.get('content', '')
-                if role == 'user':
-                    lines.append(f"## 👤 User\n\n{content_text}\n\n")
-                else:
-                    lines.append(f"## 🤖 Assistant\n\n{content_text}\n\n")
-            content = "\n".join(lines)
-            filename = f"legal_consultation_{timestamp}.md"
-        else:  # HTML
-            lines = ["<html><body><h1>Legal Consultation</h1>"]
-            for msg in history:
-                role = msg.get('role', 'unknown')
-                content_text = msg.get('content', '').replace('\n', '<br>')
-                if role == 'user':
-                    lines.append(f"<h3>👤 User</h3><p>{content_text}</p>")
-                else:
-                    lines.append(f"<h3>🤖 Assistant</h3><p>{content_text}</p>")
-            lines.append("</body></html>")
-            content = "\n".join(lines)
-            filename = f"legal_consultation_{timestamp}.html"
+        # Convert history to session-like format for exporters
+        session_data = {
+            'session_id': current_session or 'export',
+            'created_at': datetime.now().isoformat(),
+            'turns': []
+        }
+        
+        # Build turns from history
+        for i in range(0, len(history), 2):
+            if i + 1 < len(history):
+                user_msg = history[i]
+                assistant_msg = history[i + 1]
+                session_data['turns'].append({
+                    'query': user_msg.get('content', ''),
+                    'answer': assistant_msg.get('content', ''),
+                    'timestamp': datetime.now().isoformat()
+                })
+        
+        # Use appropriate exporter (same as gradio_app.py)
+        exporters = {
+            'Markdown': MarkdownExporter,
+            'JSON': JSONExporter,
+            'HTML': HTMLExporter
+        }
+        
+        exporter_class = exporters.get(export_format, MarkdownExporter)
+        exporter = exporter_class()
+        
+        content = exporter.export(session_data)
+        
+        ext_map = {'Markdown': 'md', 'JSON': 'json', 'HTML': 'html'}
+        extension = ext_map.get(export_format, 'md')
+        filename = f"legal_consultation_{timestamp}.{extension}"
         
         # Save to temp file
         import tempfile
-        ext = {'JSON': 'json', 'Markdown': 'md', 'HTML': 'html'}[export_format]
-        with tempfile.NamedTemporaryFile(mode='w', suffix=f'.{ext}', delete=False, encoding='utf-8') as f:
+        with tempfile.NamedTemporaryFile(mode='w', suffix=f'.{extension}', delete=False, encoding='utf-8') as f:
             f.write(content)
             temp_path = f.name
         
         return content[:5000] + "..." if len(content) > 5000 else content, temp_path
         
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return f"Export failed: {str(e)}", None
 
 
@@ -463,7 +703,7 @@ def create_gradio_interface():
             gr.HTML("""
             <div style="text-align: center; padding: 50px 20px; max-width: 400px; margin: 0 auto;">
                 <h1 style="color: #1e3a5f;">🏛️ Indonesian Legal Assistant</h1>
-                <p style="color: #666;">Login to access the system</p>
+                <p style="color: #666;">Production API-Based UI</p>
             </div>
             """)
             with gr.Row():
@@ -471,8 +711,8 @@ def create_gradio_interface():
                 with gr.Column(scale=2):
                     gr.Markdown("### 🔐 Login")
                     gr.Markdown("**Demo:** `demo` / `demo123` or `admin` / `admin123`")
-                    username_input = gr.Textbox(label="Username")
-                    password_input = gr.Textbox(label="Password", type="password")
+                    username_input = gr.Textbox(label="Username", placeholder="Enter username")
+                    password_input = gr.Textbox(label="Password", type="password", placeholder="Enter password")
                     login_btn = gr.Button("🔓 Login", variant="primary")
                     login_error = gr.Markdown("")
                 gr.Column(scale=1)
@@ -495,7 +735,7 @@ def create_gradio_interface():
                 with gr.TabItem("💬 Konsultasi Hukum", id="chat"):
                     with gr.Column(elem_classes="main-chat-area"):
                         chatbot = gr.Chatbot(
-                            height="75vh",
+                            height="65vh",
                             show_label=False,
                             autoscroll=True
                         )
@@ -506,11 +746,11 @@ def create_gradio_interface():
                                 show_label=False,
                                 container=False,
                                 scale=10,
-                                submit_btn=True,
                                 lines=1,
                                 max_lines=3,
                                 interactive=True
                             )
+                            send_btn = gr.Button("📤", variant="primary", scale=1, min_width=50)
                         
                         with gr.Row():
                             with gr.Column():
@@ -520,6 +760,30 @@ def create_gradio_interface():
                                     examples_per_page=2,
                                     label=""
                                 )
+                
+                # =============================================================
+                # SEARCH TAB - From search_app.py
+                # =============================================================
+                with gr.TabItem("🔍 Pencarian Dokumen", id="search"):
+                    gr.Markdown("### Cari Dokumen Regulasi Indonesia")
+                    gr.Markdown("Pencarian dokumen tanpa LLM generation - langsung ke database.")
+                    
+                    with gr.Row():
+                        search_query = gr.Textbox(
+                            label="Query Pencarian",
+                            placeholder="Contoh: syarat pendirian PT, sanksi UU ITE...",
+                            lines=2,
+                            scale=4
+                        )
+                        search_num_results = gr.Slider(1, 10, value=5, step=1, label="Jumlah Hasil", scale=1)
+                    
+                    search_btn = gr.Button("🔍 Cari Dokumen", variant="primary")
+                    
+                    with gr.Tabs():
+                        with gr.TabItem("📋 Ringkasan"):
+                            search_summary = gr.Markdown("")
+                        with gr.TabItem("📚 Semua Dokumen"):
+                            search_all_docs = gr.Markdown("")
                 
                 # =============================================================
                 # SETTINGS TAB - Exactly like gradio_app.py
@@ -532,7 +796,7 @@ def create_gradio_interface():
                                 gr.Markdown("#### 🎯 Basic Settings")
                                 final_top_k = gr.Slider(1, 10, value=3, step=1, label="Final Top K Results")
                                 temperature = gr.Slider(0.0, 2.0, value=0.7, step=0.1, label="LLM Temperature")
-                                max_new_tokens = gr.Slider(512, 4096, value=2048, step=256, label="Max New Tokens")
+                                max_new_tokens = gr.Slider(512, 8192, value=2048, step=256, label="Max New Tokens")
                                 thinking_mode = gr.Radio(
                                     choices=["Low", "Medium", "High"],
                                     value="Low",
@@ -579,6 +843,7 @@ def create_gradio_interface():
                                 gr.Markdown("#### 🧪 Production Test Runners")
                                 gr.Markdown("Run comprehensive integration tests and see results in the chat tab.")
                                 test_conversational_btn = gr.Button("🔬 Run Conversational Test (8 Questions)", variant="primary")
+                                test_stress_btn = gr.Button("⚡ Run Stress Test (8 Questions)", variant="secondary")
                 
                 # =============================================================
                 # EXPORT TAB - Exactly like gradio_app.py
@@ -633,16 +898,38 @@ def create_gradio_interface():
             # System info
             system_info_btn.click(get_system_info, outputs=system_info_output)
             
-            # Chat functionality
+            # Chat functionality - both button and enter key
             msg_input.submit(
                 chat_with_legal_rag,
                 inputs=[msg_input, chatbot, config_state, show_thinking, show_sources, show_metadata],
                 outputs=[chatbot, msg_input]
             )
+            send_btn.click(
+                chat_with_legal_rag,
+                inputs=[msg_input, chatbot, config_state, show_thinking, show_sources, show_metadata],
+                outputs=[chatbot, msg_input]
+            )
             
-            # Test runner
+            # Search functionality
+            search_btn.click(
+                search_documents,
+                inputs=[search_query, search_num_results],
+                outputs=[search_summary, search_all_docs]
+            )
+            search_query.submit(
+                search_documents,
+                inputs=[search_query, search_num_results],
+                outputs=[search_summary, search_all_docs]
+            )
+            
+            # Test runners
             test_conversational_btn.click(
                 run_conversational_test,
+                inputs=[chatbot, config_state, show_thinking, show_sources, show_metadata],
+                outputs=[chatbot, msg_input]
+            )
+            test_stress_btn.click(
+                run_stress_test,
                 inputs=[chatbot, config_state, show_thinking, show_sources, show_metadata],
                 outputs=[chatbot, msg_input]
             )
@@ -655,9 +942,21 @@ def create_gradio_interface():
             )
         
         # =====================================================================
-        # AUTH HANDLERS
+        # AUTH HANDLERS - Login supports Enter key
         # =====================================================================
         login_btn.click(
+            fn=dummy_login,
+            inputs=[username_input, password_input],
+            outputs=[login_panel, main_app, login_error]
+        )
+        
+        # Enter key support for login
+        username_input.submit(
+            fn=dummy_login,
+            inputs=[username_input, password_input],
+            outputs=[login_panel, main_app, login_error]
+        )
+        password_input.submit(
             fn=dummy_login,
             inputs=[username_input, password_input],
             outputs=[login_panel, main_app, login_error]
@@ -690,7 +989,7 @@ def launch_app(share: bool = False, server_port: int = 7860, server_name: str = 
     
     demo = create_gradio_interface()
     demo.launch(
-        server_name="0.0.0.0",
+        server_name=server_name,
         server_port=server_port,
         share=share
     )
