@@ -588,7 +588,7 @@ def create_gradio_interface():
             """)
             username_input = gr.Textbox(label="Username", placeholder="demo")
             password_input = gr.Textbox(label="Password", type="password", placeholder="demo123")
-            login_btn = gr.Button("🔓 Login", variant="primary", size="lg")
+            login_btn = gr.Button("🔓 Login", variant="primary")
             login_error = gr.Markdown("")
             gr.Markdown("<p style='text-align: center; color: #888; font-size: 12px; margin-top: 10px;'>Demo: demo/demo123 or admin/admin123</p>")
         

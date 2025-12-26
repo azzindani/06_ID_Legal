@@ -371,9 +371,9 @@ class HTMLExporter(BaseExporter):
         thinking = turn.get('thinking', '')
         if self.include_thinking and thinking:
             html += f'''
-    <details style="background: #fff3e0; padding: 15px; border-radius: 8px; border-left: 4px solid #f57c00; margin: 15px 0;">
+    <details style="background: #fff3e0; padding: 12px; border-radius: 6px; border-left: 3px solid #f57c00; margin: 10px 0;">
         <summary style="font-weight: bold; color: #f57c00; cursor: pointer;">🧠 Proses Berpikir</summary>
-        <div style="white-space: pre-wrap; margin-top: 10px;">{self._format_answer_text(thinking)}</div>
+        <div style="margin-top: 8px; line-height: 1.5;">{self._format_answer_text(thinking)}</div>
     </details>'''
 
         # Answer section
@@ -387,18 +387,18 @@ class HTMLExporter(BaseExporter):
         sources_text = turn.get('sources_text', '') or turn.get('metadata', {}).get('sources_text', '')
         if self.include_sources and sources_text:
             html += f'''
-    <details style="background: #f3e5f5; padding: 15px; border-radius: 8px; border-left: 4px solid #7b1fa2; margin: 15px 0;">
+    <details style="background: #f3e5f5; padding: 12px; border-radius: 6px; border-left: 3px solid #7b1fa2; margin: 10px 0;">
         <summary style="font-weight: bold; color: #7b1fa2; cursor: pointer;">📖 Sumber Hukum</summary>
-        <div style="white-space: pre-wrap; margin-top: 10px;">{self._format_answer_text(sources_text)}</div>
+        <div style="margin-top: 8px; line-height: 1.5;">{self._format_answer_text(sources_text)}</div>
     </details>'''
 
         # Research Process - use full formatted research_text
         research_text = turn.get('research_text', '') or turn.get('metadata', {}).get('research_log', {}).get('details', '')
         if self.include_metadata and research_text:
             html += f'''
-    <details style="background: #e0f7fa; padding: 15px; border-radius: 8px; border-left: 4px solid #0097a7; margin: 15px 0;">
+    <details style="background: #e0f7fa; padding: 12px; border-radius: 6px; border-left: 3px solid #0097a7; margin: 10px 0;">
         <summary style="font-weight: bold; color: #0097a7; cursor: pointer;">🔬 Detail Proses Penelitian</summary>
-        <div style="white-space: pre-wrap; margin-top: 10px;">{self._format_answer_text(research_text)}</div>
+        <div style="margin-top: 8px; line-height: 1.5;">{self._format_answer_text(research_text)}</div>
     </details>'''
 
         html += '</div>'

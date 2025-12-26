@@ -128,23 +128,18 @@ class MarkdownExporter(BaseExporter):
             lines.append("</details>")
             lines.append("")
 
-        # Other Metadata (collapsible)
-        if self.include_metadata and meta:
+        # Other Metadata (collapsible) - only if we have timing/stats
+        meta = turn.get('metadata', {})
+        if self.include_metadata and self.include_timing and meta:
             other_meta = []
-            if self.include_timing:
-                if 'total_time' in meta:
-                    other_meta.append(f"- **Waktu Total:** {self._format_duration(meta['total_time'])}")
-                if 'retrieval_time' in meta:
-                    other_meta.append(f"- **Waktu Retrieval:** {self._format_duration(meta['retrieval_time'])}")
-                if 'generation_time' in meta:
-                    other_meta.append(f"- **Waktu Generasi:** {self._format_duration(meta['generation_time'])}")
-
+            if 'total_time' in meta:
+                other_meta.append(f"- **Waktu Total:** {self._format_duration(meta['total_time'])}")
+            if 'retrieval_time' in meta:
+                other_meta.append(f"- **Waktu Retrieval:** {self._format_duration(meta['retrieval_time'])}")
+            if 'generation_time' in meta:
+                other_meta.append(f"- **Waktu Generasi:** {self._format_duration(meta['generation_time'])}")
             if 'tokens_generated' in meta:
                 other_meta.append(f"- **Token:** {meta['tokens_generated']}")
-            if 'query_type' in meta:
-                other_meta.append(f"- **Tipe Query:** {meta['query_type']}")
-            if 'results_count' in meta:
-                other_meta.append(f"- **Hasil Ditemukan:** {meta['results_count']}")
 
             if other_meta:
                 lines.append("<details>")
