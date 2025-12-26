@@ -8,10 +8,14 @@ from .base_exporter import BaseExporter
 from .markdown_exporter import MarkdownExporter
 from .json_exporter import JSONExporter
 from .html_exporter import HTMLExporter
+from .gradio_parser import parse_gradio_content, history_to_session_data
 
 __all__ = [
     'BaseExporter',
     'MarkdownExporter',
     'JSONExporter',
-    'HTMLExporter'
+    'HTMLExporter',
+    'parse_gradio_content',
+    'history_to_session_data'
 ]
+
