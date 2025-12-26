@@ -165,7 +165,7 @@ class LegalRAGAPIClient:
     def retrieve(
         self, 
         query: str, 
-        top_k: int = 5,
+        top_k: int = 10,
         min_score: float = 0.0
     ) -> Dict[str, Any]:
         """
@@ -173,12 +173,14 @@ class LegalRAGAPIClient:
         
         Args:
             query: Search query
-            top_k: Number of results (1-10)
+            top_k: Number of results (1-50)
             min_score: Minimum relevance score
             
         Returns:
             Dict with documents, search_time, metadata
         """
+        print(f"[API] retrieve() called with top_k={top_k}, query={query[:50]}...", flush=True)
+        
         response = self._request('POST', '/rag/retrieve', {
             'query': query,
             'top_k': top_k,
@@ -186,6 +188,8 @@ class LegalRAGAPIClient:
         })
         
         data = response.json()
+        
+        print(f"[API] retrieve() returned {len(data.get('documents', []))} documents", flush=True)
         
         return {
             'query': data.get('query', query),
@@ -296,17 +300,23 @@ class LegalRAGAPIClient:
         # Add any extra kwargs
         payload.update(kwargs)
         
-        response = self._request('POST', '/rag/chat', payload, stream=True)
-        
-        for line in response.iter_lines():
-            if line:
-                content = line.decode('utf-8')
-                if content.startswith('data: '):
-                    try:
-                        event = json.loads(content[6:])
-                        yield event
-                    except json.JSONDecodeError:
-                        continue
+        response = None
+        try:
+            response = self._request('POST', '/rag/chat', payload, stream=True)
+            
+            for line in response.iter_lines():
+                if line:
+                    content = line.decode('utf-8')
+                    if content.startswith('data: '):
+                        try:
+                            event = json.loads(content[6:])
+                            yield event
+                        except json.JSONDecodeError:
+                            continue
+        finally:
+            # Always close the response to free the connection
+            if response is not None:
+                response.close()
     
     # =========================================================================
     # Session Management

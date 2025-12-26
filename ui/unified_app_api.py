@@ -200,17 +200,17 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
     Main chat function with streaming and think tag parsing.
     Matches gradio_app.py behavior exactly.
     """
-    print(f"\n[CHAT] === New chat request: {message[:50]}... ===")
+    print(f"\n[CHAT] === New chat request: {message[:50]}... ===", flush=True)
     
     if not message.strip():
-        print("[CHAT] Empty message, returning")
+        print("[CHAT] Empty message, returning", flush=True)
         return history, ""
     
     global api_client, current_session
-    print(f"[CHAT] api_client is {'set' if api_client else 'None'}, current_session={current_session}")
+    print(f"[CHAT] api_client is {'set' if api_client else 'None'}, current_session={current_session}", flush=True)
     
     if api_client is None:
-        print("[CHAT] Initializing API...")
+        print("[CHAT] Initializing API...", flush=True)
         initialize_api()
     if api_client is None:
         print("[CHAT] API still None after init, returning error")
@@ -237,7 +237,7 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
         max_tokens = int(config_dict.get('max_new_tokens', 2048))
         team_size = int(config_dict.get('research_team_size', 3))
         
-        print(f"[CHAT] Config: top_k={top_k}, temp={temperature}, tokens={max_tokens}, team={team_size}, think={thinking_mode}")
+        print(f"[CHAT] Config: top_k={top_k}, temp={temperature}, tokens={max_tokens}, team={team_size}, think={thinking_mode}", flush=True)
         
         # Initial processing message
         yield history + [
@@ -245,7 +245,7 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
             {"role": "assistant", "content": f"🔄 **Memproses permintaan...**\n_Settings: Top-K={top_k}, Temp={temperature}, Tokens={max_tokens}, Team={team_size}, Thinking={thinking_mode}_"}
         ], ""
         
-        print("[CHAT] Calling api_client.chat_stream()...")
+        print("[CHAT] Calling api_client.chat_stream()...", flush=True)
         
         # Stream response from API with ALL settings
         chunk_count = 0

@@ -204,10 +204,12 @@ async def retrieve_documents(req: RetrievalRequest, request: Request):
                 detail="Retrieval system not initialized"
             )
         
-        # Run orchestrator for retrieval
+        # Run orchestrator for retrieval with top_k parameter
+        logger.info(f"Retrieve called with top_k={req.top_k}")
         rag_result = pipeline.orchestrator.run(
             query=req.query,
-            conversation_history=[]
+            conversation_history=[],
+            top_k=req.top_k  # Pass top_k to orchestrator
         )
         
         final_results = rag_result.get('final_results', [])
