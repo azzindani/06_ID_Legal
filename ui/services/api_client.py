@@ -260,7 +260,12 @@ class LegalRAGAPIClient:
         self,
         query: str,
         session_id: Optional[str] = None,
-        thinking_level: str = 'low'
+        thinking_level: str = 'low',
+        top_k: int = 3,
+        temperature: float = 0.7,
+        max_tokens: int = 2048,
+        team_size: int = 3,
+        **kwargs
     ) -> Generator[Dict[str, Any], None, None]:
         """
         Streaming chat via Server-Sent Events
@@ -269,16 +274,29 @@ class LegalRAGAPIClient:
             query: User question
             session_id: Session ID for context
             thinking_level: low, medium, high
+            top_k: Number of documents to retrieve
+            temperature: LLM temperature
+            max_tokens: Max tokens to generate
+            team_size: Research team size
+            **kwargs: Additional parameters
             
         Yields:
             SSE events: {type: 'progress'|'thinking'|'chunk'|'done', ...}
         """
-        response = self._request('POST', '/rag/chat', {
+        payload = {
             'query': query,
             'session_id': session_id,
             'thinking_level': thinking_level,
+            'top_k': top_k,
+            'temperature': temperature,
+            'max_tokens': max_tokens,
+            'team_size': team_size,
             'stream': True
-        }, stream=True)
+        }
+        # Add any extra kwargs
+        payload.update(kwargs)
+        
+        response = self._request('POST', '/rag/chat', payload, stream=True)
         
         for line in response.iter_lines():
             if line:

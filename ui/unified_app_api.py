@@ -208,19 +208,28 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
         header_shown = False
         result_data = None
         
+        # Extract all settings from config
         thinking_mode = str(config_dict.get('thinking_mode', 'low')).lower()
+        top_k = int(config_dict.get('final_top_k', 3))
+        temperature = float(config_dict.get('temperature', 0.7))
+        max_tokens = int(config_dict.get('max_new_tokens', 2048))
+        team_size = int(config_dict.get('research_team_size', 3))
         
         # Initial processing message
         yield history + [
             {"role": "user", "content": message},
-            {"role": "assistant", "content": "🔄 **Memproses permintaan...**"}
+            {"role": "assistant", "content": f"🔄 **Memproses permintaan...**\n_Settings: Top-K={top_k}, Temp={temperature}, Tokens={max_tokens}, Team={team_size}, Thinking={thinking_mode}_"}
         ], ""
         
-        # Stream response from API
+        # Stream response from API with ALL settings
         for chunk in api_client.chat_stream(
             query=message,
             session_id=current_session,
-            thinking_level=thinking_mode
+            thinking_level=thinking_mode,
+            top_k=top_k,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            team_size=team_size
         ):
             chunk_type = chunk.get('type', '')
             content = chunk.get('content', chunk.get('message', ''))
@@ -332,11 +341,11 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
 
 
 # =============================================================================
-# SEARCH FUNCTION
+# SEARCH FUNCTION - Matching search_app.py style
 # =============================================================================
 
 def search_documents(query: str, num_results: int = 5):
-    """Search documents without LLM generation"""
+    """Search documents without LLM generation - detailed output like search_app.py"""
     global api_client
     if not query.strip():
         return "⚠️ Masukkan query pencarian", ""
@@ -351,30 +360,63 @@ def search_documents(query: str, num_results: int = 5):
             return "📭 Tidak ada dokumen ditemukan", ""
         
         docs = result['documents']
+        search_time = result.get('search_time', 0)
         
-        # Format summary
-        summary = f"""## 📋 Hasil Pencarian
+        # Format header
+        output = f"""## � Hasil Pencarian Dokumen
 
 **Query:** {query}
-**Dokumen Ditemukan:** {len(docs)}
-**Waktu Pencarian:** {result.get('search_time', 0):.2f}s
-
----
-
-"""
-        for i, d in enumerate(docs, 1):
-            summary += f"""### {i}. {d.regulation_type} No. {d.regulation_number} Tahun {d.year}
-
-**Tentang:** {d.about}
-**Skor:** {d.score:.4f}
-**Lokasi:** {getattr(d, 'location', 'N/A')}
+**Total Dokumen:** {len(docs)}
+**Waktu Pencarian:** {search_time:.3f} detik
 
 ---
 
 """
         
-        return summary, ""
+        # Format each document with detailed info (like search_app.py)
+        for i, d in enumerate(docs, 1):
+            # Basic info
+            reg_type = getattr(d, 'regulation_type', 'Unknown')
+            reg_num = getattr(d, 'regulation_number', '?')
+            year = getattr(d, 'year', '?')
+            about = getattr(d, 'about', 'N/A')
+            location = getattr(d, 'location', 'N/A')
+            score = getattr(d, 'score', 0)
+            global_id = getattr(d, 'global_id', 'N/A')
+            effective_date = getattr(d, 'effective_date', 'N/A')
+            content = getattr(d, 'content', '')
+            
+            # Truncate about and content for display
+            about_display = about[:200] + '...' if len(about) > 200 else about
+            content_preview = content[:300] + '...' if len(content) > 300 else content
+            
+            output += f"""### 📄 {i}. {reg_type} No. {reg_num} Tahun {year}
+
+**Global ID:** `{global_id}`
+
+**Tentang:** {about_display}
+
+**Tanggal Penetapan:** {effective_date}
+
+**Lokasi:** {location}
+
+**Skor:** `{score:.4f}`
+
+<details>
+<summary>📝 Konten Dokumen</summary>
+
+{content_preview}
+
+</details>
+
+---
+
+"""
+        
+        return output, ""
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return f"❌ Error: {e}", ""
 
 
