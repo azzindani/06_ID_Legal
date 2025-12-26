@@ -1,22 +1,29 @@
+# Indonesian Legal RAG System - Docker Compose
+#
+# Unified stack deployment with GPU support and production launcher
+#
+# Usage:
+#   docker-compose up --build        # Build and run
+#   docker-compose up -d             # Run in background
+#   docker-compose down              # Stop all services
+#   docker-compose logs -f           # View logs
+#
+# Access:
+#   API:  http://localhost:8000
+#   UI:   http://localhost:7860
+#   Docs: http://localhost:8000/docs
+
 version: '3.8'
 
 services:
-  # Main RAG API service
-  rag-api:
+  # Unified Legal RAG service (API + UI via production launcher)
+  legal-rag:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: id-legal-rag-api
-    ports:
-      - "8000:8000"
-    environment:
-      - PYTHONUNBUFFERED=1
-      - HF_HOME=/app/.cache/huggingface
-      - CUDA_VISIBLE_DEVICES=0
-    volumes:
-      - ./exports:/app/exports
-      - ./logs:/app/logs
-      - huggingface-cache:/app/.cache/huggingface
+    container_name: legal-rag-unified
+    
+    # GPU support (requires nvidia-docker)
     deploy:
       resources:
         reservations:
@@ -24,32 +31,47 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
-    restart: unless-stopped
+    
+    # Port mapping
+    ports:
+      - "8000:8000"    # FastAPI
+      - "7860:7860"    # Gradio Unified UI
+    
+    # Persistent volumes
+    volumes:
+      - ./data:/app/.data              # Session database
+      - huggingface-cache:/app/.cache/huggingface  # Model cache
+      - ./exports:/app/exports         # Exported files
+      - ./logs:/app/logs               # Log files
+    
+    # Environment variables
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LEGAL_API_KEY=${LEGAL_API_KEY:-production_key_change_me}
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+      - UI_HOST=0.0.0.0
+      - UI_PORT=7860
+      - HF_HOME=/app/.cache/huggingface
+      - CUDA_VISIBLE_DEVICES=0
+    
+    # Health check
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/live"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 120s
-
-  # Optional: Gradio UI service
-  rag-ui:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: id-legal-rag-ui
-    command: ["python", "ui/gradio_app.py"]
-    ports:
-      - "7860:7860"
-    environment:
-      - PYTHONUNBUFFERED=1
-      - API_URL=http://rag-api:8000
-    depends_on:
-      rag-api:
-        condition: service_healthy
+      start_period: 300s
+    
+    # Restart policy
     restart: unless-stopped
-    profiles:
-      - ui
+    
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "3"
 
 volumes:
   huggingface-cache:
@@ -57,4 +79,4 @@ volumes:
 
 networks:
   default:
-    name: id-legal-network
+    name: legal-rag-network
