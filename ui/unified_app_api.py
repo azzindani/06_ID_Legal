@@ -480,150 +480,150 @@ def create_unified_interface():
             status_display = gr.Markdown("⏳ Connecting to API...", elem_classes=["status-display"])
             
             with gr.Tabs():
-            
-            # =================================================================
-            # SEARCH TAB
-            # =================================================================
-            with gr.Tab("🔍 Pencarian", id="search"):
-                gr.Markdown("### Cari Dokumen Hukum")
                 
-                with gr.Row():
-                    with gr.Column(scale=3):
-                        search_query = gr.Textbox(
-                            label="Query Pencarian",
-                            placeholder="Contoh: Syarat pendirian PT...",
-                            lines=2
-                        )
-                    with gr.Column(scale=1):
-                        search_top_k = gr.Slider(1, 20, value=5, step=1, label="Jumlah Hasil")
-                        search_min_score = gr.Slider(0, 1, value=0.0, step=0.1, label="Skor Minimum")
-                
-                search_btn = gr.Button("🔍 Cari Dokumen", variant="primary")
-                search_results = gr.Markdown("", label="Hasil Pencarian")
-                
-                search_btn.click(
-                    fn=search_documents,
-                    inputs=[search_query, search_top_k, search_min_score],
-                    outputs=search_results
-                )
-            
-            # =================================================================
-            # CHAT TAB
-            # =================================================================
-            with gr.Tab("💬 Konsultasi", id="chat"):
-                gr.Markdown("### Konsultasi Hukum dengan AI")
-                
-                # Legal disclaimer
-                gr.HTML(f'<div class="legal-disclaimer">{LEGAL_DISCLAIMER}</div>')
-                
-                with gr.Row():
-                    with gr.Column(scale=3):
-                        chatbot = gr.Chatbot(
-                            label="Percakapan",
-                            height=500,
-                            type="messages"
-                        )
-                        
-                        with gr.Row():
-                            chat_input = gr.Textbox(
-                                label="Pertanyaan",
-                                placeholder="Ketik pertanyaan hukum Anda...",
-                                scale=4
-                            )
-                            send_btn = gr.Button("Kirim", variant="primary", scale=1)
+                # =================================================================
+                # SEARCH TAB
+                # =================================================================
+                with gr.Tab("🔍 Pencarian", id="search"):
+                    gr.Markdown("### Cari Dokumen Hukum")
                     
-                    with gr.Column(scale=1):
-                        session_id_display = gr.Textbox(
-                            label="Session ID",
-                            interactive=False
-                        )
-                        thinking_level = gr.Radio(
-                            ["low", "medium", "high"],
-                            value="low",
-                            label="Tingkat Analisis"
-                        )
-                        show_thinking = gr.Checkbox(
-                            value=True,
-                            label="Tampilkan Proses Berpikir"
-                        )
+                    with gr.Row():
+                        with gr.Column(scale=3):
+                            search_query = gr.Textbox(
+                                label="Query Pencarian",
+                                placeholder="Contoh: Syarat pendirian PT...",
+                                lines=2
+                            )
+                        with gr.Column(scale=1):
+                            search_top_k = gr.Slider(1, 20, value=5, step=1, label="Jumlah Hasil")
+                            search_min_score = gr.Slider(0, 1, value=0.0, step=0.1, label="Skor Minimum")
+                    
+                    search_btn = gr.Button("🔍 Cari Dokumen", variant="primary")
+                    search_results = gr.Markdown("", label="Hasil Pencarian")
+                    
+                    search_btn.click(
+                        fn=search_documents,
+                        inputs=[search_query, search_top_k, search_min_score],
+                        outputs=search_results
+                    )
+            
+                # =================================================================
+                # CHAT TAB
+                # =================================================================
+                with gr.Tab("💬 Konsultasi", id="chat"):
+                    gr.Markdown("### Konsultasi Hukum dengan AI")
+                    
+                    # Legal disclaimer
+                    gr.HTML(f'<div class="legal-disclaimer">{LEGAL_DISCLAIMER}</div>')
+                    
+                    with gr.Row():
+                        with gr.Column(scale=3):
+                            chatbot = gr.Chatbot(
+                                label="Percakapan",
+                                height=500,
+                                type="messages"
+                            )
+                            
+                            with gr.Row():
+                                chat_input = gr.Textbox(
+                                    label="Pertanyaan",
+                                    placeholder="Ketik pertanyaan hukum Anda...",
+                                    scale=4
+                                )
+                                send_btn = gr.Button("Kirim", variant="primary", scale=1)
                         
-                        new_session_btn = gr.Button("🆕 Sesi Baru")
-                        clear_btn = gr.Button("🗑️ Hapus Chat")
+                        with gr.Column(scale=1):
+                            session_id_display = gr.Textbox(
+                                label="Session ID",
+                                interactive=False
+                            )
+                            thinking_level = gr.Radio(
+                                ["low", "medium", "high"],
+                                value="low",
+                                label="Tingkat Analisis"
+                            )
+                            show_thinking = gr.Checkbox(
+                                value=True,
+                                label="Tampilkan Proses Berpikir"
+                            )
+                            
+                            new_session_btn = gr.Button("🆕 Sesi Baru")
+                            clear_btn = gr.Button("🗑️ Hapus Chat")
+                    
+                    # Chat handlers
+                    send_btn.click(
+                        fn=chat_with_api,
+                        inputs=[chat_input, chatbot, thinking_level, show_thinking, session_id_display],
+                        outputs=chatbot
+                    ).then(
+                        fn=lambda: "",
+                        outputs=chat_input
+                    )
+                    
+                    chat_input.submit(
+                        fn=chat_with_api,
+                        inputs=[chat_input, chatbot, thinking_level, show_thinking, session_id_display],
+                        outputs=chatbot
+                    ).then(
+                        fn=lambda: "",
+                        outputs=chat_input
+                    )
+                    
+                    clear_btn.click(fn=clear_chat, outputs=chatbot)
+                    new_session_btn.click(fn=new_session, outputs=[session_id_display, chatbot])
                 
-                # Chat handlers
-                send_btn.click(
-                    fn=chat_with_api,
-                    inputs=[chat_input, chatbot, thinking_level, show_thinking, session_id_display],
-                    outputs=chatbot
-                ).then(
-                    fn=lambda: "",
-                    outputs=chat_input
-                )
+                # =================================================================
+                # SETTINGS TAB
+                # =================================================================
+                with gr.Tab("⚙️ Pengaturan", id="settings"):
+                    gr.Markdown("### Konfigurasi API")
+                    
+                    with gr.Row():
+                        with gr.Column():
+                            api_url_input = gr.Textbox(
+                                label="API URL",
+                                value=DEFAULT_CONFIG['api_url'],
+                                placeholder="http://localhost:8000/api/v1"
+                            )
+                            api_key_input = gr.Textbox(
+                                label="API Key",
+                                value=DEFAULT_CONFIG['api_key'],
+                                type="password"
+                            )
+                            apply_btn = gr.Button("💾 Terapkan", variant="primary")
+                            settings_status = gr.Markdown("")
+                    
+                    gr.Markdown("---")
+                    gr.Markdown("### Manajemen Sesi")
+                    
+                    with gr.Row():
+                        refresh_sessions_btn = gr.Button("🔄 Refresh Sesi")
+                        sessions_list = gr.Markdown("")
+                    
+                    with gr.Row():
+                        export_format = gr.Radio(["md", "json", "html"], value="md", label="Format Export")
+                        export_btn = gr.Button("📥 Export Sesi Aktif")
+                        export_output = gr.Textbox(label="Hasil Export", lines=10)
+                    
+                    apply_btn.click(
+                        fn=apply_settings,
+                        inputs=[api_url_input, api_key_input],
+                        outputs=settings_status
+                    )
+                    
+                    refresh_sessions_btn.click(fn=get_sessions_list, outputs=sessions_list)
+                    export_btn.click(fn=export_current_session, inputs=export_format, outputs=export_output)
                 
-                chat_input.submit(
-                    fn=chat_with_api,
-                    inputs=[chat_input, chatbot, thinking_level, show_thinking, session_id_display],
-                    outputs=chatbot
-                ).then(
-                    fn=lambda: "",
-                    outputs=chat_input
-                )
-                
-                clear_btn.click(fn=clear_chat, outputs=chatbot)
-                new_session_btn.click(fn=new_session, outputs=[session_id_display, chatbot])
-            
-            # =================================================================
-            # SETTINGS TAB
-            # =================================================================
-            with gr.Tab("⚙️ Pengaturan", id="settings"):
-                gr.Markdown("### Konfigurasi API")
-                
-                with gr.Row():
-                    with gr.Column():
-                        api_url_input = gr.Textbox(
-                            label="API URL",
-                            value=DEFAULT_CONFIG['api_url'],
-                            placeholder="http://localhost:8000/api/v1"
-                        )
-                        api_key_input = gr.Textbox(
-                            label="API Key",
-                            value=DEFAULT_CONFIG['api_key'],
-                            type="password"
-                        )
-                        apply_btn = gr.Button("💾 Terapkan", variant="primary")
-                        settings_status = gr.Markdown("")
-                
-                gr.Markdown("---")
-                gr.Markdown("### Manajemen Sesi")
-                
-                with gr.Row():
-                    refresh_sessions_btn = gr.Button("🔄 Refresh Sesi")
-                    sessions_list = gr.Markdown("")
-                
-                with gr.Row():
-                    export_format = gr.Radio(["md", "json", "html"], value="md", label="Format Export")
-                    export_btn = gr.Button("📥 Export Sesi Aktif")
-                    export_output = gr.Textbox(label="Hasil Export", lines=10)
-                
-                apply_btn.click(
-                    fn=apply_settings,
-                    inputs=[api_url_input, api_key_input],
-                    outputs=settings_status
-                )
-                
-                refresh_sessions_btn.click(fn=get_sessions_list, outputs=sessions_list)
-                export_btn.click(fn=export_current_session, inputs=export_format, outputs=export_output)
-            
-            # =================================================================
-            # STATUS TAB
-            # =================================================================
-            with gr.Tab("📊 Status", id="status"):
-                gr.Markdown("### Status Sistem")
-                
-                check_btn = gr.Button("🔄 Periksa Status", variant="primary")
-                status_output = gr.Markdown("")
-                
-                check_btn.click(fn=check_status, outputs=status_output)
+                # =================================================================
+                # STATUS TAB
+                # =================================================================
+                with gr.Tab("📊 Status", id="status"):
+                    gr.Markdown("### Status Sistem")
+                    
+                    check_btn = gr.Button("🔄 Periksa Status", variant="primary")
+                    status_output = gr.Markdown("")
+                    
+                    check_btn.click(fn=check_status, outputs=status_output)
         
         # =====================================================================
         # AUTH EVENT HANDLERS
