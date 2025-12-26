@@ -312,6 +312,9 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
         
         final_output = ""
         
+        # Add config info at the top (shows settings were applied)
+        config_info = f"_⚙️ Config: Top-K={top_k}, Temp={temperature}, Tokens={max_tokens}, Team={team_size}, Think={thinking_mode}_"
+        
         # Add thinking section if available
         if show_thinking and thinking_text:
             final_output += f'<details><summary>🧠 <strong>Proses Berpikir</strong></summary>\n\n{thinking_text}\n</details>\n\n---\n\n### ✅ Jawaban\n\n{response_text}'
@@ -325,6 +328,9 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
         # Add research process
         if show_metadata and result_data and result_data.get('research_process'):
             final_output += f'\n\n<details><summary>🔬 <strong>Detail Proses Penelitian</strong></summary>\n\n{result_data["research_process"]}\n</details>'
+        
+        # Add config metadata at the bottom
+        final_output += f'\n\n---\n\n{config_info}'
         
         yield history + [
             {"role": "user", "content": message},
@@ -425,38 +431,58 @@ def search_documents(query: str, num_results: int = 5):
 # =============================================================================
 
 def run_conversational_test(history, config_dict, show_thinking, show_sources, show_metadata):
-    """Run full conversational test with 8 questions"""
+    """Run full conversational test with 8 questions - with error handling"""
+    total_questions = len(TEST_QUESTIONS)
+    completed = 0
+    errors = []
+    
     # Initial message
     history = history + [{
         "role": "assistant",
-        "content": f"🧪 **Starting Conversational Test (8 Questions)**\n\nAuto-feeding questions through API...\n\n**Questions to test:**\n" +
+        "content": f"🧪 **Starting Conversational Test ({total_questions} Questions)**\n\nAuto-feeding questions through API...\n\n**Questions to test:**\n" +
                    "\n".join([f"{i+1}. {q[:80]}..." for i, q in enumerate(TEST_QUESTIONS)])
     }]
     yield history, ""
     
-    # Process each question
+    # Process each question with error handling
     for i, question in enumerate(TEST_QUESTIONS, 1):
-        # Add progress indicator
-        history = history + [{
-            "role": "assistant",
-            "content": f"🔄 **Question {i}/8**\n\nProcessing: _{question[:100]}..._"
-        }]
-        yield history, ""
-        
-        # Remove progress and process question
-        history = history[:-1]
-        
-        for updated_history, cleared_input in chat_with_legal_rag(
-            question, history, config_dict, show_thinking, show_sources, show_metadata
-        ):
-            yield updated_history, cleared_input
-        
-        history = updated_history
+        try:
+            # Add progress indicator
+            history = history + [{
+                "role": "assistant",
+                "content": f"🔄 **Question {i}/{total_questions}**\n\nProcessing: _{question[:100]}..._\n\n_Progress: {completed}/{total_questions} completed_"
+            }]
+            yield history, ""
+            
+            # Remove progress indicator
+            history = history[:-1]
+            
+            # Process question - consume generator fully
+            updated_history = history
+            for updated_history, cleared_input in chat_with_legal_rag(
+                question, history, config_dict, show_thinking, show_sources, show_metadata
+            ):
+                yield updated_history, cleared_input
+            
+            history = updated_history
+            completed += 1
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            errors.append(f"Q{i}: {str(e)[:50]}")
+            history = history + [{
+                "role": "assistant",
+                "content": f"⚠️ **Question {i} Error:** {e}\n\nContinuing to next question..."
+            }]
+            yield history, ""
     
     # Completion message
+    status = "✅ Complete" if len(errors) == 0 else f"⚠️ Completed with {len(errors)} errors"
+    error_summary = "\n\n**Errors:**\n" + "\n".join(errors) if errors else ""
     history = history + [{
         "role": "assistant",
-        "content": f"✅ **Conversational Test Complete**\n\nSuccessfully processed all {len(TEST_QUESTIONS)} questions through the API."
+        "content": f"{status} - **Conversational Test Done**\n\nProcessed {completed}/{total_questions} questions successfully.{error_summary}"
     }]
     yield history, ""
 
