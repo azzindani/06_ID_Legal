@@ -428,7 +428,7 @@ def check_status() -> str:
 def create_unified_interface():
     """Create unified Gradio interface with tabs and auth"""
     
-    with gr.Blocks(css=UNIFIED_CSS, title="Legal RAG Indonesia") as app:
+    with gr.Blocks(title="Legal RAG Indonesia") as app:
         
         # =====================================================================
         # LOGIN PANEL (visible by default)
@@ -520,8 +520,7 @@ def create_unified_interface():
                         with gr.Column(scale=3):
                             chatbot = gr.Chatbot(
                                 label="Percakapan",
-                                height=500,
-                                type="messages"
+                                height=500
                             )
                             
                             with gr.Row():
@@ -668,7 +667,8 @@ def launch_unified_app(
     app.launch(
         share=share,
         server_port=server_port,
-        server_name=server_name
+        server_name=server_name,
+        css=UNIFIED_CSS
     )
 
 
