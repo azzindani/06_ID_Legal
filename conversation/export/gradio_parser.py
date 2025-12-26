@@ -11,13 +11,43 @@ import re
 from typing import Dict, Any, List, Optional
 
 
-def parse_gradio_content(raw_content: str) -> Dict[str, str]:
+def extract_text_content(content: Any) -> str:
+    """
+    Extract plain text from various Gradio message formats.
+    Handles: str, list of dicts [{'text': '...'}], dict {'text': '...'}, etc.
+    """
+    if content is None:
+        return ""
+    
+    if isinstance(content, str):
+        return content
+    
+    if isinstance(content, dict):
+        # Format: {'text': '...', 'type': 'text'}
+        return str(content.get('text', content.get('content', str(content))))
+    
+    if isinstance(content, (list, tuple)):
+        # Format: [{'text': '...', 'type': 'text'}, ...]
+        parts = []
+        for item in content:
+            if isinstance(item, dict):
+                parts.append(str(item.get('text', item.get('content', ''))))
+            elif isinstance(item, str):
+                parts.append(item)
+            else:
+                parts.append(str(item))
+        return '\n'.join(parts)
+    
+    return str(content)
+
+
+def parse_gradio_content(raw_content: Any) -> Dict[str, str]:
     """
     Parse the raw chat content to extract structured sections.
     The content contains HTML details/summary tags for thinking, sources, research process.
     
     Args:
-        raw_content: Raw HTML/Markdown content from chat response
+        raw_content: Raw content from chat response (may be string, dict, or list)
         
     Returns:
         Dict with 'thinking', 'answer', 'sources', 'research_process' keys
@@ -32,7 +62,11 @@ def parse_gradio_content(raw_content: str) -> Dict[str, str]:
     if not raw_content:
         return result
     
-    content = str(raw_content)
+    # First extract plain text from Gradio format
+    content = extract_text_content(raw_content)
+    
+    if not content:
+        return result
     
     # Extract thinking from <details><summary>🧠 ... </summary>...</details>
     thinking_match = re.search(
@@ -63,9 +97,9 @@ def parse_gradio_content(raw_content: str) -> Dict[str, str]:
     if sources_match:
         result['sources'] = sources_match.group(1).strip()
     
-    # Extract research process from <details><summary>🔬 ... Detail Proses...</summary>...</details>
+    # Extract research process from <details><summary>🔬 ... Detail...</summary>...</details>
     research_match = re.search(
-        r'<details>\s*<summary>🔬.*?Detail Proses.*?</summary>\s*(.*?)\s*</details>',
+        r'<details>\s*<summary>🔬.*?Detail.*?</summary>\s*(.*?)\s*</details>',
         content, re.DOTALL | re.IGNORECASE
     )
     if research_match:
@@ -114,15 +148,19 @@ def history_to_session_data(
         item = history[i]
         
         if isinstance(item, dict) and item.get('role') == 'user' and i + 1 < len(history):
-            user_content = str(item.get('content', ''))
+            # Extract user content
+            user_raw = item.get('content', '')
+            user_content = extract_text_content(user_raw)
+            
+            # Extract assistant content
             next_item = history[i + 1]
-            
             if isinstance(next_item, dict):
-                assistant_content = str(next_item.get('content', ''))
+                assistant_raw = next_item.get('content', '')
             else:
-                assistant_content = str(next_item) if next_item else ''
+                assistant_raw = next_item
+            assistant_content = extract_text_content(assistant_raw)
             
-            # Parse the assistant content
+            # Parse the assistant content for structured data
             parsed = parse_gradio_content(assistant_content)
             
             # Build citations from sources if available
