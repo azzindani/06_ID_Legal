@@ -238,12 +238,13 @@ async def retrieve_documents(req: RetrievalRequest, request: Request):
                 chapter=record.get('chapter') or record.get('bab'),
                 article=record.get('article') or record.get('pasal'),
                 effective_date=record.get('effective_date') or record.get('tanggal_penetapan'),
-                content_preview=record.get('content', '')[:200] if record.get('content') else None,
+                content_preview=record.get('content', '')[:500] if record.get('content') else None,
                 score=scores.get('final', 0.0)
             ))
         
         search_time = time.time() - start_time
         
+        # Include full metadata for rich UI (like search_app.py)
         return RetrievalResponse(
             query=req.query,
             documents=documents,
@@ -252,7 +253,13 @@ async def retrieve_documents(req: RetrievalRequest, request: Request):
             metadata={
                 'retrieval_only': True,
                 'min_score': req.min_score,
-                'total_candidates': len(rag_result.get('final_results', []))
+                'top_k': req.top_k,
+                'total_candidates': len(rag_result.get('final_results', [])),
+                # Include full results for rich formatting
+                'final_results': final_results,
+                'phase_metadata': rag_result.get('phase_metadata', {}),
+                'consensus_data': rag_result.get('consensus_data', {}),
+                'research_data': rag_result.get('research_data', {})
             }
         )
         

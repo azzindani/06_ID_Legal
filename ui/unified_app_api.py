@@ -19,6 +19,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from ui.services.api_client import LegalRAGAPIClient
 from utils.text_utils import parse_think_tags
+from utils.research_transparency import format_detailed_research_process
+from utils.formatting import _extract_all_documents_from_metadata
 from conversation.export import (
     MarkdownExporter, JSONExporter, HTMLExporter,
     parse_gradio_content, history_to_session_data, extract_text_content
@@ -515,56 +517,184 @@ Mohon tunggu sejenak, sistem sedang menganalisis query Anda.
         
         docs = result['documents']
         search_time = result.get('search_time', 0)
+        metadata = result.get('metadata', {})
         
-        # Store for export
-        last_search_result = {
-            'query': query,
-            'documents': docs,
-            'search_time': search_time,
-            'metadata': result.get('metadata', {})
+        # Get rich data from API metadata (like search_app.py)
+        final_results = metadata.get('final_results', [])
+        phase_metadata = metadata.get('phase_metadata', {})
+        consensus_data = metadata.get('consensus_data', {})
+        research_data = metadata.get('research_data', {})
+        
+        # Build result dict for format functions (like search_app.py)
+        rich_result = {
+            'final_results': final_results,
+            'phase_metadata': phase_metadata,
+            'consensus_data': consensus_data,
+            'research_data': research_data,
+            'metadata': {
+                'query': query,
+                'total_time': search_time
+            }
         }
         
-        # Format outputs
-        summary = format_search_summary(query, docs, search_time)
-        all_docs = format_all_documents(docs)
+        # Store for export
+        last_search_result = rich_result
+        last_search_result['query'] = query
+        last_search_result['documents'] = docs
+        last_search_result['search_time'] = search_time
         
-        # Create DataFrame for table (like search_app.py)
+        # Format summary (like search_app.py format_summary)
+        summary_lines = [f"## 📋 Ringkasan Hasil Pencarian\n\n"]
+        summary_lines.append(f"**Query:** `{query}`\n")
+        summary_lines.append(f"**Waktu Proses:** {search_time:.3f} detik\n\n")
+        
+        if final_results:
+            summary_lines.append(f"### ⭐ Hasil Relevan ({len(final_results)} dokumen)\n\n")
+            
+            for i, doc in enumerate(final_results, 1):
+                record = doc.get('record', doc)
+                
+                reg_type = record.get('regulation_type', 'N/A')
+                reg_num = record.get('regulation_number', 'N/A')
+                year = record.get('year', 'N/A')
+                about = record.get('about', 'N/A')
+                effective_date = record.get('effective_date', record.get('tanggal_penetapan', ''))
+                
+                chapter = record.get('chapter', record.get('bab', ''))
+                article = record.get('article', record.get('pasal', ''))
+                article_num = record.get('article_number', '')
+                location_parts = []
+                if chapter: location_parts.append(chapter)
+                if article: location_parts.append(article)
+                elif article_num: location_parts.append(article_num)
+                location = " | ".join(location_parts) if location_parts else "Dokumen Lengkap"
+                
+                summary_lines.append(f"{i}. **{reg_type} No. {reg_num}/{year}**\n")
+                summary_lines.append(f"   - **Lokasi:** {location}\n")
+                if effective_date and effective_date != 'N/A':
+                    summary_lines.append(f"   - **Tgl Penetapan:** {effective_date}\n")
+                summary_lines.append(f"   - **Tentang:** _{about}_\n")
+                
+                content = record.get('content', '')
+                if content:
+                    preview = content[:300].replace('\n', ' ') + "..." if len(content) > 300 else content
+                    summary_lines.append(f"   - **Konten:** {preview}\n")
+                summary_lines.append("\n")
+            
+            if phase_metadata:
+                summary_lines.append(f"Analisis dilakukan melalui **{len(phase_metadata)}** fase penelitian agen.\n\n")
+        
+        summary_lines.append("---\n\n")
+        summary_lines.append("### 📊 Statistik Sistem\n\n")
+        all_docs_list = _extract_all_documents_from_metadata(rich_result) if final_results else []
+        summary_lines.append(f"- **Dokumen Dievaluasi:** {len(all_docs_list)}\n")
+        agreement = consensus_data.get('agreement_level', 0) if consensus_data else 0
+        summary_lines.append(f"- **Tingkat Konsensus:** {agreement:.0%}\n")
+        summary_lines.append(f"- **Waktu Proses Total:** {search_time:.2f} detik\n")
+        
+        summary = "".join(summary_lines)
+        
+        # Format all documents using API result
+        all_docs_output = format_all_documents_rich(final_results) if final_results else "❌ Tidak ada dokumen"
+        
+        # Create DataFrame for table (like search_app.py get_docs_dataframe_data)
         table_rows = []
-        for i, d in enumerate(docs, 1):
+        for i, doc in enumerate(final_results, 1):
+            record = doc.get('record', doc)
+            scores = doc.get('scores', {})
+            
+            chapter = record.get('chapter', record.get('bab', ''))
+            article = record.get('article', record.get('pasal', '')) or record.get('article_number', '')
+            location = " | ".join(filter(None, [chapter, article])) or "Lengkap"
+            
             table_rows.append({
                 "No": i,
-                "Jenis": getattr(d, 'regulation_type', ''),
-                "Nomor": getattr(d, 'regulation_number', ''),
-                "Tahun": getattr(d, 'year', ''),
-                "Tentang": getattr(d, 'about', '')[:100] + '...' if len(getattr(d, 'about', '')) > 100 else getattr(d, 'about', ''),
-                "Lokasi": getattr(d, 'location', 'N/A'),
-                "Skor": f"{getattr(d, 'score', 0):.4f}"
+                "Jenis": record.get('regulation_type', ''),
+                "Nomor": record.get('regulation_number', ''),
+                "Tahun": record.get('year', ''),
+                "Lokasi": location,
+                "Tgl Penetapan": record.get('effective_date', record.get('tanggal_penetapan', 'N/A')),
+                "Tentang": record.get('about', ''),
+                "Skor Final": f"{scores.get('final', doc.get('final_score', 0)):.4f}",
+                "Bidang": record.get('kg_primary_domain', ''),
+                "Konten": record.get('content', '')[:150] + "..." if record.get('content') else ""
             })
         table_df = pd.DataFrame(table_rows)
         
-        # Research process (with checklist like search_app.py)
-        research = f"""### 📋 Proses yang Sudah Dilakukan
-
-✅ Query terkirim ke API
-✅ Pencarian dokumen selesai
-✅ {len(docs)} dokumen ditemukan
-✅ Hasil diurutkan berdasarkan relevansi
-✅ Format hasil selesai
-
----
-
-**Statistik:**
-- **Waktu Proses:** {search_time:.3f} detik
-- **Top-K:** {num_results}
-- **Dokumen Ditemukan:** {len(docs)}
-"""
+        # Research process (use format_detailed_research_process like search_app.py)
+        checklist = ["### 📋 Proses yang Sudah Dilakukan\n"]
+        checklist.append("✅ Analisis Query Berhasil")
+        checklist.append("✅ Pemindaian Regulasi Selesai")
+        checklist.append("✅ Konsensus Tim Tercapai")
+        checklist.append("✅ Reranking Final Selesai")
         
-        yield summary, table_df, all_docs, research
+        research_detail = format_detailed_research_process(rich_result, top_n_per_researcher=20, show_content=False)
+        checklist_str = '\n'.join(checklist)
+        research = f"{checklist_str}\n\n---\n\n{research_detail}"
+        
+        yield summary, table_df, all_docs_output, research
         
     except Exception as e:
         import traceback
         traceback.print_exc()
         yield f"❌ Error: {e}", empty_df, "", ""
+
+
+def format_all_documents_rich(final_results: list) -> str:
+    """Format all documents as detailed cards (like search_app.py format_document_card)"""
+    if not final_results:
+        return "❌ Tidak ada dokumen yang ditemukan."
+    
+    output = [f"## 📚 Semua Dokumen Ditemukan ({len(final_results)} dokumen)\n\n"]
+    
+    for i, doc in enumerate(final_results, 1):
+        record = doc.get('record', doc)
+        scores = doc.get('scores', {})
+        
+        reg_type = record.get('regulation_type', 'N/A')
+        reg_num = record.get('regulation_number', 'N/A')
+        year = record.get('year', 'N/A')
+        about = record.get('about', 'N/A')
+        
+        final_score = scores.get('final', doc.get('final_score', 0))
+        semantic_score = scores.get('semantic', 0)
+        keyword_score = scores.get('keyword', 0)
+        kg_score = scores.get('kg', 0)
+        
+        chapter = record.get('chapter', record.get('bab', ''))
+        article = record.get('article', record.get('pasal', '')) or record.get('article_number', '')
+        location = " | ".join(filter(None, [chapter, article])) or "Dokumen Lengkap"
+        eff_date = record.get('effective_date', record.get('tanggal_penetapan', 'N/A'))
+        
+        content = record.get('content', '')
+        content_preview = content[:400] + "..." if len(content) > 400 else content
+        
+        output.append(f"""### 📄 {i}. {reg_type} No. {reg_num}/{year}
+
+**Lokasi:** {location}
+**Tgl Penetapan:** {eff_date}
+**Tentang:** {about}
+
+---
+
+#### 📊 Skor Relevansi
+
+| Komponen | Nilai |
+|----------|-------|
+| **Final Score** | **{final_score:.4f}** |
+| Semantic | {semantic_score:.4f} |
+| Keyword | {keyword_score:.4f} |
+| Knowledge Graph | {kg_score:.4f} |
+
+#### 📝 Konten
+
+{content_preview}
+
+---
+
+""")
+    
+    return "".join(output)
 
 
 def export_search_results(export_format: str):
