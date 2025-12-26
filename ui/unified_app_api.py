@@ -575,7 +575,11 @@ def create_gradio_interface():
                     min-height: 80vh !important;
                 }
                 #login-panel > div {
-                    max-width: 350px !important;
+                    max-width: 300px !important;
+                    width: 100% !important;
+                }
+                #login-panel button {
+                    max-width: 300px !important;
                     width: 100% !important;
                 }
             </style>
