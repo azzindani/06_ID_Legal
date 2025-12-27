@@ -136,7 +136,7 @@ async def upload_document(
         
         try:
             # Parse the file
-            doc_info = parser.parse_file(tmp_path, session_id, original_filename=file.filename)
+            doc_info = parser.parse_file(tmp_path, session_id, filename=file.filename)
             
             logger.success(f"Document parsed successfully", {
                 "document_id": doc_info.get('id'),
