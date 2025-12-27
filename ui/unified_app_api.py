@@ -216,17 +216,28 @@ def upload_document_handler(files):
     """
     global api_client, current_session, attached_documents
     
+    print(f"[UPLOAD] Called with files: {files}", flush=True)
+    
     if not files:
         return get_attached_docs_display()
     
     if api_client is None:
         initialize_api()
     
+    # Ensure session exists
+    if not current_session:
+        import uuid
+        current_session = f"ui-session-{uuid.uuid4().hex[:8]}"
+        print(f"[UPLOAD] Created session: {current_session}", flush=True)
+    
     results = []
     for file_obj in files if isinstance(files, list) else [files]:
         try:
             file_path = file_obj.name if hasattr(file_obj, 'name') else str(file_obj)
+            print(f"[UPLOAD] Uploading: {file_path}", flush=True)
+            
             doc_info = api_client.upload_document(file_path, current_session)
+            print(f"[UPLOAD] Result: {doc_info}", flush=True)
             
             attached_documents.append({
                 'id': doc_info.get('document_id', ''),
@@ -236,9 +247,12 @@ def upload_document_handler(files):
             })
             results.append(f"✅ {os.path.basename(file_path)}")
         except Exception as e:
+            print(f"[UPLOAD] Error: {e}", flush=True)
             results.append(f"❌ {os.path.basename(str(file_obj))}: {e}")
     
-    return get_attached_docs_display()
+    display = get_attached_docs_display()
+    print(f"[UPLOAD] Display: {display}", flush=True)
+    return display
 
 
 def extract_url_handler(url: str):
@@ -458,7 +472,8 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                     saw_think = True
                     new_text = new_text.replace('<think>', '')
                     if not header_shown and show_thinking:
-                        live_output = ['🧠 **Sedang berfikir...**\n\n']
+                        # Preserve doc_info_section at start of live_output
+                        live_output = [doc_info_section, '🧠 **Sedang berfikir...**\n\n']
                         header_shown = True
                 
                 if '</think>' in new_text:
@@ -481,7 +496,7 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                         saw_think = True
                         in_thinking = '</think>' not in accumulated_text
                         if not header_shown and show_thinking:
-                            live_output = ['🧠 **Sedang berfikir...**\n\n']
+                            live_output = [doc_info_section, '🧠 **Sedang berfikir...**\n\n']
                             header_shown = True
                         think_start = accumulated_text.find('<think>') + 7
                         if '</think>' in accumulated_text:
@@ -499,7 +514,7 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                     elif len(accumulated_text) > 100:
                         # No think tag, assume direct answer
                         if not header_shown:
-                            live_output = ['✅ **Jawaban:**\n\n']
+                            live_output = [doc_info_section, '✅ **Jawaban:**\n\n']
                             header_shown = True
                         final_answer.append(new_text)
                         live_output.append(new_text)
