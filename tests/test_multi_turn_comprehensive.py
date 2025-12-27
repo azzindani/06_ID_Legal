@@ -319,7 +319,8 @@ class AuditAPIClient:
                 'thinking_level': 'low',
                 'stream': True,
                 'top_k': 5,
-                'max_tokens': 1024
+                'max_tokens': 1024,
+                'max_document_chars': 20000  # Limit document context to prevent OOM
             }
             
             # Streaming request

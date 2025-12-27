@@ -79,6 +79,7 @@ class ChatRequest(BaseModel):
     # Document context (NEW)
     document_ids: Optional[List[str]] = Field(None, description="Specific document IDs to include as context")
     include_session_documents: bool = Field(False, description="Include all session documents as context")
+    max_document_chars: int = Field(100000, ge=1000, le=100000, description="Max chars per document context (tests can lower to prevent OOM)")
     
     @validator('query')
     def validate_query_field(cls, v):
@@ -411,15 +412,21 @@ async def conversational_rag(req: ChatRequest, request: Request):
                     else:
                         docs = []
                     
-                    # Build context
+                    # Build context with truncation to prevent OOM
                     if docs:
-                        doc_list = [
-                            {'filename': d['filename'], 'extracted_text': d['extracted_text']}
-                            for d in docs if d.get('extracted_text')
-                        ]
+                        doc_list = []
+                        for d in docs:
+                            text = d.get('extracted_text', '')
+                            if text:
+                                # Truncate to max_document_chars if too long
+                                if len(text) > req.max_document_chars:
+                                    text = text[:req.max_document_chars] + "\n\n[... Dokumen dipotong karena batas ukuran ...]"
+                                    logger.info(f"Truncated {d['filename']} from {len(d['extracted_text'])} to {req.max_document_chars} chars")
+                                doc_list.append({'filename': d['filename'], 'extracted_text': text})
+                        
                         if doc_list:
                             document_context = builder.build_prompt_section(doc_list)
-                            logger.info(f"Injected {len(doc_list)} documents into context")
+                            logger.info(f"Injected {len(doc_list)} documents into context (max {req.max_document_chars} chars each)")
             except Exception as e:
                 logger.warning(f"Failed to build document context: {e}")
         
