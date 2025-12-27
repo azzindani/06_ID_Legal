@@ -1348,7 +1348,10 @@ def create_gradio_interface():
             outputs=[login_panel, main_app, chatbot]
         )
     
-    interface.queue()
+    # Configure queue with explicit settings for sequential processing
+    # default_concurrency_limit=1 ensures requests are processed one at a time
+    # This prevents race conditions with GPU memory and model state
+    interface.queue(default_concurrency_limit=1, max_size=20)
     return interface
 
 

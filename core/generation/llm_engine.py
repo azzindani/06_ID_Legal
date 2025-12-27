@@ -49,6 +49,10 @@ class LLMEngine:
         self._model = None
         self._tokenizer = None
         
+        # CRITICAL: Lock to serialize LLM generation requests
+        # Only one generation can run at a time to prevent GPU conflicts
+        self._generation_lock = __import__('threading').Lock()
+        
         self.logger.info("LLMEngine initialized", {
             "model": self.model_name,
             "device": str(self.device),
@@ -183,140 +187,139 @@ class LLMEngine:
                 'success': False
             }
         
-        self.logger.info("Starting generation", {
-            "prompt_length": len(prompt),
-            "max_new_tokens": max_new_tokens or self.max_new_tokens
-        })
+        # CRITICAL: Acquire lock to serialize generation requests
+        # Use context manager for cleaner lock management
+        with self._generation_lock:
+            self.logger.info("Starting generation (lock acquired)", {
+                "prompt_length": len(prompt),
+                "max_new_tokens": max_new_tokens or self.max_new_tokens
+            })
 
-        # CRITICAL: Aggressive memory cleanup BEFORE generation to prevent OOM
-        # This is especially important after expansion which can consume significant memory
-        cleanup_before_generation("LLM generation")
-        log_memory_state("Pre-generation")
+            # CRITICAL: Aggressive memory cleanup BEFORE generation to prevent OOM
+            cleanup_before_generation("LLM generation")
+            log_memory_state("Pre-generation")
 
-        start_time = time.time()
+            start_time = time.time()
 
-        try:
-            # Apply chat template if available (required for instruction-tuned models)
-            formatted_prompt = prompt
-            if hasattr(self._tokenizer, 'chat_template') and self._tokenizer.chat_template:
-                try:
-                    # Structure as chat messages
-                    messages = [{"role": "user", "content": prompt}]
-                    formatted_prompt = self._tokenizer.apply_chat_template(
-                        messages,
-                        tokenize=False,
-                        add_generation_prompt=True
+            try:
+                # Apply chat template if available (required for instruction-tuned models)
+                formatted_prompt = prompt
+                if hasattr(self._tokenizer, 'chat_template') and self._tokenizer.chat_template:
+                    try:
+                        # Structure as chat messages
+                        messages = [{"role": "user", "content": prompt}]
+                        formatted_prompt = self._tokenizer.apply_chat_template(
+                            messages,
+                            tokenize=False,
+                            add_generation_prompt=True
+                        )
+                        self.logger.debug("Applied chat template to prompt")
+                    except Exception as e:
+                        self.logger.warning(f"Failed to apply chat template: {e}, using raw prompt")
+                        formatted_prompt = prompt
+
+                # Tokenize input
+                inputs = self._tokenizer(
+                    formatted_prompt,
+                    return_tensors='pt',
+                    padding=True,
+                    truncation=True,
+                    max_length=self.max_length
+                ).to(self.device)
+
+                input_length = inputs['input_ids'].shape[1]
+
+                self.logger.debug("Input tokenized", {
+                    "input_tokens": input_length
+                })
+
+                # Generation parameters
+                gen_kwargs = {
+                    'max_new_tokens': max_new_tokens or self.max_new_tokens,
+                    'temperature': temperature or self.temperature,
+                    'top_p': top_p or self.top_p,
+                    'top_k': top_k or self.top_k,
+                    'repetition_penalty': self.repetition_penalty,
+                    'do_sample': True,
+                    'pad_token_id': self._tokenizer.pad_token_id,
+                    'eos_token_id': self._tokenizer.eos_token_id,
+                }
+                
+                # Generate
+                with torch.no_grad():
+                    outputs = self._model.generate(
+                        **inputs,
+                        **gen_kwargs
                     )
-                    self.logger.debug("Applied chat template to prompt")
-                except Exception as e:
-                    self.logger.warning(f"Failed to apply chat template: {e}, using raw prompt")
-                    formatted_prompt = prompt
-
-            # Tokenize input
-            inputs = self._tokenizer(
-                formatted_prompt,
-                return_tensors='pt',
-                padding=True,
-                truncation=True,
-                max_length=self.max_length
-            ).to(self.device)
-
-            input_length = inputs['input_ids'].shape[1]
-
-            self.logger.debug("Input tokenized", {
-                "input_tokens": input_length
-            })
-
-            # Generation parameters
-            gen_kwargs = {
-                'max_new_tokens': max_new_tokens or self.max_new_tokens,
-                'temperature': temperature or self.temperature,
-                'top_p': top_p or self.top_p,
-                'top_k': top_k or self.top_k,
-                'repetition_penalty': self.repetition_penalty,
-                'do_sample': True,
-                # use_cache=True by default - cache is used WITHIN generation, not between calls
-                # Deleting outputs frees the cache (past_key_values)
-                'pad_token_id': self._tokenizer.pad_token_id,
-                'eos_token_id': self._tokenizer.eos_token_id,
-            }
-            
-            # Generate
-            with torch.no_grad():
-                outputs = self._model.generate(
-                    **inputs,
-                    **gen_kwargs
+                
+                # Decode
+                generated_ids = outputs[0][input_length:]
+                generated_text = self._tokenizer.decode(
+                    generated_ids,
+                    skip_special_tokens=True
                 )
-            
-            # Decode
-            generated_ids = outputs[0][input_length:]
-            generated_text = self._tokenizer.decode(
-                generated_ids,
-                skip_special_tokens=True
-            )
 
-            # Debug logging for short generations
-            tokens_generated = len(generated_ids)
-            if tokens_generated <= 5:
-                self.logger.warning(f"Very short generation detected: {tokens_generated} tokens")
-                raw_tokens = [self._tokenizer.decode([tid], skip_special_tokens=False) for tid in generated_ids.tolist()]
-                self.logger.debug(f"Generated token IDs: {generated_ids.tolist()}")
-                self.logger.debug(f"Generated tokens (raw): {raw_tokens}")
-                self.logger.debug(f"EOS token ID: {self._tokenizer.eos_token_id}, PAD token ID: {self._tokenizer.pad_token_id}")
-                if len(generated_ids) > 0 and generated_ids[0].item() == self._tokenizer.eos_token_id:
-                    self.logger.error("First generated token is EOS - model may have wrong config or prompt issue")
+                # Debug logging for short generations
+                tokens_generated = len(generated_ids)
+                if tokens_generated <= 5:
+                    self.logger.warning(f"Very short generation detected: {tokens_generated} tokens")
+                    raw_tokens = [self._tokenizer.decode([tid], skip_special_tokens=False) for tid in generated_ids.tolist()]
+                    self.logger.debug(f"Generated token IDs: {generated_ids.tolist()}")
+                    self.logger.debug(f"Generated tokens (raw): {raw_tokens}")
+                    self.logger.debug(f"EOS token ID: {self._tokenizer.eos_token_id}, PAD token ID: {self._tokenizer.pad_token_id}")
+                    if len(generated_ids) > 0 and generated_ids[0].item() == self._tokenizer.eos_token_id:
+                        self.logger.error("First generated token is EOS - model may have wrong config or prompt issue")
 
-            # Post-process
-            if stop_sequences:
-                for stop_seq in stop_sequences:
-                    if stop_seq in generated_text:
-                        generated_text = generated_text[:generated_text.index(stop_seq)]
-            
-            generation_time = time.time() - start_time
-            tokens_generated = len(generated_ids)
-            tokens_per_second = tokens_generated / generation_time if generation_time > 0 else 0
-            
-            self.logger.success("Generation completed", {
-                "tokens_generated": tokens_generated,
-                "generation_time": f"{generation_time:.2f}s",
-                "tokens_per_second": f"{tokens_per_second:.1f}"
-            })
+                # Post-process
+                if stop_sequences:
+                    for stop_seq in stop_sequences:
+                        if stop_seq in generated_text:
+                            generated_text = generated_text[:generated_text.index(stop_seq)]
+                
+                generation_time = time.time() - start_time
+                tokens_generated = len(generated_ids)
+                tokens_per_second = tokens_generated / generation_time if generation_time > 0 else 0
+                
+                self.logger.success("Generation completed", {
+                    "tokens_generated": tokens_generated,
+                    "generation_time": f"{generation_time:.2f}s",
+                    "tokens_per_second": f"{tokens_per_second:.1f}"
+                })
 
-            # CRITICAL: Clean up tensors to prevent OOM on next generation
-            # Delete inputs and outputs to free GPU memory immediately
-            del inputs
-            del outputs
-            del generated_ids
+                # CRITICAL: Clean up tensors to prevent OOM on next generation
+                del inputs
+                del outputs
+                del generated_ids
 
-            # Use standardized cleanup after generation
-            from utils.memory_utils import aggressive_cleanup
-            aggressive_cleanup("post-generation cleanup")
+                # Use standardized cleanup after generation
+                from utils.memory_utils import aggressive_cleanup
+                aggressive_cleanup("post-generation cleanup")
 
-            return {
-                'generated_text': generated_text.strip(),
-                'tokens_generated': tokens_generated,
-                'generation_time': generation_time,
-                'tokens_per_second': tokens_per_second,
-                'success': True,
-                'error': None
-            }
-            
-        except Exception as e:
-            self.logger.error("Generation failed", {
-                "error": str(e),
-                "error_type": type(e).__name__
-            })
-            
-            import traceback
-            self.logger.debug("Traceback", {
-                "traceback": traceback.format_exc()[:500]
-            })
-            
-            return {
-                'generated_text': '',
-                'error': str(e),
-                'success': False
-            }
+                return {
+                    'generated_text': generated_text.strip(),
+                    'tokens_generated': tokens_generated,
+                    'generation_time': generation_time,
+                    'tokens_per_second': tokens_per_second,
+                    'success': True,
+                    'error': None
+                }
+                
+            except Exception as e:
+                self.logger.error("Generation failed", {
+                    "error": str(e),
+                    "error_type": type(e).__name__
+                })
+                
+                import traceback
+                self.logger.debug("Traceback", {
+                    "traceback": traceback.format_exc()[:500]
+                })
+                
+                return {
+                    'generated_text': '',
+                    'error': str(e),
+                    'success': False
+                }
     
     def generate_stream(
         self,
@@ -354,7 +357,20 @@ class LLMEngine:
             }
             return
 
-        self.logger.info("Starting streaming generation with TextIteratorStreamer")
+        # CRITICAL: Acquire lock to serialize generation requests
+        # This prevents concurrent GPU access which causes hangs
+        lock_acquired = self._generation_lock.acquire(timeout=30.0)  # 30 second timeout
+        if not lock_acquired:
+            self.logger.error("Failed to acquire generation lock - another generation is in progress")
+            yield {
+                'token': '',
+                'error': 'Generation busy - previous request still running',
+                'done': True,
+                'success': False
+            }
+            return
+
+        self.logger.info("Starting streaming generation with TextIteratorStreamer (lock acquired)")
 
         # CRITICAL: Clear GPU cache BEFORE generation to prevent OOM
         # Especially important for long prompts (thinking modes)
@@ -447,8 +463,11 @@ class LLMEngine:
                     'success': True
                 }
 
-            # Wait for generation thread to complete
-            thread.join()
+            # Wait for generation thread to complete with timeout
+            # This prevents indefinite blocking if thread gets stuck
+            thread.join(timeout=300.0)  # 5 minute timeout
+            if thread.is_alive():
+                self.logger.warning("Generation thread still alive after timeout - may have stalled")
 
             generation_time = time.time() - start_time
             tokens_per_second = tokens_generated / generation_time if generation_time > 0 else 0
@@ -497,6 +516,15 @@ class LLMEngine:
                 'done': True,
                 'success': False
             }
+        
+        finally:
+            # CRITICAL: Always release the lock to allow next generation
+            try:
+                self._generation_lock.release()
+                self.logger.debug("Generation lock released")
+            except RuntimeError:
+                # Lock was not acquired (shouldn't happen, but handle gracefully)
+                pass
 
     def unload_model(self):
         """Unload model to free memory"""

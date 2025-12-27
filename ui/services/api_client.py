@@ -11,6 +11,8 @@ import os
 import json
 import time
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from typing import Dict, List, Any, Optional, Generator
 from dataclasses import dataclass
 from utils.logger_utils import get_logger
@@ -76,16 +78,43 @@ class LegalRAGAPIClient:
         Args:
             base_url: API server URL (default: localhost:8000)
             api_key: API key for authentication
-            timeout: Request timeout in seconds
+            timeout: Request timeout in seconds (for read operations)
         """
         self.base_url = base_url.rstrip('/')
         self.api_key = api_key or os.environ.get('LEGAL_API_KEY', '')
-        self.timeout = timeout
+        # Use tuple timeout: (connect_timeout, read_timeout)
+        self.timeout = (10, timeout)  # 10s connect, configurable read
         
-        self.headers = {
+        # Create session with connection pooling for proper connection reuse
+        self.session = requests.Session()
+        
+        # Configure retry strategy
+        retry_strategy = Retry(
+            total=3,
+            backoff_factor=0.5,
+            status_forcelist=[500, 502, 503, 504],
+            allowed_methods=["HEAD", "GET", "POST", "PUT", "DELETE", "OPTIONS"]
+        )
+        
+        # Configure adapter with explicit pool settings
+        # pool_block=False prevents blocking when pool is exhausted (raises instead)
+        adapter = HTTPAdapter(
+            pool_connections=10,
+            pool_maxsize=10,
+            max_retries=retry_strategy,
+            pool_block=False
+        )
+        self.session.mount('http://', adapter)
+        self.session.mount('https://', adapter)
+        
+        # Set default headers on session
+        self.session.headers.update({
             'Content-Type': 'application/json',
             'X-API-Key': self.api_key
-        }
+        })
+        
+        # Keep headers attribute for backward compatibility
+        self.headers = dict(self.session.headers)
         
         logger.info(f"API client initialized | base_url={self.base_url}")
     
@@ -96,14 +125,14 @@ class LegalRAGAPIClient:
         data: Optional[Dict] = None,
         stream: bool = False
     ) -> requests.Response:
-        """Make HTTP request with error handling"""
+        """Make HTTP request with error handling using session for connection pooling"""
         url = f"{self.base_url}{endpoint}"
         
         try:
-            response = requests.request(
+            # Use session for proper connection pooling
+            response = self.session.request(
                 method=method,
                 url=url,
-                headers=self.headers,
                 json=data,
                 timeout=self.timeout,
                 stream=stream
@@ -114,7 +143,7 @@ class LegalRAGAPIClient:
         except requests.exceptions.ConnectionError:
             raise ConnectionError(f"Cannot connect to API at {self.base_url}")
         except requests.exceptions.Timeout:
-            raise TimeoutError(f"Request timed out after {self.timeout}s")
+            raise TimeoutError(f"Request timed out after {self.timeout[1]}s")
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 401:
                 raise PermissionError("Invalid API key")
@@ -300,23 +329,39 @@ class LegalRAGAPIClient:
         # Add any extra kwargs
         payload.update(kwargs)
         
-        response = None
+        url = f"{self.base_url}/rag/chat"
+        
+        # Use session.post with context manager to ensure connection is released
+        # This is critical: 'with' ensures close() is called even if generator is not fully consumed
         try:
-            response = self._request('POST', '/rag/chat', payload, stream=True)
-            
-            for line in response.iter_lines():
-                if line:
-                    content = line.decode('utf-8')
-                    if content.startswith('data: '):
-                        try:
-                            event = json.loads(content[6:])
-                            yield event
-                        except json.JSONDecodeError:
-                            continue
-        finally:
-            # Always close the response to free the connection
-            if response is not None:
-                response.close()
+            with self.session.post(
+                url, 
+                json=payload, 
+                stream=True, 
+                timeout=self.timeout
+            ) as response:
+                response.raise_for_status()
+                
+                for line in response.iter_lines():
+                    if line:
+                        content = line.decode('utf-8')
+                        if content.startswith('data: '):
+                            try:
+                                event = json.loads(content[6:])
+                                yield event
+                            except json.JSONDecodeError:
+                                continue
+        except requests.exceptions.ConnectionError:
+            raise ConnectionError(f"Cannot connect to API at {self.base_url}")
+        except requests.exceptions.Timeout:
+            raise TimeoutError(f"Request timed out after {self.timeout[1]}s")
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 401:
+                raise PermissionError("Invalid API key")
+            elif e.response.status_code == 429:
+                raise RuntimeError("Rate limit exceeded")
+            else:
+                raise RuntimeError(f"API error: {e.response.text}")
     
     # =========================================================================
     # Session Management
