@@ -338,15 +338,16 @@ def refresh_documents():
 def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_sources=True, show_metadata=True):
     """
     Main chat function with streaming and think tag parsing.
-    Matches gradio_app.py behavior exactly.
+    Now with: URL auto-detection, document display in user message and response.
     """
+    import re
     print(f"\n[CHAT] === New chat request: {message[:50]}... ===", flush=True)
     
     if not message.strip():
         print("[CHAT] Empty message, returning", flush=True)
         return history, ""
     
-    global api_client, current_session
+    global api_client, current_session, attached_documents
     print(f"[CHAT] api_client is {'set' if api_client else 'None'}, current_session={current_session}", flush=True)
     
     if api_client is None:
@@ -358,6 +359,25 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
         history.append({"role": "assistant", "content": "❌ API not connected. Please refresh and try again."})
         yield history, ""
         return
+    
+    # Auto-detect and fetch URLs in message
+    url_pattern = r'https?://[^\s<>"{}|\\^`\[\]]+'
+    urls_found = re.findall(url_pattern, message)
+    urls_fetched = []
+    
+    for url in urls_found[:3]:  # Max 3 URLs
+        try:
+            print(f"[CHAT] Auto-fetching URL: {url[:50]}...")
+            doc_info = api_client.extract_from_url(url, current_session)
+            attached_documents.append({
+                'id': doc_info.get('document_id', ''),
+                'filename': url[:40] + '...' if len(url) > 40 else url,
+                'char_count': doc_info.get('char_count', 0),
+                'format': 'url'
+            })
+            urls_fetched.append(url)
+        except Exception as e:
+            print(f"[CHAT] URL fetch failed: {e}")
     
     try:
         # State tracking (same as gradio_app.py)
@@ -379,20 +399,34 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
         
         print(f"[CHAT] Config: top_k={top_k}, temp={temperature}, tokens={max_tokens}, team={team_size}, think={thinking_mode}", flush=True)
         
-        # Initial processing message
-        yield history + [
-            {"role": "user", "content": message},
-            {"role": "assistant", "content": f"🔄 **Memproses permintaan...**\n_Settings: Top-K={top_k}, Temp={temperature}, Tokens={max_tokens}, Team={team_size}, Thinking={thinking_mode}_"}
-        ], ""
-        
-        print("[CHAT] Calling api_client.chat_stream()...", flush=True)
+        # Build user message content with attached documents
+        user_content = message
+        if attached_documents:
+            doc_list = "\n".join([f"📄 {d['filename']} ({d['char_count']:,} chars)" for d in attached_documents])
+            user_content = f"{message}\n\n---\n**📎 Dokumen terlampir:**\n{doc_list}"
         
         # Check if documents are attached
         include_docs = bool(config_dict.get('include_documents', True) and attached_documents)
         max_doc_chars = int(config_dict.get('max_document_chars', 20000))
         
+        # Build document info section for response
+        doc_info_section = ""
         if include_docs:
+            doc_info_section = "📄 **Dokumen dalam konteks:**\n"
+            for d in attached_documents:
+                doc_info_section += f"- {d['filename']} ({d['char_count']:,} karakter)\n"
+            doc_info_section += "\n---\n\n"
             print(f"[CHAT] Including {len(attached_documents)} documents in context", flush=True)
+        
+        # Initial processing message with document info
+        initial_response = doc_info_section + f"🔄 **Memproses permintaan...**\n_Settings: Top-K={top_k}, Temp={temperature}, Tokens={max_tokens}, Team={team_size}_"
+        
+        yield history + [
+            {"role": "user", "content": user_content},
+            {"role": "assistant", "content": initial_response}
+        ], ""
+        
+        print("[CHAT] Calling api_client.chat_stream()...", flush=True)
         
         # Stream response from API with ALL settings including document context
         chunk_count = 0
@@ -1138,10 +1172,12 @@ python tests/test_multi_turn_comprehensive.py
     except:
         pass
     
-    # Test 1: Ask about documents feature
+    # Test with 4 turns as requested
     test_questions = [
         "Jelaskan bagaimana fitur upload dokumen ini bekerja dengan sistem konsultasi hukum.",
-        "Apa keuntungan menggunakan konteks dokumen dalam konsultasi hukum?"
+        "Apa keuntungan menggunakan konteks dokumen dalam konsultasi hukum?",
+        "Bagaimana sistem ini memproses pertanyaan yang berkaitan dengan dokumen yang diunggah?",
+        "Apa saja jenis dokumen yang didukung oleh sistem ini?"
     ]
     
     for i, question in enumerate(test_questions, 1):
@@ -1333,7 +1369,7 @@ def create_gradio_interface():
                 # =====================================================================
                 with gr.TabItem("💬 Konsultasi Hukum"):
                     chatbot = gr.Chatbot(
-                        height="65vh",
+                        height="60vh",
                         show_label=False,
                         autoscroll=True
                     )
@@ -1346,7 +1382,7 @@ def create_gradio_interface():
                             elem_id="attached-docs"
                         )
                     
-                    # Input row with attachment button
+                    # Input row with attachment button - larger input
                     with gr.Row():
                         attach_btn = gr.UploadButton(
                             "📎",
@@ -1357,28 +1393,24 @@ def create_gradio_interface():
                             min_width=50
                         )
                         msg_input = gr.Textbox(
-                            placeholder="Tanyakan tentang hukum Indonesia... (📎 untuk lampirkan dokumen)",
+                            placeholder="Tanyakan tentang hukum Indonesia... (📎 upload dokumen, atau paste URL langsung)",
                             show_label=False,
                             container=False,
                             scale=10,
                             submit_btn=True,
-                            lines=1,
-                            max_lines=3,
+                            lines=2,
+                            max_lines=5,
                             interactive=True
                         )
                     
-                    # URL extraction and document controls (accordion)
-                    with gr.Accordion("🌐 Ekstrak dari URL / Kelola Dokumen", open=False):
-                        with gr.Row():
-                            url_input = gr.Textbox(
-                                placeholder="https://example.com/document.pdf",
-                                label="URL",
-                                scale=8
-                            )
-                            url_extract_btn = gr.Button("🌐 Ekstrak", scale=2)
-                        with gr.Row():
-                            refresh_docs_btn = gr.Button("🔄 Refresh", size="sm")
-                            clear_docs_btn = gr.Button("🗑️ Hapus Semua", size="sm", variant="stop")
+                    # Simple document controls (no URL accordion - URLs auto-detected in chat)
+                    with gr.Row():
+                        refresh_docs_btn = gr.Button("🔄 Refresh", size="sm", scale=1)
+                        clear_docs_btn = gr.Button("🗑️ Hapus Semua Dokumen", size="sm", variant="stop", scale=2)
+                    
+                    # Hidden components for compatibility (not displayed)
+                    url_input = gr.Textbox(visible=False)
+                    url_extract_btn = gr.Button(visible=False)
                     
                     # 8 Examples with 2 per page
                     with gr.Row():
