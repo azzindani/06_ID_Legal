@@ -230,6 +230,66 @@ Path(LOG_DIR).mkdir(parents=True, exist_ok=True)
 Path(CACHE_DIR).mkdir(parents=True, exist_ok=True)
 
 # =============================================================================
+# DOCUMENT PARSER CONFIGURATION
+# =============================================================================
+
+# Document upload limits
+DOCUMENT_MAX_FILES_PER_SESSION = int(os.getenv("DOCUMENT_MAX_FILES_PER_SESSION", "5"))
+DOCUMENT_MAX_FILE_SIZE_MB = int(os.getenv("DOCUMENT_MAX_FILE_SIZE_MB", "5"))
+DOCUMENT_MAX_CHARS_PER_FILE = int(os.getenv("DOCUMENT_MAX_CHARS_PER_FILE", "50000"))
+DOCUMENT_MAX_CHARS_TOTAL = int(os.getenv("DOCUMENT_MAX_CHARS_TOTAL", "100000"))
+
+# Storage settings
+DOCUMENT_TTL_HOURS = int(os.getenv("DOCUMENT_TTL_HOURS", "24"))
+DOCUMENT_TEMP_DIR = os.getenv("DOCUMENT_TEMP_DIR", "uploads/temp")
+
+# OCR settings
+DOCUMENT_OCR_PROVIDER = os.getenv("DOCUMENT_OCR_PROVIDER", "tesseract")  # tesseract, easyocr
+DOCUMENT_OCR_LANGUAGES = os.getenv("DOCUMENT_OCR_LANGUAGES", "ind,eng").split(",")
+
+# Supported formats (can be restricted via environment)
+DOCUMENT_ALLOWED_EXTENSIONS = os.getenv(
+    "DOCUMENT_ALLOWED_EXTENSIONS",
+    ".pdf,.docx,.doc,.txt,.md,.html,.htm,.json,.csv,.xml,.rtf,.png,.jpg,.jpeg,.tiff,.bmp"
+).split(",")
+
+# Document parser configuration dict
+DOCUMENT_PARSER_CONFIG = {
+    'max_documents_per_session': DOCUMENT_MAX_FILES_PER_SESSION,
+    'max_file_size_mb': DOCUMENT_MAX_FILE_SIZE_MB,
+    'max_chars_per_document': DOCUMENT_MAX_CHARS_PER_FILE,
+    'max_chars_total': DOCUMENT_MAX_CHARS_TOTAL,
+    'document_ttl_hours': DOCUMENT_TTL_HOURS,
+    'temp_upload_dir': DOCUMENT_TEMP_DIR,
+    'ocr_provider': DOCUMENT_OCR_PROVIDER,
+    'ocr_languages': DOCUMENT_OCR_LANGUAGES,
+    'allowed_extensions': DOCUMENT_ALLOWED_EXTENSIONS
+}
+
+# =============================================================================
+# URL EXTRACTION CONFIGURATION
+# =============================================================================
+
+# URL extraction settings
+URL_EXTRACTION_ENABLED = os.getenv("URL_EXTRACTION_ENABLED", "true").lower() == "true"
+URL_EXTRACTION_TIMEOUT = int(os.getenv("URL_EXTRACTION_TIMEOUT", "10"))
+URL_EXTRACTION_MAX_SIZE_MB = int(os.getenv("URL_EXTRACTION_MAX_SIZE_MB", "5"))
+
+# Optional domain whitelist (empty = allow all public URLs)
+# Example: "go.id,kemenkeu.go.id,hukumonline.com"
+URL_ALLOWED_DOMAINS = os.getenv("URL_ALLOWED_DOMAINS", "").split(",") if os.getenv("URL_ALLOWED_DOMAINS") else None
+
+# URL extraction configuration dict
+URL_EXTRACTION_CONFIG = {
+    'enabled': URL_EXTRACTION_ENABLED,
+    'timeout': URL_EXTRACTION_TIMEOUT,
+    'max_size_bytes': URL_EXTRACTION_MAX_SIZE_MB * 1024 * 1024,
+    'allowed_domains': URL_ALLOWED_DOMAINS,
+    'user_agent': 'LegalRAG-Bot/1.0 (+https://github.com/azzindani/06_ID_Legal)'
+}
+
+
+# =============================================================================
 # THINKING MODE CONFIGURATION
 # =============================================================================
 

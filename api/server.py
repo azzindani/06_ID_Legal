@@ -37,6 +37,19 @@ async def lifespan(app: FastAPI):
 
     # Initialize conversation manager and store in app.state
     app.state.conversation_manager = ConversationManager()
+    
+    # Initialize document parser module
+    try:
+        import document_parser
+        if document_parser.initialize():
+            app.state.document_parser_initialized = True
+            logger.info("Document parser module initialized")
+        else:
+            app.state.document_parser_initialized = False
+            logger.warning("Document parser initialization failed - uploads disabled")
+    except Exception as e:
+        app.state.document_parser_initialized = False
+        logger.warning(f"Document parser not available: {e}")
 
     logger.info("API ready to serve requests")
 
@@ -46,6 +59,14 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down API...")
     if hasattr(app.state, 'pipeline') and app.state.pipeline:
         app.state.pipeline.shutdown()
+    
+    # Cleanup document parser
+    try:
+        import document_parser
+        document_parser.shutdown()
+    except:
+        pass
+        
     logger.info("API shutdown complete")
 
 
@@ -113,12 +134,14 @@ def create_app() -> FastAPI:
         search_router, generate_router, health_router, 
         session_router, rag_enhanced_router
     )
+    from .routes.documents import router as documents_router
 
     app.include_router(health_router, prefix="/api/v1", tags=["Health"])
     app.include_router(search_router, prefix="/api/v1", tags=["Search"])
     app.include_router(generate_router, prefix="/api/v1", tags=["Generate"])
     app.include_router(session_router, prefix="/api/v1", tags=["Session"])
     app.include_router(rag_enhanced_router, prefix="/api/v1", tags=["Enhanced RAG"])
+    app.include_router(documents_router, prefix="/api/v1", tags=["Documents"])
 
     return app
 
