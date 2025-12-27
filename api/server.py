@@ -115,7 +115,10 @@ def create_app() -> FastAPI:
             '/openapi.json',
             '/api/v1/health',
             '/api/v1/ready',
-            '/api/v1/live'
+            '/api/v1/live',
+            # Document endpoints (for testing - remove in production if needed)
+            '/api/v1/documents',
+            '/api/v1/rag'
         ]
     )
     
