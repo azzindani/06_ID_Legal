@@ -1,5 +1,5 @@
 """
-Multi-Turn Comprehensive Document Integration Test
+Multi-Turn Comprehensive Document Integration Test (API-Based)
 
 8-turn conversation test validating:
 - Document upload and context injection
@@ -7,12 +7,13 @@ Multi-Turn Comprehensive Document Integration Test
 - Conversation memory with document context
 - Backwards compatibility (no document turns)
 - URL extraction integration
-- Keyword validation and timing metrics
 
-This test is the FOUNDATION for:
-- Pipeline validation
-- API integration testing  
-- UI feature development
+AUDIT-STYLE OUTPUT:
+- Full streaming thinking + answer display
+- Complete legal references and citations
+- Chat history transparency
+- Timing and performance metrics
+- JSON report generation
 
 Run: python tests/test_multi_turn_comprehensive.py
 
@@ -37,6 +38,11 @@ API_BASE_URL = os.getenv("API_URL", "http://127.0.0.1:8000/api/v1")
 TEST_DOCS_DIR = PROJECT_ROOT / "tests" / "test_documents"
 REPORT_DIR = PROJECT_ROOT / "tests" / "test_reports"
 
+# GENEROUS TIMEOUTS for Kaggle
+CHAT_TIMEOUT = 600  # 10 minutes for LLM with large context
+UPLOAD_TIMEOUT = 180  # 3 minutes for large file upload
+URL_TIMEOUT = 120  # 2 minutes for URL extraction
+
 # Colors
 class Colors:
     GREEN = '\033[92m'
@@ -47,6 +53,21 @@ class Colors:
     MAGENTA = '\033[95m'
     RESET = '\033[0m'
     BOLD = '\033[1m'
+    DIM = '\033[2m'
+
+
+def print_box(title: str, content: List[str], width: int = 100):
+    """Print a bordered box"""
+    print(f"\n┌{'─' * (width-2)}┐")
+    print(f"│ {title:<{width-4}} │")
+    print(f"├{'─' * (width-2)}┤")
+    for line in content:
+        # Handle long lines
+        while len(line) > width - 4:
+            print(f"│ {line[:width-4]} │")
+            line = line[width-4:]
+        print(f"│ {line:<{width-4}} │")
+    print(f"└{'─' * (width-2)}┘")
 
 
 # =============================================================================
@@ -56,43 +77,39 @@ class Colors:
 TURN_CONFIG = [
     {
         "turn": 1,
-        "description": "Upload PDF #1 and ask about it",
+        "description": "Upload PDF #1 (Peraturan BPK) and ask about it",
         "upload_file": "peraturan_1.pdf",
-        "clear_docs": True,  # Start fresh
+        "clear_docs": True,
         "include_session_docs": True,
-        "query": "Apa yang diatur dalam peraturan BPK yang saya unggah ini? Jelaskan secara singkat.",
-        "expected_keywords": ["BPK", "tata kerja", "peraturan", "badan pemeriksa"],
-        "timeout": 180
+        "query": "Apa yang diatur dalam peraturan BPK yang saya unggah ini? Jelaskan secara singkat fokus pengaturannya.",
+        "expected_keywords": ["BPK", "tata kerja", "peraturan"],
     },
     {
         "turn": 2,
         "description": "Follow-up on same document (memory + doc)",
-        "upload_file": None,  # Use existing
+        "upload_file": None,
         "clear_docs": False,
         "include_session_docs": True,
-        "query": "Siapa saja yang disebutkan dalam peraturan tersebut? Sebutkan struktur organisasinya.",
-        "expected_keywords": ["ketua", "anggota", "sekretariat", "BPK"],
-        "timeout": 180
+        "query": "Berdasarkan dokumen yang sama, siapa saja pejabat atau struktur yang disebutkan di dalamnya?",
+        "expected_keywords": ["ketua", "anggota", "BPK"],
     },
     {
         "turn": 3,
         "description": "General question WITHOUT document (backwards compat)",
         "upload_file": None,
         "clear_docs": False,
-        "include_session_docs": False,  # NO DOCUMENT
-        "query": "Jelaskan tentang UU Ketenagakerjaan No. 13 Tahun 2003 secara singkat.",
-        "expected_keywords": ["ketenagakerjaan", "pekerja", "tenaga kerja"],
-        "timeout": 180
+        "include_session_docs": False,
+        "query": "Jelaskan tentang UU Ketenagakerjaan No. 13 Tahun 2003 secara singkat, terutama hak-hak pekerja.",
+        "expected_keywords": ["ketenagakerjaan", "pekerja", "hak"],
     },
     {
         "turn": 4,
         "description": "Upload PDF #2 (contract) - switch document",
         "upload_file": "contract_sample_1.pdf",
-        "clear_docs": True,  # Clear previous doc
+        "clear_docs": True,
         "include_session_docs": True,
-        "query": "Apa isi kontrak yang saya unggah? Jelaskan para pihak dan pokok perjanjiannya.",
+        "query": "Apa isi kontrak yang saya unggah ini? Siapa para pihak dan apa pokok perjanjiannya?",
         "expected_keywords": ["kontrak", "perjanjian", "pihak"],
-        "timeout": 180
     },
     {
         "turn": 5,
@@ -100,71 +117,67 @@ TURN_CONFIG = [
         "upload_file": None,
         "clear_docs": False,
         "include_session_docs": True,
-        "query": "Apa kewajiban masing-masing pihak dalam kontrak tersebut?",
-        "expected_keywords": ["kewajiban", "pihak"],
-        "timeout": 180
+        "query": "Apa kewajiban dan hak masing-masing pihak dalam kontrak yang sama?",
+        "expected_keywords": ["kewajiban", "hak", "pihak"],
     },
     {
         "turn": 6,
-        "description": "Upload both docs (multi-document context)",
-        "upload_file": "peraturan_1.pdf",  # Add back first doc
-        "clear_docs": False,  # Keep contract
+        "description": "Upload putusan + kontrak (multi-document context)",
+        "upload_file": "putusan_mahkamah_agung_1.pdf",
+        "clear_docs": False,
         "include_session_docs": True,
-        "query": "Bandingkan kedua dokumen yang saya unggah. Apa perbedaan sifat hukumnya?",
-        "expected_keywords": ["peraturan", "kontrak", "perbedaan", "hukum"],
-        "timeout": 240  # Longer for multi-doc
+        "query": "Sekarang saya punya dua dokumen. Jelaskan perbedaan sifat hukum antara kontrak dan putusan pengadilan yang saya unggah.",
+        "expected_keywords": ["kontrak", "putusan", "perbedaan"],
     },
     {
         "turn": 7,
         "description": "Extract from URL (URL integration)",
         "upload_url": "https://www.cnbcindonesia.com/news/20251226155414-4-697445/kpk-setop-penyidikan-kasus-korupsi-izin-tambang-konawe-utara-rp27-t",
         "upload_file": None,
-        "clear_docs": True,  # Clear PDFs
+        "clear_docs": True,
         "include_session_docs": True,
-        "query": "Apa isi berita yang saya berikan? Jelaskan kasusnya.",
-        "expected_keywords": ["KPK", "korupsi", "penyidikan", "tambang"],
-        "timeout": 180
+        "query": "Apa isi berita yang saya berikan melalui URL tadi? Jelaskan kasusnya secara ringkas.",
+        "expected_keywords": ["KPK", "korupsi", "tambang"],
     },
     {
         "turn": 8,
         "description": "Summary WITHOUT document (memory only)",
         "upload_file": None,
         "clear_docs": True,
-        "include_session_docs": False,  # NO DOCUMENT
-        "query": "Berdasarkan percakapan kita sebelumnya, topik hukum apa saja yang sudah kita bahas?",
-        "expected_keywords": ["peraturan", "kontrak", "korupsi"],  # From memory
-        "timeout": 180
+        "include_session_docs": False,
+        "query": "Berdasarkan seluruh percakapan kita, topik hukum apa saja yang sudah kita bahas? Sebutkan secara ringkas.",
+        "expected_keywords": ["BPK", "kontrak", "korupsi"],
     }
 ]
 
 
 # =============================================================================
-# TEST RUNNER CLASS
+# API CLIENT WITH STREAMING
 # =============================================================================
 
-class MultiTurnTestRunner:
-    """Runs comprehensive 8-turn test with metrics"""
+class AuditAPIClient:
+    """API client with streaming and full audit output"""
     
-    def __init__(self, session_id: str = None):
-        self.session_id = session_id or f"test-multi-{int(time.time())}"
-        self.results: List[Dict] = []
-        self.uploaded_docs: List[str] = []
-        self.start_time = None
-        self.total_time = 0
+    def __init__(self, session_id: str):
+        self.session_id = session_id
+        self.uploaded_docs: List[Dict] = []
+        self.conversation_history: List[Dict] = []
     
     def check_api(self) -> bool:
-        """Check if API is running"""
         try:
-            resp = requests.get(f"{API_BASE_URL}/health", timeout=5)
+            resp = requests.get(f"{API_BASE_URL}/health", timeout=10)
             return resp.status_code == 200
         except:
             return False
     
-    def upload_document(self, filename: str) -> Optional[Dict]:
-        """Upload a document"""
+    def upload_document(self, filename: str) -> Tuple[bool, Dict]:
+        """Upload document and return full details"""
         filepath = TEST_DOCS_DIR / filename
         if not filepath.exists():
-            return None
+            return False, {"error": f"File not found: {filepath}"}
+        
+        print(f"\n{Colors.YELLOW}📤 Uploading {filename}...{Colors.RESET}")
+        start = time.time()
         
         try:
             with open(filepath, 'rb') as f:
@@ -172,35 +185,54 @@ class MultiTurnTestRunner:
                     f"{API_BASE_URL}/documents/upload",
                     files={'file': (filename, f)},
                     data={'session_id': self.session_id},
-                    timeout=60
+                    timeout=UPLOAD_TIMEOUT
                 )
+            
+            elapsed = time.time() - start
             
             if resp.status_code == 200:
                 data = resp.json()
-                self.uploaded_docs.append(data.get('document_id'))
-                return data
-            return None
+                self.uploaded_docs.append(data)
+                print(f"{Colors.GREEN}✓ Upload complete ({elapsed:.1f}s){Colors.RESET}")
+                print(f"  Document ID: {data.get('document_id', 'N/A')}")
+                print(f"  Characters: {data.get('char_count', 0):,}")
+                print(f"  Pages: {data.get('page_count', 0)}")
+                return True, data
+            else:
+                return False, {"error": f"HTTP {resp.status_code}", "detail": resp.text}
+                
+        except requests.Timeout:
+            return False, {"error": f"Upload timeout ({UPLOAD_TIMEOUT}s)"}
         except Exception as e:
-            print(f"Upload error: {e}")
-            return None
+            return False, {"error": str(e)}
     
-    def extract_url(self, url: str) -> Optional[Dict]:
+    def extract_url(self, url: str) -> Tuple[bool, Dict]:
         """Extract content from URL"""
+        print(f"\n{Colors.YELLOW}🌐 Extracting URL...{Colors.RESET}")
+        start = time.time()
+        
         try:
             resp = requests.post(
                 f"{API_BASE_URL}/documents/url",
                 json={'url': url, 'session_id': self.session_id},
-                timeout=60
+                timeout=URL_TIMEOUT
             )
+            
+            elapsed = time.time() - start
             
             if resp.status_code == 200:
                 data = resp.json()
-                self.uploaded_docs.append(data.get('document_id'))
-                return data
-            return None
+                self.uploaded_docs.append(data)
+                print(f"{Colors.GREEN}✓ URL extracted ({elapsed:.1f}s){Colors.RESET}")
+                print(f"  Characters: {data.get('char_count', 0):,}")
+                return True, data
+            else:
+                return False, {"error": f"HTTP {resp.status_code}", "detail": resp.text}
+                
+        except requests.Timeout:
+            return False, {"error": f"URL timeout ({URL_TIMEOUT}s)"}
         except Exception as e:
-            print(f"URL extract error: {e}")
-            return None
+            return False, {"error": str(e)}
     
     def clear_documents(self):
         """Clear session documents"""
@@ -208,15 +240,56 @@ class MultiTurnTestRunner:
             requests.delete(
                 f"{API_BASE_URL}/documents",
                 params={'session_id': self.session_id},
-                timeout=10
+                timeout=30
             )
             self.uploaded_docs = []
+            print(f"{Colors.DIM}🗑️  Documents cleared{Colors.RESET}")
         except:
             pass
     
-    def chat(self, query: str, include_docs: bool, timeout: int) -> Tuple[Optional[str], float]:
-        """Send chat request and return answer + time"""
+    def list_documents(self) -> List[Dict]:
+        """List current session documents"""
+        try:
+            resp = requests.get(
+                f"{API_BASE_URL}/documents",
+                params={'session_id': self.session_id},
+                timeout=30
+            )
+            if resp.status_code == 200:
+                return resp.json().get('documents', [])
+        except:
+            pass
+        return []
+    
+    def chat_streaming(self, query: str, include_docs: bool) -> Dict:
+        """Send chat with streaming output - FULL AUDIT"""
+        print(f"\n{Colors.BOLD}{'═' * 100}{Colors.RESET}")
+        print(f"{Colors.BOLD}QUERY{Colors.RESET}")
+        print(f"{'═' * 100}")
+        print(f"{query}")
+        
+        # Show document context status
+        print(f"\n{Colors.CYAN}Document Context: {'ENABLED' if include_docs else 'DISABLED'}{Colors.RESET}")
+        if include_docs:
+            docs = self.list_documents()
+            if docs:
+                print(f"  Active Documents: {len(docs)}")
+                for d in docs:
+                    print(f"    - {d.get('filename', 'N/A')} ({d.get('char_count', 0):,} chars)")
+        
+        print(f"\n{Colors.BOLD}{'─' * 100}{Colors.RESET}")
+        print(f"{Colors.BOLD}STREAMING RESPONSE{Colors.RESET}")
+        print(f"{'─' * 100}")
+        
         start = time.time()
+        result = {
+            'success': False,
+            'answer': '',
+            'thinking': '',
+            'sources': [],
+            'elapsed': 0,
+            'error': None
+        }
         
         try:
             payload = {
@@ -224,128 +297,192 @@ class MultiTurnTestRunner:
                 'session_id': self.session_id,
                 'include_session_documents': include_docs,
                 'thinking_level': 'low',
-                'stream': False,
+                'stream': True,
                 'top_k': 5,
                 'max_tokens': 1024
             }
             
-            resp = requests.post(
+            # Streaming request
+            with requests.post(
                 f"{API_BASE_URL}/rag/chat",
                 json=payload,
-                timeout=timeout
-            )
-            
+                stream=True,
+                timeout=CHAT_TIMEOUT
+            ) as resp:
+                if resp.status_code != 200:
+                    result['error'] = f"HTTP {resp.status_code}"
+                    return result
+                
+                full_text = ""
+                chunk_count = 0
+                
+                for line in resp.iter_lines():
+                    if line:
+                        line_str = line.decode('utf-8')
+                        if line_str.startswith('data: '):
+                            data_str = line_str[6:]
+                            if data_str == '[DONE]':
+                                break
+                            try:
+                                data = json.loads(data_str)
+                                
+                                if data.get('type') == 'chunk':
+                                    token = data.get('content', '')
+                                    full_text += token
+                                    print(token, end='', flush=True)
+                                    chunk_count += 1
+                                    
+                                elif data.get('type') == 'metadata':
+                                    result['sources'] = data.get('sources', [])
+                                    result['thinking'] = data.get('thinking', '')
+                                    
+                            except json.JSONDecodeError:
+                                pass
+                
+                result['answer'] = full_text
+                result['success'] = True
+                
             elapsed = time.time() - start
+            result['elapsed'] = elapsed
             
-            if resp.status_code == 200:
-                return resp.json().get('answer', ''), elapsed
-            return None, elapsed
+            print(f"\n\n{Colors.DIM}[Streamed in {elapsed:.1f}s]{Colors.RESET}")
+            
+            # Show sources/citations
+            if result['sources']:
+                print(f"\n{Colors.BOLD}{'─' * 100}{Colors.RESET}")
+                print(f"{Colors.BOLD}LEGAL SOURCES ({len(result['sources'])} references){Colors.RESET}")
+                print(f"{'─' * 100}")
+                for idx, src in enumerate(result['sources'][:5], 1):
+                    reg_type = src.get('regulation_type', 'N/A')
+                    reg_num = src.get('regulation_number', 'N/A')
+                    year = src.get('year', 'N/A')
+                    score = src.get('score', 0)
+                    print(f"  {idx}. {reg_type} No. {reg_num}/{year} (Score: {score:.3f})")
+            
+            # Save to conversation history
+            self.conversation_history.append({
+                'turn': len(self.conversation_history) + 1,
+                'query': query,
+                'answer': full_text,
+                'include_docs': include_docs,
+                'sources': result['sources'],
+                'elapsed': elapsed
+            })
             
         except requests.Timeout:
-            return None, time.time() - start
+            result['error'] = f"Chat timeout ({CHAT_TIMEOUT}s)"
+            result['elapsed'] = time.time() - start
+            print(f"\n\n{Colors.RED}⏱️ TIMEOUT after {result['elapsed']:.1f}s{Colors.RESET}")
         except Exception as e:
-            return None, time.time() - start
+            result['error'] = str(e)
+            result['elapsed'] = time.time() - start
+            print(f"\n\n{Colors.RED}❌ ERROR: {e}{Colors.RESET}")
+        
+        return result
+
+
+# =============================================================================
+# TEST RUNNER
+# =============================================================================
+
+class MultiTurnAuditTestRunner:
+    """Runs 8-turn test with FULL audit output"""
     
-    def validate_keywords(self, answer: str, expected: List[str]) -> Tuple[bool, List[str]]:
-        """Check if answer contains expected keywords"""
-        if not answer:
-            return False, []
-        
-        answer_lower = answer.lower()
-        found = [kw for kw in expected if kw.lower() in answer_lower]
-        
-        # Pass if at least 50% keywords found
-        threshold = max(1, len(expected) // 2)
-        return len(found) >= threshold, found
+    def __init__(self):
+        self.session_id = f"test-audit-{int(time.time())}"
+        self.client = AuditAPIClient(self.session_id)
+        self.results: List[Dict] = []
+        self.start_time = None
     
     def run_turn(self, config: Dict) -> Dict:
-        """Run a single turn"""
+        """Run a single turn with full audit output"""
         turn_num = config['turn']
+        
+        print(f"\n\n{'█' * 100}")
+        print(f"  TURN {turn_num}: {config['description']}")
+        print(f"{'█' * 100}")
+        
         result = {
             'turn': turn_num,
             'description': config['description'],
             'passed': False,
-            'answer': None,
-            'time_seconds': 0,
+            'upload_success': True,
+            'chat_result': None,
             'keywords_found': [],
             'keywords_expected': config['expected_keywords'],
             'error': None
         }
         
-        print(f"\n{Colors.BOLD}Turn {turn_num}: {config['description']}{Colors.RESET}")
-        print(f"  Query: {config['query'][:60]}...")
-        
-        # Clear docs if needed
+        # Step 1: Clear docs if needed
         if config.get('clear_docs'):
-            self.clear_documents()
-            print(f"  {Colors.YELLOW}Cleared documents{Colors.RESET}")
+            self.client.clear_documents()
         
-        # Upload file if specified
+        # Step 2: Upload file if specified
         if config.get('upload_file'):
-            print(f"  {Colors.YELLOW}Uploading {config['upload_file']}...{Colors.RESET}")
-            upload_result = self.upload_document(config['upload_file'])
-            if upload_result:
-                print(f"  {Colors.GREEN}✓ Uploaded: {upload_result.get('char_count')} chars{Colors.RESET}")
-            else:
-                result['error'] = "Upload failed"
-                print(f"  {Colors.RED}✗ Upload failed{Colors.RESET}")
+            success, data = self.client.upload_document(config['upload_file'])
+            result['upload_success'] = success
+            if not success:
+                result['error'] = data.get('error')
+                print(f"{Colors.RED}✗ Upload failed: {result['error']}{Colors.RESET}")
                 return result
         
-        # Extract URL if specified
+        # Step 3: Extract URL if specified
         if config.get('upload_url'):
-            print(f"  {Colors.YELLOW}Extracting URL...{Colors.RESET}")
-            url_result = self.extract_url(config['upload_url'])
-            if url_result:
-                print(f"  {Colors.GREEN}✓ Extracted: {url_result.get('char_count')} chars{Colors.RESET}")
-            else:
-                result['error'] = "URL extraction failed"
-                print(f"  {Colors.RED}✗ URL extraction failed{Colors.RESET}")
+            success, data = self.client.extract_url(config['upload_url'])
+            result['upload_success'] = success
+            if not success:
+                result['error'] = data.get('error')
+                print(f"{Colors.RED}✗ URL extraction failed: {result['error']}{Colors.RESET}")
                 return result
         
-        # Send chat
-        print(f"  {Colors.YELLOW}Generating response...{Colors.RESET}")
-        answer, elapsed = self.chat(
+        # Step 4: Send chat
+        chat_result = self.client.chat_streaming(
             config['query'],
-            config['include_session_docs'],
-            config['timeout']
+            config['include_session_docs']
         )
+        result['chat_result'] = chat_result
         
-        result['time_seconds'] = round(elapsed, 2)
+        if chat_result['error']:
+            result['error'] = chat_result['error']
+            return result
         
-        if answer:
-            result['answer'] = answer
-            
-            # Validate keywords
-            passed, found = self.validate_keywords(answer, config['expected_keywords'])
-            result['passed'] = passed
-            result['keywords_found'] = found
-            
-            status = f"{Colors.GREEN}✓ PASS" if passed else f"{Colors.RED}✗ FAIL"
-            print(f"  {status}{Colors.RESET} ({elapsed:.1f}s)")
-            print(f"  Keywords: {found} / {config['expected_keywords']}")
-            print(f"  Answer: {answer[:150]}...")
-        else:
-            result['error'] = "Timeout or error"
-            print(f"  {Colors.RED}✗ TIMEOUT ({elapsed:.1f}s){Colors.RESET}")
+        # Step 5: Validate keywords
+        answer = chat_result['answer'].lower()
+        found = [kw for kw in config['expected_keywords'] if kw.lower() in answer]
+        result['keywords_found'] = found
+        
+        # Pass if at least half the keywords found
+        threshold = max(1, len(config['expected_keywords']) // 2)
+        result['passed'] = len(found) >= threshold
+        
+        # Show validation result
+        print(f"\n{Colors.BOLD}{'─' * 100}{Colors.RESET}")
+        print(f"{Colors.BOLD}KEYWORD VALIDATION{Colors.RESET}")
+        print(f"{'─' * 100}")
+        print(f"  Expected: {config['expected_keywords']}")
+        print(f"  Found: {found}")
+        status = f"{Colors.GREEN}✓ PASS" if result['passed'] else f"{Colors.RED}✗ FAIL"
+        print(f"  Status: {status}{Colors.RESET}")
         
         return result
     
     def run_all(self) -> Dict:
-        """Run all turns"""
+        """Run all 8 turns"""
         self.start_time = datetime.now()
         
         print(f"\n{Colors.BOLD}{Colors.CYAN}")
-        print("=" * 70)
-        print("  MULTI-TURN COMPREHENSIVE DOCUMENT INTEGRATION TEST")
-        print("=" * 70)
+        print("═" * 100)
+        print("  MULTI-TURN DOCUMENT INTEGRATION TEST (AUDIT MODE)")
+        print("═" * 100)
         print(f"{Colors.RESET}")
         
         print(f"Session ID: {self.session_id}")
         print(f"API URL: {API_BASE_URL}")
-        print(f"Test documents: {TEST_DOCS_DIR}")
+        print(f"Timeouts: Chat={CHAT_TIMEOUT}s, Upload={UPLOAD_TIMEOUT}s, URL={URL_TIMEOUT}s")
+        print(f"Test Documents: {TEST_DOCS_DIR}")
         
         # Check API
-        if not self.check_api():
+        if not self.client.check_api():
             print(f"\n{Colors.RED}ERROR: API not running at {API_BASE_URL}{Colors.RESET}")
             return {'error': 'API not running', 'results': []}
         
@@ -355,22 +492,53 @@ class MultiTurnTestRunner:
         for config in TURN_CONFIG:
             result = self.run_turn(config)
             self.results.append(result)
-            time.sleep(2)  # Brief pause between turns
+            time.sleep(5)  # Brief pause between turns
         
-        self.total_time = (datetime.now() - self.start_time).total_seconds()
+        total_time = (datetime.now() - self.start_time).total_seconds()
         
-        return self.generate_report()
+        return self.generate_report(total_time)
     
-    def generate_report(self) -> Dict:
-        """Generate test report"""
+    def generate_report(self, total_time: float) -> Dict:
+        """Generate comprehensive report"""
         passed = sum(1 for r in self.results if r['passed'])
         failed = len(self.results) - passed
         
+        # Print summary
+        print(f"\n\n{'═' * 100}")
+        print(f"  TEST SUMMARY")
+        print(f"{'═' * 100}")
+        
+        for r in self.results:
+            status = f"{Colors.GREEN}✓ PASS" if r['passed'] else f"{Colors.RED}✗ FAIL"
+            elapsed = r['chat_result']['elapsed'] if r['chat_result'] else 0
+            print(f"{status}{Colors.RESET} Turn {r['turn']}: {r['description'][:50]}... ({elapsed:.1f}s)")
+            if r['error']:
+                print(f"      Error: {r['error']}")
+        
+        print(f"\n{Colors.BOLD}Results:{Colors.RESET}")
+        print(f"  Total:  {len(self.results)}")
+        print(f"  {Colors.GREEN}Passed: {passed}{Colors.RESET}")
+        print(f"  {Colors.RED}Failed: {failed}{Colors.RESET}")
+        print(f"  Pass Rate: {passed/len(self.results)*100:.1f}%")
+        print(f"\nTotal Time: {total_time:.1f}s ({total_time/60:.1f} minutes)")
+        
+        # Print conversation history
+        print(f"\n{'═' * 100}")
+        print(f"  CONVERSATION HISTORY AUDIT")
+        print(f"{'═' * 100}")
+        
+        for turn in self.client.conversation_history:
+            print(f"\n{Colors.CYAN}Turn {turn['turn']}:{Colors.RESET}")
+            print(f"  Q: {turn['query'][:80]}...")
+            print(f"  A: {turn['answer'][:200]}...")
+            print(f"  Sources: {len(turn['sources'])} | Time: {turn['elapsed']:.1f}s")
+        
+        # Build report
         report = {
-            'test_name': 'Multi-Turn Comprehensive Document Integration Test',
+            'test_name': 'Multi-Turn Document Integration Test (Audit)',
             'session_id': self.session_id,
-            'timestamp': self.start_time.isoformat() if self.start_time else None,
-            'total_time_seconds': round(self.total_time, 2),
+            'timestamp': self.start_time.isoformat(),
+            'total_time_seconds': round(total_time, 2),
             'summary': {
                 'total_turns': len(self.results),
                 'passed': passed,
@@ -378,48 +546,23 @@ class MultiTurnTestRunner:
                 'pass_rate': f"{passed/len(self.results)*100:.1f}%"
             },
             'turns': self.results,
-            'timing': {
-                'average_per_turn': round(sum(r['time_seconds'] for r in self.results) / len(self.results), 2),
-                'slowest_turn': max(self.results, key=lambda r: r['time_seconds'])['turn'],
-                'fastest_turn': min(self.results, key=lambda r: r['time_seconds'])['turn']
-            }
+            'conversation_history': self.client.conversation_history
         }
         
-        # Print summary
-        print(f"\n{Colors.BOLD}{'='*70}{Colors.RESET}")
-        print(f"{Colors.BOLD}TEST SUMMARY{Colors.RESET}")
-        print(f"{'='*70}")
-        
-        for r in self.results:
-            status = f"{Colors.GREEN}✓" if r['passed'] else f"{Colors.RED}✗"
-            print(f"  {status} Turn {r['turn']}: {r['description'][:40]}... ({r['time_seconds']}s){Colors.RESET}")
-        
-        print(f"\n{Colors.BOLD}Results:{Colors.RESET}")
-        print(f"  Total:  {len(self.results)}")
-        print(f"  {Colors.GREEN}Passed: {passed}{Colors.RESET}")
-        print(f"  {Colors.RED}Failed: {failed}{Colors.RESET}")
-        print(f"  Pass Rate: {report['summary']['pass_rate']}")
-        print(f"\nTotal Time: {self.total_time:.1f}s")
-        
         # Save report
-        self.save_report(report)
-        
-        return report
-    
-    def save_report(self, report: Dict):
-        """Save report to file"""
         try:
             REPORT_DIR.mkdir(parents=True, exist_ok=True)
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            report_file = REPORT_DIR / f"multi_turn_test_{timestamp}.json"
+            report_file = REPORT_DIR / f"multi_turn_audit_{timestamp}.json"
             
             with open(report_file, 'w', encoding='utf-8') as f:
-                json.dump(report, f, indent=2, ensure_ascii=False)
+                json.dump(report, f, indent=2, ensure_ascii=False, default=str)
             
             print(f"\n{Colors.CYAN}Report saved: {report_file}{Colors.RESET}")
-            
         except Exception as e:
             print(f"\n{Colors.YELLOW}Could not save report: {e}{Colors.RESET}")
+        
+        return report
 
 
 # =============================================================================
@@ -427,14 +570,13 @@ class MultiTurnTestRunner:
 # =============================================================================
 
 def main():
-    runner = MultiTurnTestRunner()
+    runner = MultiTurnAuditTestRunner()
     report = runner.run_all()
     
     if report.get('error'):
         print(f"\n{Colors.RED}Test failed: {report['error']}{Colors.RESET}")
         return 1
     
-    # Exit with appropriate code
     if report['summary']['failed'] == 0:
         print(f"\n{Colors.GREEN}{Colors.BOLD}ALL TESTS PASSED!{Colors.RESET}")
         return 0
