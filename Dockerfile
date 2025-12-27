@@ -1,56 +1,67 @@
 # Indonesian Legal RAG System - Docker Image
-# Multi-stage build for optimized production image
+# Multi-stage build with GPU support for production deployment
+#
+# Build: docker build -t legal-rag .
+# Run:   docker-compose up
+# Or:    docker run --gpus all -p 8000:8000 -p 7860:7860 legal-rag
 
-# Build stage
-FROM python:3.10-slim as builder
+# =============================================================================
+# Base image with CUDA for GPU support
+# =============================================================================
+FROM nvidia/cuda:12.1.0-runtime-ubuntu22.04 AS base
 
-WORKDIR /app
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    DEBIAN_FRONTEND=noninteractive
 
-# Install build dependencies
+# Install Python 3.10 and dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
+    python3.10 \
+    python3.10-venv \
+    python3-pip \
     git \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy requirements first for caching
-COPY requirements.txt .
-
-# Install Python dependencies
-RUN pip install --no-cache-dir --user -r requirements.txt
-
-# Production stage
-FROM python:3.10-slim
+    curl \
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/* \
+    && update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1 \
+    && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1
 
 WORKDIR /app
 
-# Install runtime dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgomp1 \
-    && rm -rf /var/lib/apt/lists/*
+# =============================================================================
+# Dependencies stage
+# =============================================================================
+FROM base AS dependencies
 
-# Copy installed packages from builder
-COPY --from=builder /root/.local /root/.local
+COPY requirements.txt .
+RUN pip install --upgrade pip && pip install -r requirements.txt
 
-# Make sure scripts in .local are usable
-ENV PATH=/root/.local/bin:$PATH
+# =============================================================================
+# Production stage
+# =============================================================================
+FROM dependencies AS production
 
 # Copy application code
 COPY . .
 
-# Create directories for data and exports
-RUN mkdir -p /app/exports /app/logs /app/data
+# Create directories
+RUN mkdir -p /app/.data /app/exports /app/logs
 
 # Environment variables
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV HF_HOME=/app/.cache/huggingface
+ENV PYTHONPATH=/app \
+    HF_HOME=/app/.cache/huggingface \
+    API_HOST=0.0.0.0 \
+    API_PORT=8000 \
+    UI_HOST=0.0.0.0 \
+    UI_PORT=7860
 
-# Expose port
-EXPOSE 8000
+# Expose ports
+EXPOSE 8000 7860
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:8000/api/v1/live || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=300s --retries=3 \
+    CMD curl -f http://localhost:8000/api/v1/health || exit 1
 
-# Default command - run API server
-CMD ["uvicorn", "api.server:app", "--host", "0.0.0.0", "--port", "8000"]
+# Default command - production launcher with health monitoring
+CMD ["python", "launch_production.py"]

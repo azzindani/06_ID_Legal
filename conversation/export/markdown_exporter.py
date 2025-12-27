@@ -92,48 +92,62 @@ class MarkdownExporter(BaseExporter):
         lines.append(f"> {turn.get('query', '')}")
         lines.append("")
 
+        # Thinking Process (if available and include_thinking is True)
+        thinking = turn.get('thinking', '')
+        if self.include_thinking and thinking:
+            lines.append("### 🧠 Proses Berpikir")
+            lines.append("")
+            lines.append(thinking)
+            lines.append("")
+
         # Answer
-        lines.append(f"### Jawaban {turn_num}")
+        lines.append(f"### ✅ Jawaban {turn_num}")
         lines.append("")
         lines.append(turn.get('answer', ''))
         lines.append("")
 
-        # Metadata (collapsible)
-        if self.include_metadata and turn.get('metadata'):
-            meta = turn['metadata']
+        # Sources - use full formatted sources_text
+        sources_text = turn.get('sources_text', '') or turn.get('metadata', {}).get('sources_text', '')
+        if self.include_sources and sources_text:
             lines.append("<details>")
-            lines.append(f"<summary>Detail ({timestamp})</summary>")
+            lines.append("<summary>📖 Sumber Hukum</summary>")
             lines.append("")
-
-            if self.include_timing:
-                if 'total_time' in meta:
-                    lines.append(f"- **Waktu Total:** {self._format_duration(meta['total_time'])}")
-                if 'retrieval_time' in meta:
-                    lines.append(f"- **Waktu Retrieval:** {self._format_duration(meta['retrieval_time'])}")
-                if 'generation_time' in meta:
-                    lines.append(f"- **Waktu Generasi:** {self._format_duration(meta['generation_time'])}")
-
-            if 'tokens_generated' in meta:
-                lines.append(f"- **Token:** {meta['tokens_generated']}")
-
-            if 'query_type' in meta:
-                lines.append(f"- **Tipe Query:** {meta['query_type']}")
-
-            if 'results_count' in meta:
-                lines.append(f"- **Hasil Ditemukan:** {meta['results_count']}")
-
-            # Sources
-            if self.include_sources and 'citations' in meta:
-                lines.append("")
-                lines.append("**Sumber:**")
-                for i, citation in enumerate(meta['citations'], 1):
-                    cite_text = citation.get('citation_text', '')
-                    if not cite_text:
-                        cite_text = f"{citation.get('regulation_type', '')} No. {citation.get('regulation_number', '')}/{citation.get('year', '')}"
-                    lines.append(f"{i}. {cite_text}")
-
+            lines.append(sources_text)
             lines.append("")
             lines.append("</details>")
+            lines.append("")
+
+        # Research Process Details - use full formatted research_text
+        research_text = turn.get('research_text', '') or turn.get('metadata', {}).get('research_log', {}).get('details', '')
+        if self.include_metadata and research_text:
+            lines.append("<details>")
+            lines.append("<summary>🔬 Detail Proses Penelitian</summary>")
+            lines.append("")
+            lines.append(research_text)
+            lines.append("")
+            lines.append("</details>")
+            lines.append("")
+
+        # Other Metadata (collapsible) - only if we have timing/stats
+        meta = turn.get('metadata', {})
+        if self.include_metadata and self.include_timing and meta:
+            other_meta = []
+            if 'total_time' in meta:
+                other_meta.append(f"- **Waktu Total:** {self._format_duration(meta['total_time'])}")
+            if 'retrieval_time' in meta:
+                other_meta.append(f"- **Waktu Retrieval:** {self._format_duration(meta['retrieval_time'])}")
+            if 'generation_time' in meta:
+                other_meta.append(f"- **Waktu Generasi:** {self._format_duration(meta['generation_time'])}")
+            if 'tokens_generated' in meta:
+                other_meta.append(f"- **Token:** {meta['tokens_generated']}")
+
+            if other_meta:
+                lines.append("<details>")
+                lines.append(f"<summary>📋 Metadata ({timestamp})</summary>")
+                lines.append("")
+                lines.extend(other_meta)
+                lines.append("")
+                lines.append("</details>")
 
         return lines
 

@@ -35,7 +35,7 @@ router = APIRouter()
 class RetrievalRequest(BaseModel):
     """Request for pure retrieval (no LLM generation)"""
     query: str = Field(..., min_length=1, max_length=2000, description="Search query")
-    top_k: int = Field(3, ge=1, le=10, description="Number of results to return")
+    top_k: int = Field(10, ge=1, le=50, description="Number of results to return")
     min_score: float = Field(0.0, ge=0.0, le=1.0, description="Minimum relevance score")
     
     @validator('query')
@@ -68,6 +68,11 @@ class ChatRequest(BaseModel):
     session_id: Optional[str] = Field(None, max_length=100, description="Session ID for context")
     thinking_level: str = Field('low', description="Thinking depth: low, medium, high")
     stream: bool = Field(False, description="Enable streaming response")
+    # Config parameters from UI
+    top_k: int = Field(3, ge=1, le=30, description="Number of documents to retrieve")
+    temperature: float = Field(0.7, ge=0.0, le=2.0, description="LLM temperature")
+    max_tokens: int = Field(2048, ge=256, le=8192, description="Max tokens to generate")
+    team_size: int = Field(3, ge=1, le=5, description="Research team size")
     
     @validator('query')
     def validate_query_field(cls, v):
@@ -199,10 +204,12 @@ async def retrieve_documents(req: RetrievalRequest, request: Request):
                 detail="Retrieval system not initialized"
             )
         
-        # Run orchestrator for retrieval
+        # Run orchestrator for retrieval with top_k parameter
+        logger.info(f"Retrieve called with top_k={req.top_k}")
         rag_result = pipeline.orchestrator.run(
             query=req.query,
-            conversation_history=[]
+            conversation_history=[],
+            top_k=req.top_k  # Pass top_k to orchestrator
         )
         
         final_results = rag_result.get('final_results', [])
@@ -231,12 +238,13 @@ async def retrieve_documents(req: RetrievalRequest, request: Request):
                 chapter=record.get('chapter') or record.get('bab'),
                 article=record.get('article') or record.get('pasal'),
                 effective_date=record.get('effective_date') or record.get('tanggal_penetapan'),
-                content_preview=record.get('content', '')[:200] if record.get('content') else None,
+                content_preview=record.get('content', '')[:500] if record.get('content') else None,
                 score=scores.get('final', 0.0)
             ))
         
         search_time = time.time() - start_time
         
+        # Include full metadata for rich UI (like search_app.py)
         return RetrievalResponse(
             query=req.query,
             documents=documents,
@@ -245,7 +253,13 @@ async def retrieve_documents(req: RetrievalRequest, request: Request):
             metadata={
                 'retrieval_only': True,
                 'min_score': req.min_score,
-                'total_candidates': len(rag_result.get('final_results', []))
+                'top_k': req.top_k,
+                'total_candidates': len(rag_result.get('final_results', [])),
+                # Include full results for rich formatting
+                'final_results': final_results,
+                'phase_metadata': rag_result.get('phase_metadata', {}),
+                'consensus_data': rag_result.get('consensus_data', {}),
+                'research_data': rag_result.get('research_data', {})
             }
         )
         
@@ -378,10 +392,19 @@ async def conversational_rag(req: ChatRequest, request: Request):
                 full_answer = ""
                 final_result = None
                 
+                # Build config dict with ALL parameters from request
+                config_dict = {
+                    'thinking_mode': req.thinking_level,
+                    'final_top_k': req.top_k,
+                    'temperature': req.temperature,
+                    'max_new_tokens': req.max_tokens,
+                    'research_team_size': req.team_size
+                }
+                
                 for event in service.process_query(
                     message=req.query,
                     session_id=req.session_id or 'default',
-                    config_dict={'thinking_mode': req.thinking_level},
+                    config_dict=config_dict,
                     thinking_mode=req.thinking_level
                 ):
                     event_type = event.get('type')
@@ -422,7 +445,14 @@ async def conversational_rag(req: ChatRequest, request: Request):
             return StreamingResponse(generate(), media_type="text/event-stream")
         
         else:
-            # Non-streaming
+            # Non-streaming - update pipeline config first
+            pipeline.update_config(
+                final_top_k=req.top_k,
+                temperature=req.temperature,
+                max_new_tokens=req.max_tokens,
+                research_team_size=req.team_size
+            )
+            
             result = pipeline.query(
                 question=req.query,
                 conversation_history=context,

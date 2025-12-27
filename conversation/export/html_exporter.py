@@ -363,17 +363,43 @@ class HTMLExporter(BaseExporter):
 
         html = f'''<div class="turn">
     <div class="question">
-        <div class="question-label">Pertanyaan {turn_num}</div>
+        <div class="question-label">❓ Pertanyaan {turn_num}</div>
         <div>{turn.get('query', '')}</div>
-    </div>
+    </div>'''
+
+        # Thinking process (COLLAPSIBLE if available)
+        thinking = turn.get('thinking', '')
+        if self.include_thinking and thinking:
+            html += f'''
+    <details style="background: #fff3e0; padding: 12px; border-radius: 6px; border-left: 3px solid #f57c00; margin: 10px 0;">
+        <summary style="font-weight: bold; color: #f57c00; cursor: pointer;">🧠 Proses Berpikir</summary>
+        <div style="margin-top: 8px; line-height: 1.5;">{self._format_answer_text(thinking)}</div>
+    </details>'''
+
+        # Answer section
+        html += f'''
     <div class="answer">
-        <div class="answer-label">Jawaban {turn_num}</div>
+        <div class="answer-label">✅ Jawaban {turn_num}</div>
         <div>{self._format_answer_text(turn.get('answer', ''))}</div>
     </div>'''
 
-        # Add metadata details
-        if self.include_metadata and turn.get('metadata'):
-            html += self._format_turn_details(turn['metadata'], timestamp)
+        # Sources - use full formatted sources_text
+        sources_text = turn.get('sources_text', '') or turn.get('metadata', {}).get('sources_text', '')
+        if self.include_sources and sources_text:
+            html += f'''
+    <details style="background: #f3e5f5; padding: 12px; border-radius: 6px; border-left: 3px solid #7b1fa2; margin: 10px 0;">
+        <summary style="font-weight: bold; color: #7b1fa2; cursor: pointer;">📖 Sumber Hukum</summary>
+        <div style="margin-top: 8px; line-height: 1.5;">{self._format_answer_text(sources_text)}</div>
+    </details>'''
+
+        # Research Process - use full formatted research_text
+        research_text = turn.get('research_text', '') or turn.get('metadata', {}).get('research_log', {}).get('details', '')
+        if self.include_metadata and research_text:
+            html += f'''
+    <details style="background: #e0f7fa; padding: 12px; border-radius: 6px; border-left: 3px solid #0097a7; margin: 10px 0;">
+        <summary style="font-weight: bold; color: #0097a7; cursor: pointer;">🔬 Detail Proses Penelitian</summary>
+        <div style="margin-top: 8px; line-height: 1.5;">{self._format_answer_text(research_text)}</div>
+    </details>'''
 
         html += '</div>'
         return html

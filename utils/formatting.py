@@ -240,6 +240,17 @@ def _extract_all_documents_from_metadata(metadata: Dict) -> List[Dict]:
                 seen_ids.add(doc_id)
                 all_docs.append(doc_copy)
 
+    # Try final_results at top level (API format)
+    if not all_docs:
+        final_results = metadata.get('final_results', [])
+        for doc in final_results:
+            doc_copy = dict(doc) if isinstance(doc, dict) else {'record': doc}
+            record = doc_copy.get('record', doc_copy)
+            doc_id = record.get('global_id', str(hash(str(doc))))
+            if doc_id not in seen_ids:
+                seen_ids.add(doc_id)
+                all_docs.append(doc_copy)
+
     # Try sources/citations at top level (fallback)
     if not all_docs:
         sources = metadata.get('sources', metadata.get('citations', []))
