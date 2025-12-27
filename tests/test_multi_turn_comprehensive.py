@@ -170,6 +170,26 @@ class AuditAPIClient:
         except:
             return False
     
+    def cleanup_memory(self) -> Dict:
+        """Force GPU/RAM cleanup between turns"""
+        print(f"\n{Colors.DIM}🧹 Cleaning GPU/RAM memory...{Colors.RESET}")
+        try:
+            resp = requests.post(f"{API_BASE_URL}/memory/cleanup", timeout=30)
+            if resp.status_code == 200:
+                data = resp.json()
+                before_gpu = data.get('before', {}).get('gpu', {}).get('allocated_mb', 0)
+                after_gpu = data.get('after', {}).get('gpu', {}).get('allocated_mb', 0)
+                freed = data.get('cleanup', {}).get('gpu_freed_mb', 0)
+                
+                print(f"{Colors.GREEN}✓ Memory cleaned: GPU {before_gpu:.0f}MB → {after_gpu:.0f}MB (freed {freed:.0f}MB){Colors.RESET}")
+                return data
+            else:
+                print(f"{Colors.YELLOW}⚠ Cleanup endpoint returned {resp.status_code}{Colors.RESET}")
+                return {}
+        except Exception as e:
+            print(f"{Colors.YELLOW}⚠ Memory cleanup error: {e}{Colors.RESET}")
+            return {}
+    
     def upload_document(self, filename: str) -> Tuple[bool, Dict]:
         """Upload document and return full details"""
         filepath = TEST_DOCS_DIR / filename
@@ -347,17 +367,38 @@ class AuditAPIClient:
             
             print(f"\n\n{Colors.DIM}[Streamed in {elapsed:.1f}s]{Colors.RESET}")
             
-            # Show sources/citations
+            # Show sources/citations with FULL LEGAL REFERENCES
             if result['sources']:
                 print(f"\n{Colors.BOLD}{'─' * 100}{Colors.RESET}")
-                print(f"{Colors.BOLD}LEGAL SOURCES ({len(result['sources'])} references){Colors.RESET}")
+                print(f"{Colors.BOLD}📚 LEGAL REFERENCES ({len(result['sources'])} sources retrieved){Colors.RESET}")
                 print(f"{'─' * 100}")
-                for idx, src in enumerate(result['sources'][:5], 1):
-                    reg_type = src.get('regulation_type', 'N/A')
-                    reg_num = src.get('regulation_number', 'N/A')
+                
+                for idx, src in enumerate(result['sources'][:8], 1):
+                    reg_type = src.get('regulation_type', src.get('type', 'N/A'))
+                    reg_num = src.get('regulation_number', src.get('number', 'N/A'))
                     year = src.get('year', 'N/A')
-                    score = src.get('score', 0)
-                    print(f"  {idx}. {reg_type} No. {reg_num}/{year} (Score: {score:.3f})")
+                    title = src.get('title', src.get('regulation_title', ''))
+                    article = src.get('article', src.get('article_number', ''))
+                    score = src.get('score', src.get('relevance_score', 0))
+                    snippet = src.get('content', src.get('text', src.get('snippet', '')))[:150]
+                    
+                    # Main reference line
+                    ref_str = f"{reg_type} No. {reg_num}/{year}"
+                    if article:
+                        ref_str += f" Pasal {article}"
+                    
+                    print(f"\n  {Colors.CYAN}{idx}. {ref_str}{Colors.RESET}")
+                    print(f"     Score: {score:.3f}")
+                    
+                    if title:
+                        print(f"     Title: {title[:80]}{'...' if len(title) > 80 else ''}")
+                    
+                    if snippet:
+                        # Clean up snippet
+                        snippet = snippet.replace('\n', ' ').strip()
+                        print(f"     Preview: \"{snippet}{'...' if len(snippet) >= 150 else ''}\"")
+                
+                print(f"\n{'─' * 100}")
             
             # Save to conversation history
             self.conversation_history.append({
@@ -402,6 +443,9 @@ class MultiTurnAuditTestRunner:
         print(f"  TURN {turn_num}: {config['description']}")
         print(f"{'█' * 100}")
         
+        # MEMORY CLEANUP at start of each turn to prevent OOM
+        self.client.cleanup_memory()
+        
         result = {
             'turn': turn_num,
             'description': config['description'],
@@ -410,7 +454,8 @@ class MultiTurnAuditTestRunner:
             'chat_result': None,
             'keywords_found': [],
             'keywords_expected': config['expected_keywords'],
-            'error': None
+            'error': None,
+            'memory_cleaned': True
         }
         
         # Step 1: Clear docs if needed
