@@ -178,6 +178,72 @@ api_proc.terminate()
 
 ---
 
+### Test 4: Multi-Turn Comprehensive (8-Turn Full Validation) 🏆
+
+**File:** `test_multi_turn_comprehensive.py`
+
+The **most comprehensive test** - validates the entire document integration through 8 conversation turns with document switching, memory retention, and keyword validation.
+
+```bash
+# Start API first
+python -m uvicorn api.server:app --host 0.0.0.0 --port 8000
+
+# Run test (takes 15-30 minutes on Kaggle GPU)
+python tests/test_multi_turn_comprehensive.py
+```
+
+**What It Tests:**
+
+| Turn | Document Context | Validation |
+|------|-----------------|------------|
+| 1 | Upload PDF #1 | Doc + RAG integration |
+| 2 | Same doc | Memory + doc retention |
+| 3 | **No document** | Backwards compatibility |
+| 4 | Upload PDF #2 | Document switching |
+| 5 | Same doc | Memory + switched doc |
+| 6 | Both docs | Multi-document context |
+| 7 | URL extract | URL integration |
+| 8 | **No document** | Memory only |
+
+**Features:**
+- ✅ Keyword validation (checks answer quality)
+- ✅ Timing metrics (per-turn and total)
+- ✅ JSON report generation
+- ✅ Session cleanup
+
+**Report Output:** `tests/test_reports/multi_turn_test_*.json`
+
+**Kaggle Instructions:**
+```python
+# Cell 1: Start API
+import threading
+import time
+import os
+import sys
+
+os.chdir('/kaggle/working/06_ID_Legal')
+sys.path.insert(0, '/kaggle/working/06_ID_Legal')
+
+def start_api():
+    import uvicorn
+    from api.server import app
+    uvicorn.run(app, host="127.0.0.1", port=8000, log_level="warning")
+
+api_thread = threading.Thread(target=start_api, daemon=True)
+api_thread.start()
+
+print("⏳ Waiting 90 seconds for API startup...")
+time.sleep(90)
+print("✅ API ready")
+```
+
+```python
+# Cell 2: Run comprehensive test
+!python tests/test_multi_turn_comprehensive.py
+```
+
+---
+
 ## 🔍 Multi-Turn API Blocking Diagnostic Tests (NEW)
 
 These diagnostic tests help identify blocking issues in multi-turn conversations. Use them when the system works for the first request but blocks on subsequent requests.
