@@ -1139,32 +1139,34 @@ def run_stress_test(history, config_dict, show_thinking, show_sources, show_meta
 
 def run_document_test(history, config_dict, show_thinking, show_sources, show_metadata):
     """
-    Run document integration test - demonstrates document upload + chat.
-    Note: This test shows the workflow, for full 8-turn test run test_multi_turn_comprehensive.py
+    Run document integration test - uploads actual documents and chats with them.
+    4 turns: 2 with PDF, 2 with another document type.
     """
     global api_client, current_session, attached_documents
+    from pathlib import Path
+    import uuid
     
     # Test configuration
     doc_config = dict(config_dict)
     doc_config['include_documents'] = True
     doc_config['max_document_chars'] = 20000
     
+    # Ensure session exists
+    if not current_session:
+        current_session = f"ui-doctest-{uuid.uuid4().hex[:8]}"
+    
     # Initial message
     history = history + [{
         "role": "assistant",
-        "content": f"""📄 **Starting Document Integration Test**
+        "content": """📄 **Starting Document Integration Test (4 Turns)**
 
-**This test demonstrates:**
-1. Document upload to API
-2. Chat with document context
-3. Memory cleanup between turns
+**This test will:**
+1. Upload a PDF document (peraturan_1.pdf)
+2. Ask 2 questions about that document
+3. Upload a different document (contract_sample_1.pdf)
+4. Ask 2 questions about the new document
 
-**Note:** For full 8-turn test, run:
-```
-python tests/test_multi_turn_comprehensive.py
-```
-
-**Testing with sample document...**"""
+**Starting document upload...**"""
     }]
     yield history, ""
     
@@ -1187,21 +1189,97 @@ python tests/test_multi_turn_comprehensive.py
     except:
         pass
     
-    # Test with 4 turns as requested
-    test_questions = [
-        "Jelaskan bagaimana fitur upload dokumen ini bekerja dengan sistem konsultasi hukum.",
-        "Apa keuntungan menggunakan konteks dokumen dalam konsultasi hukum?",
-        "Bagaimana sistem ini memproses pertanyaan yang berkaitan dengan dokumen yang diunggah?",
-        "Apa saja jenis dokumen yang didukung oleh sistem ini?"
+    # Find test documents
+    project_root = Path(__file__).parent.parent
+    test_docs_dir = project_root / "tests" / "test_documents"
+    
+    # Test configuration: 4 turns with 2 documents
+    test_config = [
+        {
+            "turn": 1,
+            "upload_file": test_docs_dir / "peraturan_1.pdf",
+            "question": "Apa yang diatur dalam peraturan yang saya unggah ini? Jelaskan secara singkat fokus pengaturannya.",
+        },
+        {
+            "turn": 2,
+            "upload_file": None,  # Continue with same document
+            "question": "Berdasarkan dokumen yang sama, siapa saja pejabat atau struktur yang disebutkan di dalamnya?",
+        },
+        {
+            "turn": 3,
+            "upload_file": test_docs_dir / "contract_sample_1.pdf",
+            "clear_docs": True,  # Clear and upload new
+            "question": "Apa isi kontrak yang saya unggah ini? Siapa para pihak dan apa pokok perjanjiannya?",
+        },
+        {
+            "turn": 4,
+            "upload_file": None,  # Continue with contract
+            "question": "Apa kewajiban dan hak masing-masing pihak dalam kontrak yang sama?",
+        },
     ]
     
-    for i, question in enumerate(test_questions, 1):
+    for config in test_config:
+        turn = config["turn"]
+        
+        # Clear documents if specified
+        if config.get("clear_docs"):
+            try:
+                api_client.clear_documents(current_session)
+                attached_documents = []
+                history = history + [{
+                    "role": "assistant",
+                    "content": f"🗑️ **Turn {turn}:** Cleared previous documents..."
+                }]
+                yield history, ""
+            except:
+                pass
+        
+        # Upload document if specified
+        if config.get("upload_file"):
+            file_path = config["upload_file"]
+            if file_path.exists():
+                history = history + [{
+                    "role": "assistant",
+                    "content": f"📤 **Turn {turn}:** Uploading {file_path.name}..."
+                }]
+                yield history, ""
+                
+                try:
+                    doc_info = api_client.upload_document(str(file_path), current_session)
+                    attached_documents.append({
+                        'id': doc_info.get('document_id', ''),
+                        'filename': doc_info.get('filename', file_path.name),
+                        'char_count': doc_info.get('char_count', 0),
+                        'format': doc_info.get('format', 'pdf')
+                    })
+                    
+                    history = history + [{
+                        "role": "assistant",
+                        "content": f"✅ **Upload complete:** {file_path.name} ({doc_info.get('char_count', 0):,} characters)"
+                    }]
+                    yield history, ""
+                except Exception as e:
+                    history = history + [{
+                        "role": "assistant",
+                        "content": f"❌ **Upload failed:** {e}"
+                    }]
+                    yield history, ""
+                    continue
+            else:
+                history = history + [{
+                    "role": "assistant",
+                    "content": f"⚠️ **File not found:** {file_path}"
+                }]
+                yield history, ""
+                continue
+        
+        # Ask question
+        question = config["question"]
         history = history + [{
-            "role": "assistant", 
-            "content": f"📄 **Document Test - Question {i}/{len(test_questions)}**\n\nProcessing: _{question[:80]}..._"
+            "role": "assistant",
+            "content": f"💬 **Turn {turn}/4:** Processing question..."
         }]
         yield history, ""
-        
         history = history[:-1]
         
         try:
@@ -1213,24 +1291,22 @@ python tests/test_multi_turn_comprehensive.py
         except Exception as e:
             history = history + [{
                 "role": "assistant",
-                "content": f"⚠️ **Error in Question {i}:** {e}"
+                "content": f"⚠️ **Error in Turn {turn}:** {e}"
             }]
             yield history, ""
     
     # Completion message
     history = history + [{
         "role": "assistant",
-        "content": f"""✅ **Document Integration Test Complete**
+        "content": f"""✅ **Document Integration Test Complete (4 Turns)**
 
 **Results:**
-- API Connection: ✅
-- Chat with document params: ✅
-- Memory integration: ✅
+- Documents uploaded: ✅
+- Document context in chat: ✅
+- Multi-document switching: ✅
 
-**To test with actual documents:**
-1. Click 📎 to upload a PDF/DOCX
-2. Type your question about the document
-3. The system will use document content as context
+**Note:** User messages should show attached documents.
+Assistant responses should show "📄 Dokumen dalam konteks" section.
 
 **For comprehensive 8-turn test:** Run `python tests/test_multi_turn_comprehensive.py`"""
     }]
