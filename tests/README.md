@@ -28,6 +28,110 @@ GOOGLE_API_KEY=your_key_here
 EOF
 ```
 
+## 🔍 Multi-Turn API Blocking Diagnostic Tests (NEW)
+
+These diagnostic tests help identify blocking issues in multi-turn conversations. Use them when the system works for the first request but blocks on subsequent requests.
+
+### Test 1: Pipeline Test (Standalone - No API Server Needed) ⭐
+
+**File:** `minimal_pipeline_test.py`
+
+Tests the core pipeline directly without HTTP/API. Use this **first** to verify the LLM and retrieval system work correctly for multiple sequential queries.
+
+**How to Run:**
+```bash
+# From project root
+python tests/minimal_pipeline_test.py
+
+# In Kaggle notebook
+%cd /kaggle/working/06_ID_Legal
+%run tests/minimal_pipeline_test.py
+```
+
+**What It Tests:**
+- LLM engine direct generation (3 sequential queries)
+- Full RAG pipeline with streaming (4 sequential queries simulating UI usage)
+- RAM/VRAM memory management and cache clearing
+- Generation lock serialization
+
+**Expected Output:**
+```
+======================================================================
+DIAGNOSTIC SUMMARY
+======================================================================
+Total Tests: 7
+Passed: 7
+Failed: 0
+Total Time: XXXs
+
+--- TEST RESULTS ---
+[1] LLM_Gen_1: ✅ PASS (Xs)
+    Memory: RAM=XXXmb, VRAM=XXXmb (XX%)
+...
+
+--- ALL TESTS PASSED ---
+The pipeline works correctly for multiple sequential queries.
+If blocking occurs with Gradio/API, the issue is in HTTP/UI layer.
+======================================================================
+```
+
+**Results saved to:** `tests/test_results.json`
+
+---
+
+### Test 2: API Test (Requires Running API Server)
+
+**File:** `debug_api_blocking.py`
+
+Tests the HTTP API layer by simulating Gradio UI requests. **Run this ONLY if Test 1 passes and you still have blocking issues.**
+
+**Step 1: Start API Server First** (in a separate terminal or Kaggle cell)
+```bash
+python -m uvicorn api.server:app --host 0.0.0.0 --port 8000
+```
+Wait for "API ready to serve requests" message.
+
+**Step 2: Run the Test**
+```bash
+# From project root
+python tests/debug_api_blocking.py
+
+# With custom API URL
+python tests/debug_api_blocking.py http://127.0.0.1:8000/api/v1
+
+# In Kaggle notebook (after API is running)
+%run tests/debug_api_blocking.py http://127.0.0.1:8000/api/v1
+```
+
+**What It Tests:**
+- API health check
+- Retrieve endpoint (non-streaming) - 3 sequential queries
+- Chat endpoint (streaming SSE) - 4 sequential queries
+- Mixed retrieve/chat sequence
+
+**Results saved to:** `tests/api_test_results.json`
+
+---
+
+### Interpreting Diagnostic Results
+
+Both tests generate a **DIAGNOSTIC SUMMARY** with pattern analysis:
+
+| Pattern | Likely Cause | Solution |
+|---------|--------------|----------|
+| All pipeline tests pass, API fails | HTTP/Gradio layer issue | Check server config, connection handling |
+| First test passes, 2nd fails | Resource exhaustion or lock deadlock | Check generation lock, memory cleanup |
+| Only CHAT tests fail | Streaming/SSE connection issue | Check response streaming, connection close |
+| VRAM > 90% at failure | GPU memory exhaustion | Increase cache clearing, reduce batch size |
+
+### Memory Guidelines
+
+- **VRAM < 80%**: Safe zone
+- **VRAM 80-90%**: Warning, may cause OOM on next request
+- **VRAM > 90%**: High risk of OOM errors
+
+---
+
 ## 📋 Testing the Bug Fixes
 
 ### Test 1: Division by Zero Fix (hybrid_search.py)
