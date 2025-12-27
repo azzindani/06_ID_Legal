@@ -14,6 +14,9 @@ from typing import List, Dict, Any, Optional
 import json
 import sys
 import os
+import asyncio
+import queue
+import threading
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
@@ -401,12 +404,38 @@ async def conversational_rag(req: ChatRequest, request: Request):
                     'research_team_size': req.team_size
                 }
                 
-                for event in service.process_query(
-                    message=req.query,
-                    session_id=req.session_id or 'default',
-                    config_dict=config_dict,
-                    thinking_mode=req.thinking_level
-                ):
+                # Use a thread-safe queue to communicate between sync generator and async handler
+                # This prevents blocking the uvicorn event loop
+                event_queue = queue.Queue()
+                
+                def run_sync_generator():
+                    """Run the sync generator in a thread and put events in queue"""
+                    try:
+                        for event in service.process_query(
+                            message=req.query,
+                            session_id=req.session_id or 'default',
+                            config_dict=config_dict,
+                            thinking_mode=req.thinking_level
+                        ):
+                            event_queue.put(event)
+                    except Exception as e:
+                        event_queue.put({'type': 'error', 'data': {'error': str(e)}})
+                    finally:
+                        event_queue.put(None)  # Sentinel to signal completion
+                
+                # Start the generator in a background thread
+                thread = threading.Thread(target=run_sync_generator, daemon=True)
+                thread.start()
+                
+                # Yield events from the queue asynchronously
+                loop = asyncio.get_event_loop()
+                while True:
+                    # Get event from queue without blocking the event loop
+                    event = await loop.run_in_executor(None, event_queue.get)
+                    
+                    if event is None:  # Sentinel - generator is done
+                        break
+                    
                     event_type = event.get('type')
                     data = event.get('data', {})
                     
@@ -425,6 +454,12 @@ async def conversational_rag(req: ChatRequest, request: Request):
                     elif event_type == 'final_result':
                         final_result = data
                         full_answer = data.get('answer', full_answer)
+                    
+                    elif event_type == 'error':
+                        yield f"data: {json.dumps({'type': 'error', 'message': data.get('error', 'Unknown error')})}\n\n"
+                
+                # Wait for thread to complete
+                thread.join(timeout=5.0)
                 
                 # Send final message with detailed research info
                 if final_result:
