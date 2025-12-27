@@ -410,6 +410,102 @@ class LegalRAGAPIClient:
             'format': format
         })
         return response.json().get('content', '')
+    
+    # =========================================================================
+    # Document Management (NEW)
+    # =========================================================================
+    
+    def upload_document(
+        self,
+        file_path: str,
+        session_id: str
+    ) -> Dict[str, Any]:
+        """
+        Upload a document file for context-aware chat
+        
+        Args:
+            file_path: Path to the file to upload
+            session_id: Session ID to associate document with
+            
+        Returns:
+            Dict with document_id, filename, char_count, etc.
+        """
+        url = f"{self.base_url}/documents/upload"
+        
+        with open(file_path, 'rb') as f:
+            files = {'file': (os.path.basename(file_path), f)}
+            data = {'session_id': session_id}
+            
+            response = self.session.post(
+                url,
+                files=files,
+                data=data,
+                timeout=120
+            )
+        
+        if response.status_code == 200:
+            return response.json()
+        else:
+            raise RuntimeError(f"Upload failed: {response.text}")
+    
+    def extract_from_url(
+        self,
+        url: str,
+        session_id: str
+    ) -> Dict[str, Any]:
+        """
+        Extract content from a URL for context-aware chat
+        
+        Args:
+            url: URL to extract content from
+            session_id: Session ID to associate document with
+            
+        Returns:
+            Dict with document_id, char_count, etc.
+        """
+        response = self._request('POST', '/documents/url', {
+            'url': url,
+            'session_id': session_id
+        })
+        return response.json()
+    
+    def list_documents(self, session_id: str) -> List[Dict[str, Any]]:
+        """
+        List all documents for a session
+        
+        Args:
+            session_id: Session ID to list documents for
+            
+        Returns:
+            List of document info dicts
+        """
+        response = self._request('GET', '/documents', params={'session_id': session_id})
+        data = response.json()
+        return data.get('documents', [])
+    
+    def delete_document(self, document_id: str) -> bool:
+        """Delete a specific document"""
+        try:
+            self._request('DELETE', f'/documents/{document_id}')
+            return True
+        except:
+            return False
+    
+    def clear_documents(self, session_id: str) -> bool:
+        """Clear all documents for a session"""
+        try:
+            self._request('DELETE', '/documents', params={'session_id': session_id})
+            return True
+        except:
+            return False
+    
+    def cleanup_memory(self) -> Dict[str, Any]:
+        """Force GPU/RAM memory cleanup"""
+        try:
+            response = self._request('POST', '/memory/cleanup')
+            return response.json()
+        except:
+            return {}
 
 
 # =============================================================================
