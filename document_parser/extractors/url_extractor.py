@@ -370,11 +370,12 @@ class URLExtractor(BaseExtractor):
 
 URL_PATTERN = re.compile(
     r'https?://'  # http:// or https://
-    r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,6}\.?|'  # domain
+    r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+'  # domain parts
+    r'[A-Z]{2,63}|'  # TLD
     r'localhost|'  # localhost
     r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'  # or IP
     r'(?::\d+)?'  # optional port
-    r'(?:/?|[/?]\S+)',
+    r'(?:/[^\s\"\'\<\>\)\]]*)?',  # path (everything until whitespace or brackets)
     re.IGNORECASE
 )
 

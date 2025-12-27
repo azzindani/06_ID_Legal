@@ -353,9 +353,9 @@ def test_chat_with_document_simulation() -> List[Tuple[str, bool, str]]:
         shutdown()
         return results
     
-    # Step 2: Retrieve session documents
+    # Step 2: Retrieve session documents (with text for context building)
     try:
-        session_docs = storage.get_session_documents(session_id)
+        session_docs = storage.get_session_documents(session_id, include_text=True)
         passed = len(session_docs) > 0
         results.append(("Step 2: Retrieve session docs", passed, f"{len(session_docs)} docs"))
         print_test("Step 2: Retrieve session docs", passed, f"{len(session_docs)} docs")
