@@ -657,6 +657,199 @@ class RAGPipeline:
                 'metadata': {}
             }
 
+    def _generate_with_external_llm(
+        self,
+        question: str,
+        retrieved_results: List[Dict],
+        query_analysis: Dict,
+        conversation_history: Optional[List],
+        retrieval_time: float,
+        start_time: float,
+        rag_result: Optional[Dict] = None,
+        thinking_mode: str = 'low'
+    ) -> Generator[Dict[str, Any], None, None]:
+        """
+        Generate response using external LLM provider (e.g., OpenRouter).
+        Used when pipeline is in retrieval-only mode but LLM provider is configured at runtime.
+        """
+        try:
+            from core.llm_providers.factory import LLMProviderFactory
+            
+            provider = LLMProviderFactory.get_current_provider()
+            if provider is None or provider.provider_name == "none":
+                self.logger.warning("No LLM provider available for generation")
+                yield {
+                    'type': 'error',
+                    'error': 'No LLM provider configured. Use /llm/config to set up OpenRouter.',
+                    'done': True
+                }
+                return
+            
+            self.logger.info("Using external LLM provider", {
+                "provider": provider.provider_name,
+                "model": provider.model_name
+            })
+            
+            # Build context from retrieved results
+            context_parts = []
+            for i, r in enumerate(retrieved_results[:10], 1):
+                record = r.get('record', r)
+                reg_type = record.get('regulation_type', '')
+                reg_num = record.get('regulation_number', '')
+                year = record.get('year', '')
+                about = record.get('about', '')
+                content = record.get('content', '')
+                
+                context_parts.append(
+                    f"[{i}] {reg_type} No. {reg_num} Tahun {year}\n"
+                    f"Tentang: {about}\n"
+                    f"Isi: {content}\n"
+                )
+            
+            context = "\n---\n".join(context_parts)
+            
+            # Build prompt based on thinking mode
+            thinking_instruction = ""
+            if thinking_mode == "high":
+                thinking_instruction = """
+Sebelum menjawab, lakukan analisis mendalam dengan langkah:
+1. Identifikasi isu hukum utama
+2. Temukan pasal-pasal yang relevan
+3. Analisis hubungan antar regulasi
+4. Buat kesimpulan terstruktur
+<thinking>
+"""
+            elif thinking_mode == "medium":
+                thinking_instruction = """
+Analisis pertanyaan dan berikan jawaban berdasarkan dokumen legal yang tersedia.
+<thinking>
+"""
+            
+            prompt = f"""Anda adalah asisten hukum Indonesia yang ahli. Jawab pertanyaan berikut berdasarkan dokumen legal yang diberikan.
+
+KONTEKS DOKUMEN:
+{context}
+
+PERTANYAAN: {question}
+
+{thinking_instruction}
+Jawab dengan lengkap dan sitasi sumber regulasi yang relevan."""
+
+            # Stream from provider
+            full_text = ""
+            thinking_text = ""
+            tokens_generated = 0
+            generation_start = time.time()
+            
+            for chunk in provider.generate_stream(
+                prompt=prompt,
+                max_new_tokens=4096,
+                temperature=0.7 if thinking_mode == "low" else 0.5
+            ):
+                if chunk.get('token'):
+                    token = chunk['token']
+                    full_text += token
+                    tokens_generated += 1
+                    
+                    # Detect thinking section
+                    if '<thinking>' in full_text and '</thinking>' not in full_text:
+                        thinking_text += token
+                        yield {
+                            'type': 'thinking',
+                            'token': token,
+                            'done': False
+                        }
+                    else:
+                        yield {
+                            'type': 'token',
+                            'token': token,
+                            'done': False
+                        }
+                
+                if chunk.get('done'):
+                    break
+            
+            generation_time = time.time() - generation_start
+            total_time = time.time() - start_time
+            
+            # Extract answer (remove thinking tags if present)
+            answer = full_text
+            if '<thinking>' in answer and '</thinking>' in answer:
+                think_start = answer.find('<thinking>')
+                think_end = answer.find('</thinking>') + len('</thinking>')
+                thinking_text = answer[think_start:think_end]
+                answer = answer[:think_start] + answer[think_end:]
+            answer = answer.strip()
+            
+            # Build sources
+            sources = []
+            for r in retrieved_results:
+                record = r.get('record', r)
+                scores = r.get('scores', {})
+                sources.append({
+                    'regulation_type': record.get('regulation_type', ''),
+                    'regulation_number': record.get('regulation_number', ''),
+                    'year': record.get('year', ''),
+                    'about': record.get('about', ''),
+                    'content': record.get('content', ''),
+                    'score': scores.get('final', 0),
+                    'scores': scores
+                })
+            
+            # Build phase metadata from rag_result
+            phase_metadata = {}
+            if rag_result:
+                research_data = rag_result.get('research_data', {})
+                if research_data:
+                    phase_results = research_data.get('phase_results', {})
+                    from config import RESEARCH_TEAM_PERSONAS
+                    entry_idx = 0
+                    for phase_name, results in phase_results.items():
+                        for result in results:
+                            persona = result.get('metadata', {}).get('persona', 'unknown')
+                            key = f"{entry_idx}_{phase_name}_{persona}"
+                            researcher_info = RESEARCH_TEAM_PERSONAS.get(persona, {})
+                            phase_metadata[key] = {
+                                'phase': phase_name,
+                                'researcher': persona,
+                                'researcher_name': researcher_info.get('name', persona),
+                                'candidates': [result],
+                                'confidence': 1.0
+                            }
+                            entry_idx += 1
+            
+            # Yield complete
+            yield {
+                'type': 'complete',
+                'success': True,
+                'answer': answer,
+                'thinking': thinking_text,
+                'sources': sources,
+                'citations': sources,
+                'metadata': {
+                    'question': question,
+                    'retrieval_time': retrieval_time,
+                    'generation_time': generation_time,
+                    'total_time': total_time,
+                    'results_count': len(retrieved_results),
+                    'tokens_generated': tokens_generated,
+                    'provider': provider.provider_name,
+                    'model': provider.model_name
+                },
+                'phase_metadata': phase_metadata,
+                'done': True
+            }
+            
+        except Exception as e:
+            self.logger.error("External LLM generation failed", {"error": str(e)})
+            import traceback
+            self.logger.debug("Traceback", {"traceback": traceback.format_exc()})
+            yield {
+                'type': 'error',
+                'error': str(e),
+                'done': True
+            }
+
     def _generate_streaming(
         self,
         question: str,
@@ -668,11 +861,27 @@ class RAGPipeline:
         rag_result: Optional[Dict] = None,
         thinking_mode: str = 'low'
     ) -> Generator[Dict[str, Any], None, None]:
+
         """Generate streaming response with full metadata"""
 
         self.logger.info("Starting streaming generation", {
             "thinking_mode": thinking_mode
         })
+        
+        # Check if we have a generation engine, otherwise try external LLM provider
+        if self.generation_engine is None:
+            # Try to use external LLM provider (e.g., OpenRouter configured at runtime)
+            yield from self._generate_with_external_llm(
+                question=question,
+                retrieved_results=retrieved_results,
+                query_analysis=query_analysis,
+                conversation_history=conversation_history,
+                retrieval_time=retrieval_time,
+                start_time=start_time,
+                rag_result=rag_result,
+                thinking_mode=thinking_mode
+            )
+            return
 
         # Pre-build phase_metadata from rag_result for inclusion in complete chunk
         phase_metadata = {}

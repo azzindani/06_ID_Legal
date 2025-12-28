@@ -399,10 +399,10 @@ Response: ...
 
 ### Running LLM Provider Tests in Kaggle
 
-**Step 1: Start API Server (Background Thread)**
+**Step 1: Start API Server (Skip Local LLM)**
 
 ```python
-# Cell 1: Start API in background
+# Cell 1: Start API with --llm-provider none (no local LLM loading)
 import threading
 import time
 import os
@@ -411,75 +411,58 @@ import sys
 os.chdir('/kaggle/working/06_ID_Legal')
 sys.path.insert(0, '/kaggle/working/06_ID_Legal')
 
+# IMPORTANT: Set CLI args BEFORE importing the app
+sys.argv = ['api.server', '--llm-provider', 'none']
+
 def start_api():
     import uvicorn
-    from api.server import create_app
-    app = create_app(llm_provider="none")
-    uvicorn.run(app, host="127.0.0.1", port=8000, log_level="warning")
+    from api.server import app
+    uvicorn.run(app, host="127.0.0.1", port=8000, log_level="info")
 
 api_thread = threading.Thread(target=start_api, daemon=True)
 api_thread.start()
 
-print("⏳ Starting API server (wait 60-90 seconds)...")
-time.sleep(90)
-print("✅ API ready!")
+print("⏳ Starting API with --llm-provider none...")
+print("   (Skips local LLM, will configure OpenRouter at runtime)")
+print("   Wait ~30-60 seconds for RAG pipeline...")
+time.sleep(60)
+print("✅ API should be ready!")
 ```
 
 **Step 2: Verify API is Running**
 
 ```python
-# Cell 2: Check API health
+# Cell 2: Check API health and LLM status
 import requests
 try:
     r = requests.get("http://127.0.0.1:8000/api/v1/health", timeout=5)
-    print("✅ API is running!" if r.status_code == 200 else "❌ Not responding")
-except:
-    print("❌ Cannot connect")
+    if r.status_code == 200:
+        print("✅ API is running!")
+        # Check LLM provider status
+        s = requests.get("http://127.0.0.1:8000/api/v1/llm/status", timeout=5)
+        print(f"LLM Provider: {s.json()}")
+    else:
+        print(f"❌ Status: {r.status_code}")
+except Exception as e:
+    print(f"❌ Cannot connect: {e}")
 ```
 
 **Step 3: Run Tests**
 
 ```python
-# Cell 3A: Simulation test (no OpenRouter key needed)
+# Cell 3A: Simulation test (no OpenRouter key needed, no server needed)
 !python tests/integration/test_llm_providers_simulation.py
 ```
 
 ```python
-# Cell 3B: Multi-turn test with OpenRouter
+# Cell 3B: Multi-turn test with OpenRouter (requires API running)
 import os
 os.environ["OPENROUTER_API_KEY"] = "sk-or-v1-YOUR-KEY-HERE"
 
 !python tests/integration/test_llm_provider_multi_turn.py
 ```
 
-**Alternative: Using Subprocess**
-
-```python
-# Start API in subprocess
-import subprocess
-import time
-import sys
-import os
-
-os.chdir('/kaggle/working/06_ID_Legal')
-
-api_proc = subprocess.Popen(
-    [sys.executable, "-m", "uvicorn", "api.server:app", 
-     "--host", "127.0.0.1", "--port", "8000"],
-    stdout=subprocess.PIPE,
-    stderr=subprocess.PIPE
-)
-
-print("⏳ Waiting 90 seconds...")
-time.sleep(90)
-print("✅ API ready!")
-
-# Run test
-!python tests/integration/test_llm_provider_multi_turn.py --openrouter-key sk-or-v1-...
-
-# Cleanup when done
-api_proc.terminate()
-```
+> **Note:** The multi-turn test will configure OpenRouter at runtime via the `/llm/config` API endpoint.
 
 ---
 
