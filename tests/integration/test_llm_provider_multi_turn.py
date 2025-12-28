@@ -205,16 +205,18 @@ class OpenRouterTestClient:
     def configure_openrouter(self) -> bool:
         """Configure API to use OpenRouter provider"""
         try:
+            # Use Gemini Flash - better compatibility with free tier privacy settings
             resp = requests.post(
                 f"{API_BASE_URL}/llm/config",
                 json={
                     "provider": "openrouter",
-                    "model": "openai/gpt-oss-120b:free",
+                    "model": "google/gemini-2.0-flash-exp:free",
                     "api_key": self.openrouter_key,
                     "save_key": False
                 },
                 timeout=30
             )
+
             if resp.status_code == 200:
                 data = resp.json()
                 print(f"{Colors.GREEN}✓ OpenRouter configured: {data.get('model')}{Colors.RESET}")
