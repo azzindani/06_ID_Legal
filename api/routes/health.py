@@ -94,3 +94,34 @@ async def liveness_check():
     Simple check that the service is running.
     """
     return {"alive": True}
+
+
+@router.post("/memory/cleanup")
+async def cleanup_memory():
+    """
+    Force memory cleanup (GPU and RAM)
+    
+    Clears CUDA cache and runs garbage collection.
+    Useful between test turns to prevent OOM.
+    
+    Returns:
+        Memory statistics before and after cleanup
+    """
+    from utils.memory_utils import aggressive_cleanup, get_memory_stats
+    
+    # Get stats before
+    before = get_memory_stats()
+    
+    # Run aggressive cleanup
+    cleanup_stats = aggressive_cleanup(reason="API cleanup request")
+    
+    # Get stats after
+    after = get_memory_stats()
+    
+    return {
+        "success": True,
+        "before": before,
+        "after": after,
+        "cleanup": cleanup_stats
+    }
+

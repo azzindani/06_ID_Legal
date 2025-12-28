@@ -76,6 +76,10 @@ class ChatRequest(BaseModel):
     temperature: float = Field(0.7, ge=0.0, le=2.0, description="LLM temperature")
     max_tokens: int = Field(2048, ge=256, le=8192, description="Max tokens to generate")
     team_size: int = Field(3, ge=1, le=5, description="Research team size")
+    # Document context (NEW)
+    document_ids: Optional[List[str]] = Field(None, description="Specific document IDs to include as context")
+    include_session_documents: bool = Field(False, description="Include all session documents as context")
+    max_document_chars: int = Field(100000, ge=1000, le=100000, description="Max chars per document context (tests can lower to prevent OOM)")
     
     @validator('query')
     def validate_query_field(cls, v):
@@ -389,6 +393,48 @@ async def conversational_rag(req: ChatRequest, request: Request):
         if req.session_id:
             context = manager.get_context_for_query(req.session_id)
         
+        # Build document context if documents are requested (NEW)
+        document_context = ""
+        if req.session_id and (req.document_ids or req.include_session_documents):
+            try:
+                import document_parser
+                from document_parser.context_builder import DocumentContextBuilder
+                
+                if document_parser.is_initialized():
+                    storage = document_parser.get_storage()
+                    builder = DocumentContextBuilder()
+                    
+                    # Get documents
+                    if req.document_ids:
+                        docs = storage.get_documents_text(req.document_ids)
+                    elif req.include_session_documents:
+                        docs = storage.get_session_documents(req.session_id, include_text=True)
+                    else:
+                        docs = []
+                    
+                    # Build context with truncation to prevent OOM
+                    if docs:
+                        doc_list = []
+                        for d in docs:
+                            text = d.get('extracted_text', '')
+                            if text:
+                                # Truncate to max_document_chars if too long
+                                if len(text) > req.max_document_chars:
+                                    text = text[:req.max_document_chars] + "\n\n[... Dokumen dipotong karena batas ukuran ...]"
+                                    logger.info(f"Truncated {d['filename']} from {len(d['extracted_text'])} to {req.max_document_chars} chars")
+                                doc_list.append({'filename': d['filename'], 'extracted_text': text})
+                        
+                        if doc_list:
+                            document_context = builder.build_prompt_section(doc_list)
+                            logger.info(f"Injected {len(doc_list)} documents into context (max {req.max_document_chars} chars each)")
+            except Exception as e:
+                logger.warning(f"Failed to build document context: {e}")
+        
+        # Prepend document context to query if available
+        enhanced_query = req.query
+        if document_context:
+            enhanced_query = f"{document_context}\n\n{req.query}"
+        
         # Handle streaming
         if req.stream:
             async def generate():
@@ -412,7 +458,7 @@ async def conversational_rag(req: ChatRequest, request: Request):
                     """Run the sync generator in a thread and put events in queue"""
                     try:
                         for event in service.process_query(
-                            message=req.query,
+                            message=enhanced_query,
                             session_id=req.session_id or 'default',
                             config_dict=config_dict,
                             thinking_mode=req.thinking_level
@@ -489,7 +535,7 @@ async def conversational_rag(req: ChatRequest, request: Request):
             )
             
             result = pipeline.query(
-                question=req.query,
+                question=enhanced_query,
                 conversation_history=context,
                 stream=False,
                 thinking_mode=req.thinking_level

@@ -28,6 +28,222 @@ GOOGLE_API_KEY=your_key_here
 EOF
 ```
 
+---
+
+## 📄 Document Parser Tests (NEW)
+
+The document parser module allows users to upload documents (PDF, DOCX, HTML, images) and use them as context in chat. These tests verify all functionality.
+
+### Required Dependencies
+
+```bash
+# Install document parser dependencies
+pip install pypdf2 pdfplumber python-docx beautifulsoup4 pytesseract pillow requests
+```
+
+> **Note:** For OCR (image extraction), you also need Tesseract:
+> - Ubuntu/Kaggle: `apt-get install tesseract-ocr`
+> - macOS: `brew install tesseract`
+> - Windows: Download from [GitHub](https://github.com/UB-Mannheim/tesseract/wiki)
+
+---
+
+### Test 1: Unit Tests (No API Required) ⭐
+
+**File:** `test_document_parser.py`
+
+Tests individual extractors, storage, and context building without needing the API server.
+
+```bash
+# Run from project root
+python tests/test_document_parser.py
+```
+
+**What It Tests:**
+| Component | Tests |
+|-----------|-------|
+| PDF Extractor | Extract text from PDFs |
+| DOCX Extractor | Extract from Word docs (needs python-docx) |
+| HTML Extractor | Extract from HTML files |
+| Image/OCR | Extract text from images (needs Tesseract or EasyOCR) |
+| URL Extractor | Fetch and extract from URLs |
+| Document Storage | CRUD, deduplication, session limits |
+| Context Builder | Build prompt context from documents |
+
+**Expected Output:**
+```
+============================================================
+  DOCUMENT PARSER TEST SUITE
+============================================================
+Test documents directory: tests/test_documents
+Documents found: 9
+
+...
+
+TEST SUMMARY
+============================================================
+  Total:  39
+  Passed: 34  (or higher if all deps installed)
+  Failed: 5   (usually DOCX if python-docx not installed)
+```
+
+---
+
+### Test 2: Integration Tests (No API Required)
+
+**File:** `test_document_parser_integration.py`
+
+Tests module initialization, pipeline context injection simulation, and URL detection.
+
+```bash
+python tests/test_document_parser_integration.py
+```
+
+**What It Tests:**
+- Module initialization and shutdown
+- Context builder with simulated documents
+- URL detection in prompts
+- Chat flow simulation with uploaded files
+
+---
+
+### Test 3: End-to-End API Tests (Requires Running API)
+
+**File:** `test_document_e2e.py`
+
+Tests the complete flow through the API including document upload, chat with context, and cleanup.
+
+**Step 1: Start API Server**
+```bash
+# In separate terminal or background
+python -m uvicorn api.server:app --host 0.0.0.0 --port 8000
+```
+
+**Step 2: Run E2E Tests**
+```bash
+python tests/test_document_e2e.py
+```
+
+**What It Tests:**
+| Test | Description |
+|------|-------------|
+| Upload PDF | Upload document via `/documents/upload` endpoint |
+| List documents | Retrieve session documents via `/documents` |
+| Chat WITH docs | Chat using `include_session_documents=true` |
+| Chat WITHOUT docs | Verify normal chat still works (backwards compatibility) |
+| URL extraction | Extract content from external URL |
+| Cleanup | Delete documents via API |
+
+---
+
+### Running in Kaggle
+
+```python
+# Cell 1: Install dependencies
+!pip install python-docx pypdf2 pdfplumber beautifulsoup4 pytesseract pillow -q
+
+# Cell 2: Run unit tests (no API needed)
+%cd /kaggle/working/06_ID_Legal
+!python tests/test_document_parser.py
+
+# Cell 3: Run integration tests (no API needed)  
+!python tests/test_document_parser_integration.py
+
+# Cell 4: Run E2E tests (needs API running)
+import subprocess
+import time
+import sys
+
+# Start API in background
+api_proc = subprocess.Popen(
+    [sys.executable, "-m", "uvicorn", "api.server:app", "--port", "8000"],
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE
+)
+
+print("⏳ Starting API (wait 60-90 seconds for model loading)...")
+time.sleep(90)  # Wait longer in Kaggle
+
+# Run tests
+result = subprocess.run(
+    [sys.executable, "tests/test_document_e2e.py"],
+    capture_output=True,
+    text=True
+)
+print(result.stdout)
+
+# Cleanup
+api_proc.terminate()
+```
+
+---
+
+### Test 4: Multi-Turn Comprehensive (8-Turn Full Validation) 🏆
+
+**File:** `test_multi_turn_comprehensive.py`
+
+The **most comprehensive test** - validates the entire document integration through 8 conversation turns with document switching, memory retention, and keyword validation.
+
+```bash
+# Start API first
+python -m uvicorn api.server:app --host 0.0.0.0 --port 8000
+
+# Run test (takes 15-30 minutes on Kaggle GPU)
+python tests/test_multi_turn_comprehensive.py
+```
+
+**What It Tests:**
+
+| Turn | Document Context | Validation |
+|------|-----------------|------------|
+| 1 | Upload PDF #1 | Doc + RAG integration |
+| 2 | Same doc | Memory + doc retention |
+| 3 | **No document** | Backwards compatibility |
+| 4 | Upload PDF #2 | Document switching |
+| 5 | Same doc | Memory + switched doc |
+| 6 | Both docs | Multi-document context |
+| 7 | URL extract | URL integration |
+| 8 | **No document** | Memory only |
+
+**Features:**
+- ✅ Keyword validation (checks answer quality)
+- ✅ Timing metrics (per-turn and total)
+- ✅ JSON report generation
+- ✅ Session cleanup
+
+**Report Output:** `tests/test_reports/multi_turn_test_*.json`
+
+**Kaggle Instructions:**
+```python
+# Cell 1: Start API
+import threading
+import time
+import os
+import sys
+
+os.chdir('/kaggle/working/06_ID_Legal')
+sys.path.insert(0, '/kaggle/working/06_ID_Legal')
+
+def start_api():
+    import uvicorn
+    from api.server import app
+    uvicorn.run(app, host="127.0.0.1", port=8000, log_level="warning")
+
+api_thread = threading.Thread(target=start_api, daemon=True)
+api_thread.start()
+
+print("⏳ Waiting 90 seconds for API startup...")
+time.sleep(90)
+print("✅ API ready")
+```
+
+```python
+# Cell 2: Run comprehensive test
+!python tests/test_multi_turn_comprehensive.py
+```
+
+---
+
 ## 🔍 Multi-Turn API Blocking Diagnostic Tests (NEW)
 
 These diagnostic tests help identify blocking issues in multi-turn conversations. Use them when the system works for the first request but blocks on subsequent requests.

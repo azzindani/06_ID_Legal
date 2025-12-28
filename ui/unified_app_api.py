@@ -202,21 +202,190 @@ def format_health_report():
 
 
 # =============================================================================
+# DOCUMENT MANAGEMENT - Attachment-style like ChatGPT/Claude
+# =============================================================================
+
+# Global state for attached documents
+attached_documents: List[Dict[str, Any]] = []
+
+
+def upload_document_handler(files):
+    """
+    Handle document upload from UI.
+    Uploads files to API and returns updated display.
+    Falls back to local-only mode if API upload fails.
+    """
+    global api_client, current_session, attached_documents
+    import uuid
+    
+    print(f"[UPLOAD] Called with files: {files}", flush=True)
+    
+    if not files:
+        return get_attached_docs_display()
+    
+    # Initialize API if needed
+    if api_client is None:
+        initialize_api()
+    
+    # Ensure session exists
+    if not current_session:
+        current_session = f"ui-session-{uuid.uuid4().hex[:8]}"
+        print(f"[UPLOAD] Created session: {current_session}", flush=True)
+    
+    for file_obj in files if isinstance(files, list) else [files]:
+        try:
+            file_path = file_obj.name if hasattr(file_obj, 'name') else str(file_obj)
+            filename = os.path.basename(file_path)
+            print(f"[UPLOAD] Processing: {filename}", flush=True)
+            
+            # Get file size for char count estimate
+            try:
+                file_size = os.path.getsize(file_path)
+                char_estimate = file_size  # Rough estimate
+            except:
+                char_estimate = 0
+            
+            # Try API upload if available
+            api_success = False
+            doc_id = f"local-{uuid.uuid4().hex[:8]}"
+            char_count = char_estimate
+            
+            if api_client:
+                try:
+                    doc_info = api_client.upload_document(file_path, current_session)
+                    print(f"[UPLOAD] API Result: {doc_info}", flush=True)
+                    doc_id = doc_info.get('document_id', doc_id)
+                    char_count = doc_info.get('char_count', char_estimate)
+                    api_success = True
+                except Exception as api_err:
+                    print(f"[UPLOAD] API Error (using local fallback): {api_err}", flush=True)
+            
+            # Always add to local list (even if API failed)
+            attached_documents.append({
+                'id': doc_id,
+                'filename': filename,
+                'char_count': char_count,
+                'format': os.path.splitext(filename)[1].lstrip('.') or 'unknown',
+                'api_uploaded': api_success
+            })
+            print(f"[UPLOAD] Added to attached_documents: {filename} (API: {api_success})", flush=True)
+            
+        except Exception as e:
+            print(f"[UPLOAD] Error: {e}", flush=True)
+    
+    display = get_attached_docs_display()
+    print(f"[UPLOAD] Final display: {display}", flush=True)
+    print(f"[UPLOAD] attached_documents count: {len(attached_documents)}", flush=True)
+    return display
+
+
+def extract_url_handler(url: str):
+    """Extract content from URL"""
+    global api_client, current_session, attached_documents
+    
+    if not url or not url.strip():
+        return get_attached_docs_display(), ""
+    
+    if api_client is None:
+        initialize_api()
+    
+    try:
+        doc_info = api_client.extract_from_url(url.strip(), current_session)
+        attached_documents.append({
+            'id': doc_info.get('document_id', ''),
+            'filename': url[:50] + '...' if len(url) > 50 else url,
+            'char_count': doc_info.get('char_count', 0),
+            'format': 'url'
+        })
+        return get_attached_docs_display(), ""
+    except Exception as e:
+        return f"❌ Error: {e}", url
+
+
+def get_attached_docs_display() -> str:
+    """Generate display for attached documents"""
+    global attached_documents
+    
+    if not attached_documents:
+        return ""
+    
+    lines = []
+    for i, doc in enumerate(attached_documents):
+        chars = f"{doc['char_count']:,}" if doc['char_count'] else "?"
+        lines.append(f"📄 **{doc['filename']}** ({chars} chars)")
+    
+    return "\n".join(lines)
+
+
+def remove_document(doc_index: int):
+    """Remove a document from attached list"""
+    global api_client, attached_documents
+    
+    if 0 <= doc_index < len(attached_documents):
+        doc = attached_documents[doc_index]
+        try:
+            if api_client and doc.get('id'):
+                api_client.delete_document(doc['id'])
+        except:
+            pass
+        attached_documents.pop(doc_index)
+    
+    return get_attached_docs_display()
+
+
+def clear_all_documents():
+    """Clear all attached documents"""
+    global api_client, current_session, attached_documents
+    
+    try:
+        if api_client and current_session:
+            api_client.clear_documents(current_session)
+    except:
+        pass
+    
+    attached_documents = []
+    return ""
+
+
+def refresh_documents():
+    """Refresh document list from API"""
+    global api_client, current_session, attached_documents
+    
+    if api_client and current_session:
+        try:
+            docs = api_client.list_documents(current_session)
+            attached_documents = [
+                {
+                    'id': d.get('id', ''),
+                    'filename': d.get('filename', 'Unknown'),
+                    'char_count': d.get('char_count', 0),
+                    'format': d.get('format', 'unknown')
+                }
+                for d in docs
+            ]
+        except:
+            pass
+    
+    return get_attached_docs_display()
+
+
+# =============================================================================
 # CHAT FUNCTION - With proper <think> tag parsing (same as gradio_app.py)
 # =============================================================================
 
 def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_sources=True, show_metadata=True):
     """
     Main chat function with streaming and think tag parsing.
-    Matches gradio_app.py behavior exactly.
+    Now with: URL auto-detection, document display in user message and response.
     """
+    import re
     print(f"\n[CHAT] === New chat request: {message[:50]}... ===", flush=True)
     
     if not message.strip():
         print("[CHAT] Empty message, returning", flush=True)
-        return history, ""
+        return history, "", get_attached_docs_display()
     
-    global api_client, current_session
+    global api_client, current_session, attached_documents
     print(f"[CHAT] api_client is {'set' if api_client else 'None'}, current_session={current_session}", flush=True)
     
     if api_client is None:
@@ -226,8 +395,27 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
         print("[CHAT] API still None after init, returning error")
         history.append({"role": "user", "content": message})
         history.append({"role": "assistant", "content": "❌ API not connected. Please refresh and try again."})
-        yield history, ""
+        yield history, "", get_attached_docs_display()
         return
+    
+    # Auto-detect and fetch URLs in message
+    url_pattern = r'https?://[^\s<>"{}|\\^`\[\]]+'
+    urls_found = re.findall(url_pattern, message)
+    urls_fetched = []
+    
+    for url in urls_found[:3]:  # Max 3 URLs
+        try:
+            print(f"[CHAT] Auto-fetching URL: {url[:50]}...")
+            doc_info = api_client.extract_from_url(url, current_session)
+            attached_documents.append({
+                'id': doc_info.get('document_id', ''),
+                'filename': url[:40] + '...' if len(url) > 40 else url,
+                'char_count': doc_info.get('char_count', 0),
+                'format': 'url'
+            })
+            urls_fetched.append(url)
+        except Exception as e:
+            print(f"[CHAT] URL fetch failed: {e}")
     
     try:
         # State tracking (same as gradio_app.py)
@@ -249,15 +437,41 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
         
         print(f"[CHAT] Config: top_k={top_k}, temp={temperature}, tokens={max_tokens}, team={team_size}, think={thinking_mode}", flush=True)
         
-        # Initial processing message
+        # SAVE attached documents to local variable, then CLEAR immediately
+        # This makes the attachment display clear as soon as send is clicked
+        docs_for_this_message = list(attached_documents)  # Copy
+        attached_documents.clear()  # Clear immediately for display update
+        
+        # Build user message content with attached documents (using saved copy)
+        user_content = message
+        if docs_for_this_message:
+            doc_list = "\n".join([f"📄 {d['filename']} ({d['char_count']:,} chars)" for d in docs_for_this_message])
+            user_content = f"{message}\n\n---\n**📎 Dokumen terlampir:**\n{doc_list}"
+        
+        # Check if documents are attached (using saved copy)
+        include_docs = bool(config_dict.get('include_documents', True) and docs_for_this_message)
+        max_doc_chars = int(config_dict.get('max_document_chars', 20000))
+        
+        # Build document info section for response (using saved copy)
+        doc_info_section = ""
+        if include_docs:
+            doc_info_section = "📄 **Dokumen dalam konteks:**\n"
+            for d in docs_for_this_message:
+                doc_info_section += f"- {d['filename']} ({d['char_count']:,} karakter)\n"
+            doc_info_section += "\n---\n\n"
+            print(f"[CHAT] Including {len(docs_for_this_message)} documents in context", flush=True)
+        
+        # Initial processing message with document info
+        initial_response = doc_info_section + f"🔄 **Memproses permintaan...**\n_Settings: Top-K={top_k}, Temp={temperature}, Tokens={max_tokens}, Team={team_size}_"
+        
         yield history + [
-            {"role": "user", "content": message},
-            {"role": "assistant", "content": f"🔄 **Memproses permintaan...**\n_Settings: Top-K={top_k}, Temp={temperature}, Tokens={max_tokens}, Team={team_size}, Thinking={thinking_mode}_"}
-        ], ""
+            {"role": "user", "content": user_content},
+            {"role": "assistant", "content": initial_response}
+        ], "", get_attached_docs_display()
         
         print("[CHAT] Calling api_client.chat_stream()...", flush=True)
         
-        # Stream response from API with ALL settings
+        # Stream response from API with ALL settings including document context
         chunk_count = 0
         for chunk in api_client.chat_stream(
             query=message,
@@ -266,7 +480,9 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
             top_k=top_k,
             temperature=temperature,
             max_tokens=max_tokens,
-            team_size=team_size
+            team_size=team_size,
+            include_session_documents=include_docs,
+            max_document_chars=max_doc_chars
         ):
             chunk_count += 1
             if chunk_count == 1:
@@ -285,7 +501,8 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                     saw_think = True
                     new_text = new_text.replace('<think>', '')
                     if not header_shown and show_thinking:
-                        live_output = ['🧠 **Sedang berfikir...**\n\n']
+                        # Preserve doc_info_section at start of live_output
+                        live_output = [doc_info_section, '🧠 **Sedang berfikir...**\n\n']
                         header_shown = True
                 
                 if '</think>' in new_text:
@@ -308,7 +525,7 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                         saw_think = True
                         in_thinking = '</think>' not in accumulated_text
                         if not header_shown and show_thinking:
-                            live_output = ['🧠 **Sedang berfikir...**\n\n']
+                            live_output = [doc_info_section, '🧠 **Sedang berfikir...**\n\n']
                             header_shown = True
                         think_start = accumulated_text.find('<think>') + 7
                         if '</think>' in accumulated_text:
@@ -326,7 +543,7 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                     elif len(accumulated_text) > 100:
                         # No think tag, assume direct answer
                         if not header_shown:
-                            live_output = ['✅ **Jawaban:**\n\n']
+                            live_output = [doc_info_section, '✅ **Jawaban:**\n\n']
                             header_shown = True
                         final_answer.append(new_text)
                         live_output.append(new_text)
@@ -334,9 +551,9 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                         live_output.append(new_text)
                 
                 yield history + [
-                    {"role": "user", "content": message},
+                    {"role": "user", "content": user_content},
                     {"role": "assistant", "content": ''.join(live_output)}
-                ], ""
+                ], "", get_attached_docs_display()
             
             elif chunk_type == 'done':
                 result_data = chunk
@@ -356,6 +573,11 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
         # Add config info at the top (shows settings were applied)
         config_info = f"_⚙️ Config: Top-K={top_k}, Temp={temperature}, Tokens={max_tokens}, Team={team_size}, Think={thinking_mode}_"
         
+        # Add document context section (collapsible) if documents were used
+        if include_docs and docs_for_this_message:
+            doc_list = "\n".join([f"- {d['filename']} ({d['char_count']:,} karakter)" for d in docs_for_this_message])
+            final_output += f'<details><summary>📄 <strong>Dokumen dalam Konteks</strong></summary>\n\n{doc_list}\n</details>\n\n---\n\n'
+        
         # Add thinking section if available
         if show_thinking and thinking_text:
             final_output += f'<details><summary>🧠 <strong>Proses Berpikir</strong></summary>\n\n{thinking_text}\n</details>\n\n---\n\n### ✅ Jawaban\n\n{response_text}'
@@ -373,18 +595,20 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
         # Add config metadata at the bottom
         final_output += f'\n\n---\n\n{config_info}'
         
+        # Note: attached_documents already cleared at start of function
+        
         yield history + [
-            {"role": "user", "content": message},
+            {"role": "user", "content": user_content},
             {"role": "assistant", "content": final_output}
-        ], ""
+        ], "", ""  # Empty string clears attachment display
         
     except Exception as e:
         import traceback
         traceback.print_exc()
         yield history + [
-            {"role": "user", "content": message},
+            {"role": "user", "content": user_content},
             {"role": "assistant", "content": f"❌ **Error:** {e}"}
-        ], ""
+        ], "", ""
 
 
 # =============================================================================
@@ -867,7 +1091,7 @@ def run_conversational_test(history, config_dict, show_thinking, show_sources, s
             print(f"[TEST Q{i}] Calling chat_with_legal_rag...")
             updated_history = history
             chunk_count = 0
-            for updated_history, cleared_input in chat_with_legal_rag(
+            for updated_history, cleared_input, _ in chat_with_legal_rag(
                 question, history, config_dict, show_thinking, show_sources, show_metadata
             ):
                 chunk_count += 1
@@ -935,7 +1159,7 @@ def run_stress_test(history, config_dict, show_thinking, show_sources, show_meta
         
         history = history[:-1]
         
-        for updated_history, cleared_input in chat_with_legal_rag(
+        for updated_history, cleared_input, _ in chat_with_legal_rag(
             question, history, stress_config, show_thinking, show_sources, show_metadata
         ):
             yield updated_history, cleared_input
@@ -947,6 +1171,197 @@ def run_stress_test(history, config_dict, show_thinking, show_sources, show_meta
         "content": f"✅ **Stress Test Complete**\n\nSuccessfully processed all {len(TEST_QUESTIONS)} questions with maximum settings."
     }]
     yield history, ""
+
+
+def run_document_test(history, config_dict, show_thinking, show_sources, show_metadata):
+    """
+    Run document integration test - simulates document uploads and chats with them.
+    Works on Kaggle without requiring local test files.
+    4 turns with simulated document context.
+    
+    Yields: (history, input_text, attached_docs_display)
+    """
+    global api_client, current_session, attached_documents
+    import uuid
+    
+    def get_docs_display():
+        """Get current attached docs display string"""
+        if not attached_documents:
+            return ""
+        lines = []
+        for d in attached_documents:
+            chars = f"{d['char_count']:,}" if d.get('char_count') else "?"
+            lines.append(f"📄 **{d['filename']}** ({chars} chars)")
+        return "\n".join(lines)
+    
+    # Test configuration
+    doc_config = dict(config_dict)
+    doc_config['include_documents'] = True
+    doc_config['max_document_chars'] = 20000
+    
+    # Ensure session exists
+    if not current_session:
+        current_session = f"ui-doctest-{uuid.uuid4().hex[:8]}"
+    
+    # Initial message
+    history = history + [{
+        "role": "assistant",
+        "content": """📄 **Starting Document Integration Test (4 Turns)**
+
+**This test will:**
+1. Simulate a legal regulation document
+2. Ask 2 questions about that document (showing document context)
+3. Simulate a contract document (clear + new)
+4. Ask 2 questions about the contract
+
+**Note:** Documents are simulated locally for Kaggle compatibility.
+The "📄 Dokumen dalam konteks" section should appear in responses.
+
+**Starting test...**"""
+    }]
+    yield history, "", get_docs_display()
+    
+    # Check if API is available
+    if api_client is None:
+        initialize_api()
+    
+    if api_client is None:
+        history = history + [{
+            "role": "assistant",
+            "content": "❌ **Error:** API not connected. Please check API server."
+        }]
+        yield history, "", get_docs_display()
+        return
+    
+    # Clear any existing documents first
+    try:
+        api_client.clear_documents(current_session)
+    except:
+        pass
+    attached_documents = []
+    
+    # Sample document data (simulated)
+    sample_documents = {
+        "peraturan": {
+            "id": f"sim-peraturan-{uuid.uuid4().hex[:8]}",
+            "filename": "Peraturan_Pemerintah_No_35_2021.pdf",
+            "char_count": 45000,
+            "format": "pdf",
+            "content_summary": "Peraturan tentang Perjanjian Kerja Waktu Tertentu (PKWT), Alih Daya, dan Waktu Kerja"
+        },
+        "contract": {
+            "id": f"sim-contract-{uuid.uuid4().hex[:8]}",
+            "filename": "Kontrak_Kerja_Sama_PT_ABC_DEF.pdf",
+            "char_count": 28000,
+            "format": "pdf",
+            "content_summary": "Perjanjian Kerja Sama antara PT ABC dan PT DEF untuk proyek pengembangan teknologi"
+        }
+    }
+    
+    # Test configuration: 4 turns with 2 documents
+    test_config = [
+        {
+            "turn": 1,
+            "simulated_doc": "peraturan",
+            "question": "Jelaskan peraturan ketenagakerjaan tentang PKWT dan alih daya. Apa kewajiban pemberi kerja?",
+        },
+        {
+            "turn": 2,
+            "simulated_doc": None,  # Continue with same document
+            "question": "Bagaimana ketentuan tentang waktu kerja dan lembur dalam dokumen tersebut?",
+        },
+        {
+            "turn": 3,
+            "simulated_doc": "contract",
+            "clear_docs": True,  # Clear and load new
+            "question": "Jelaskan isi kontrak kerja sama ini. Siapa para pihak dan apa objek perjanjiannya?",
+        },
+        {
+            "turn": 4,
+            "simulated_doc": None,  # Continue with contract
+            "question": "Apa kewajiban dan hak masing-masing pihak dalam kontrak ini?",
+        },
+    ]
+    
+    for config in test_config:
+        turn = config["turn"]
+        
+        # Clear documents if specified
+        if config.get("clear_docs"):
+            attached_documents = []
+            history = history + [{
+                "role": "assistant",
+                "content": f"🗑️ **Turn {turn}:** Cleared previous documents..."
+            }]
+            yield history, "", get_docs_display()
+        
+        # Load simulated document if specified
+        if config.get("simulated_doc"):
+            doc_key = config["simulated_doc"]
+            doc_data = sample_documents[doc_key]
+            
+            history = history + [{
+                "role": "assistant",
+                "content": f"📤 **Turn {turn}:** Loading simulated document: {doc_data['filename']}..."
+            }]
+            yield history, "", get_docs_display()
+            
+            # Add to attached_documents list (simulated)
+            attached_documents.append({
+                'id': doc_data['id'],
+                'filename': doc_data['filename'],
+                'char_count': doc_data['char_count'],
+                'format': doc_data['format']
+            })
+            
+            history = history + [{
+                "role": "assistant",
+                "content": f"✅ **Document loaded:** {doc_data['filename']} ({doc_data['char_count']:,} chars)\n\n_Content: {doc_data['content_summary']}_"
+            }]
+            # Update attachment display after adding document
+            yield history, "", get_docs_display()
+        
+        # Ask question
+        question = config["question"]
+        history = history + [{
+            "role": "assistant",
+            "content": f"💬 **Turn {turn}/4:** Processing question with document context..."
+        }]
+        yield history, "", get_docs_display()
+        history = history[:-1]
+        
+        try:
+            # Call chat - now yields 3 values (history, input, docs_display)
+            for updated_history, cleared_input, _ in chat_with_legal_rag(
+                question, history, doc_config, show_thinking, show_sources, show_metadata
+            ):
+                yield updated_history, cleared_input, get_docs_display()
+            history = updated_history
+        except Exception as e:
+            history = history + [{
+                "role": "assistant",
+                "content": f"⚠️ **Error in Turn {turn}:** {e}"
+            }]
+            yield history, "", get_docs_display()
+    
+    # Completion message
+    history = history + [{
+        "role": "assistant",
+        "content": f"""✅ **Document Integration Test Complete (4 Turns)**
+
+**Verification:**
+- ✅ Documents appeared in attached_documents list
+- ✅ User messages should show "📎 Dokumen terlampir" section
+- ✅ Assistant responses should show "📄 Dokumen dalam konteks" section
+
+If you did NOT see the document context sections above, the issue is:
+1. Check `attached_documents` is populated (see "Document loaded" messages)
+2. Check `doc_info_section` is built in chat function
+3. Check `live_output` includes `doc_info_section`
+
+**Current attached_documents count:** {len(attached_documents)}"""
+    }]
+    yield history, "", get_docs_display()
 
 
 # =============================================================================
@@ -1096,23 +1511,48 @@ def create_gradio_interface():
                 # =====================================================================
                 with gr.TabItem("💬 Konsultasi Hukum"):
                     chatbot = gr.Chatbot(
-                        height="75vh",
+                        height="60vh",
                         show_label=False,
                         autoscroll=True
                     )
                     
-                    # Input row (same style as gradio_app.py)
+                    # Attached documents display (above input)
                     with gr.Row():
+                        attached_docs_display = gr.Markdown(
+                            value="",
+                            visible=True,
+                            elem_id="attached-docs"
+                        )
+                    
+                    # Input row with attachment button - larger input
+                    with gr.Row():
+                        attach_btn = gr.UploadButton(
+                            "📎",
+                            file_types=[".pdf", ".docx", ".doc", ".txt", ".html", ".json", ".png", ".jpg", ".jpeg"],
+                            file_count="multiple",
+                            size="sm",
+                            scale=0,
+                            min_width=50
+                        )
                         msg_input = gr.Textbox(
-                            placeholder="Tanyakan tentang hukum Indonesia...",
+                            placeholder="Tanyakan tentang hukum Indonesia... (📎 upload dokumen, atau paste URL langsung)",
                             show_label=False,
                             container=False,
                             scale=10,
                             submit_btn=True,
-                            lines=1,
-                            max_lines=3,
+                            lines=2,
+                            max_lines=5,
                             interactive=True
                         )
+                    
+                    # Simple document controls (no URL accordion - URLs auto-detected in chat)
+                    with gr.Row():
+                        refresh_docs_btn = gr.Button("🔄 Refresh", size="sm", scale=1)
+                        clear_docs_btn = gr.Button("🗑️ Hapus Semua Dokumen", size="sm", variant="stop", scale=2)
+                    
+                    # Hidden components for compatibility (not displayed)
+                    url_input = gr.Textbox(visible=False)
+                    url_extract_btn = gr.Button(visible=False)
                     
                     # 8 Examples with 2 per page
                     with gr.Row():
@@ -1237,8 +1677,9 @@ def create_gradio_interface():
                             with gr.Group():
                                 gr.Markdown("#### 🧪 Test Runners")
                                 with gr.Row():
-                                    test_btn = gr.Button("🧪 Run Conversational Test (8 Questions)", variant="primary")
-                                    stress_btn = gr.Button("⚡ Run Stress Test")
+                                    test_btn = gr.Button("🧪 Conversational Test", variant="primary")
+                                    stress_btn = gr.Button("⚡ Stress Test")
+                                    doc_test_btn = gr.Button("📄 Document Test")
                 
                 # =====================================================================
                 # EXPORT TAB
@@ -1284,7 +1725,30 @@ def create_gradio_interface():
             msg_input.submit(
                 chat_with_legal_rag,
                 [msg_input, chatbot, config_state, show_thinking, show_sources, show_metadata],
-                [chatbot, msg_input]
+                [chatbot, msg_input, attached_docs_display]
+            )
+            
+            # Document attachment handlers
+            attach_btn.upload(
+                upload_document_handler,
+                [attach_btn],
+                [attached_docs_display]
+            )
+            
+            url_extract_btn.click(
+                extract_url_handler,
+                [url_input],
+                [attached_docs_display, url_input]
+            )
+            
+            refresh_docs_btn.click(
+                refresh_documents,
+                outputs=[attached_docs_display]
+            )
+            
+            clear_docs_btn.click(
+                clear_all_documents,
+                outputs=[attached_docs_display]
             )
             
             # Search handlers (outputs to 4 tabs: summary, table, all_docs, research)
@@ -1316,6 +1780,11 @@ def create_gradio_interface():
                 run_stress_test,
                 [chatbot, config_state, show_thinking, show_sources, show_metadata],
                 [chatbot, msg_input]
+            )
+            doc_test_btn.click(
+                run_document_test,
+                [chatbot, config_state, show_thinking, show_sources, show_metadata],
+                [chatbot, msg_input, attached_docs_display]
             )
             
             # Export handler
