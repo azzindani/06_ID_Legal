@@ -482,11 +482,30 @@ class OpenRouterTestClient:
                 result['answer'] = full_text
                 result['thinking'] = thinking_text
                 result['success'] = len(full_text) > 0
+                
+                # Post-process: extract thinking from response if not already captured
+                # (for models like DeepSeek R1 that stream without <think> start tag)
+                if not thinking_text and full_text:
+                    for end_tag in ['</think>', '</thinking>', '</reasoning>']:
+                        if end_tag in full_text:
+                            end_pos = full_text.find(end_tag)
+                            thinking_text = full_text[:end_pos].strip()
+                            result['thinking'] = thinking_text
+                            # Remove thinking from answer
+                            result['answer'] = full_text[end_pos + len(end_tag):].strip()
+                            break
             
             elapsed = time.time() - start
             result['elapsed'] = elapsed
             
             print(f"\n\n{Colors.DIM}[{elapsed:.1f}s | {len(result['sources'])} sources]{Colors.RESET}")
+            
+            # Show thinking preview if captured
+            if result['thinking']:
+                thinking_preview = result['thinking'][:300].replace('\n', ' ')
+                if len(result['thinking']) > 300:
+                    thinking_preview += "..."
+                print(f"\n{Colors.MAGENTA}[Parsed Thinking]{Colors.RESET} {thinking_preview}")
             
             # Track conversation
             self.conversation_history.append({
