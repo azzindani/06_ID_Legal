@@ -27,23 +27,17 @@ class GenerationEngine:
         self.logger = get_logger("GenerationEngine")
         self.config = config
         
-        # LLM provider - only external providers (like OpenRouter) are used directly
-        # For local, we always create our own LLMEngine for stability
-        self._external_provider = None
+        # LLM provider - external providers (like OpenRouter) can be injected
+        self._external_provider = llm_provider
         
-        # Check if provider is truly external (e.g., OpenRouter)
-        if llm_provider is not None:
-            provider_name = getattr(llm_provider, 'provider_name', 'unknown')
-            if provider_name == 'openrouter':
-                # OpenRouter - use as external provider
-                self._external_provider = llm_provider
-                self.llm_engine = None
-                self.logger.info("Using external LLM provider", {"provider": provider_name})
-            else:
-                # Local or other - create our own LLMEngine
-                self.llm_engine = LLMEngine(config)
-        else:
+        # Initialize LLM engine only if no external provider
+        if llm_provider is None:
             self.llm_engine = LLMEngine(config)
+        else:
+            self.llm_engine = None
+            self.logger.info("Using external LLM provider", {
+                "provider": getattr(llm_provider, 'provider_name', 'unknown')
+            })
         
         # Initialize other components
         self.prompt_builder = PromptBuilder(config)
@@ -58,9 +52,10 @@ class GenerationEngine:
         self.logger.info("GenerationEngine initialized", {
             "validation_enabled": self.enable_validation,
             "enhancement_enabled": self.enable_enhancement,
-            "using_external_provider": self._external_provider is not None
+            "using_external_provider": llm_provider is not None
         })
     
+
     def initialize(self) -> bool:
         """
         Initialize generation engine (load models)
