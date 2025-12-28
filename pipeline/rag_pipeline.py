@@ -770,7 +770,28 @@ Jawab dengan lengkap dan sitasi sumber regulasi yang relevan."""
                     tokens_generated += 1
                     
                     # Detect thinking section
-                    if '<thinking>' in full_text and '</thinking>' not in full_text:
+                    # Pattern 1: <thinking>...</thinking> or <think>...</think>
+                    # Pattern 2: Some models stream reasoning directly and only mark end with </think>
+                    has_think_start = '<thinking>' in full_text or '<think>' in full_text
+                    has_think_end = '</thinking>' in full_text or '</think>' in full_text
+                    
+                    # If we have start tag but no end, we're in thinking
+                    # If we have end tag before any answer text (len < 500), treat pre-end as thinking
+                    in_thinking = False
+                    if has_think_start and not has_think_end:
+                        in_thinking = True
+                    elif not has_think_start and '</think>' in full_text:
+                        # Model streams reasoning without start tag
+                        # Everything before </think> is thinking
+                        think_end_pos = full_text.rfind('</think>')
+                        if think_end_pos > 0 and len(full_text) - think_end_pos < len(token) + 20:
+                            # We just crossed the </think> boundary
+                            in_thinking = False
+                        elif '</think>' not in full_text[:-len(token)] if token else False:
+                            # Still building up to </think>
+                            in_thinking = True
+                    
+                    if in_thinking:
                         thinking_text += token
                         yield {
                             'type': 'thinking',
@@ -783,6 +804,7 @@ Jawab dengan lengkap dan sitasi sumber regulasi yang relevan."""
                             'token': token,
                             'done': False
                         }
+
                 
                 if chunk.get('done'):
                     self.logger.info("OpenRouter streaming done", {
