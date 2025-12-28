@@ -19,14 +19,28 @@ class GenerationEngine:
     """
     Complete generation pipeline orchestrator
     Coordinates all generation components for end-to-end response generation
+    
+    Now supports LLM provider abstraction for flexible backend switching.
     """
     
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any], llm_provider=None):
         self.logger = get_logger("GenerationEngine")
         self.config = config
         
-        # Initialize components
-        self.llm_engine = LLMEngine(config)
+        # LLM provider - can be injected or created internally
+        self._external_provider = llm_provider
+        
+        # Initialize LLM engine only if no external provider
+        if llm_provider is None:
+            self.llm_engine = LLMEngine(config)
+        else:
+            # Wrap external provider to match LLMEngine interface
+            self.llm_engine = None
+            self.logger.info("Using external LLM provider", {
+                "provider": getattr(llm_provider, 'provider_name', 'unknown')
+            })
+        
+        # Initialize other components
         self.prompt_builder = PromptBuilder(config)
         self.citation_formatter = CitationFormatter(config)
         self.response_validator = ResponseValidator(config)
@@ -38,7 +52,8 @@ class GenerationEngine:
         
         self.logger.info("GenerationEngine initialized", {
             "validation_enabled": self.enable_validation,
-            "enhancement_enabled": self.enable_enhancement
+            "enhancement_enabled": self.enable_enhancement,
+            "using_external_provider": llm_provider is not None
         })
     
     def initialize(self) -> bool:
@@ -50,12 +65,28 @@ class GenerationEngine:
         """
         self.logger.info("Initializing generation engine...")
         
+        # If using external provider, check if it's available
+        if self._external_provider is not None:
+            if self._external_provider.is_available():
+                self.logger.success("Generation engine initialized with external provider")
+                return True
+            else:
+                self.logger.warning("External provider not available, may need configuration")
+                return True  # Still return True - provider might become available
+        
+        # Load local LLM model
         if not self.llm_engine.load_model():
             self.logger.error("Failed to load LLM model")
             return False
         
         self.logger.success("Generation engine initialized successfully")
         return True
+    
+    def _get_llm(self):
+        """Get the LLM provider/engine for generation"""
+        if self._external_provider is not None:
+            return self._external_provider
+        return self.llm_engine
     
     def generate_answer(
         self,
@@ -147,7 +178,7 @@ class GenerationEngine:
                     max_new_tokens=max_new_tokens
                 )
             else:
-                generation_result = self.llm_engine.generate(prompt, max_new_tokens=max_new_tokens)
+                generation_result = self._get_llm().generate(prompt, max_new_tokens=max_new_tokens)
                 
                 if not generation_result['success']:
                     self.logger.error("Generation failed", {
@@ -268,7 +299,7 @@ class GenerationEngine:
         think_end_detected = False    # Track if we've seen </think>
 
         try:
-            for chunk in self.llm_engine.generate_stream(prompt, max_new_tokens=max_new_tokens):
+            for chunk in self._get_llm().generate_stream(prompt, max_new_tokens=max_new_tokens):
                 if chunk['success']:
                     if not chunk['done']:
                         token = chunk['token']
@@ -647,17 +678,30 @@ class GenerationEngine:
     def shutdown(self):
         """Shutdown generation engine and cleanup"""
         self.logger.info("Shutting down generation engine")
-        self.llm_engine.unload_model()
+        
+        # Unload local engine if used
+        if self.llm_engine is not None:
+            self.llm_engine.unload_model()
+        
+        # External providers are managed by factory, not here
         self.logger.success("Generation engine shut down")
     
     def get_engine_info(self) -> Dict[str, Any]:
         """Get engine information"""
+        llm_info = {}
+        
+        if self._external_provider is not None:
+            llm_info = self._external_provider.get_info()
+        elif self.llm_engine is not None:
+            llm_info = self.llm_engine.get_model_info()
+        
         return {
-            'llm_info': self.llm_engine.get_model_info(),
+            'llm_info': llm_info,
             'prompt_info': self.prompt_builder.get_template_info(),
             'config': {
                 'validation_enabled': self.enable_validation,
                 'enhancement_enabled': self.enable_enhancement,
-                'strict_validation': self.strict_validation
+                'strict_validation': self.strict_validation,
+                'using_external_provider': self._external_provider is not None
             }
         }

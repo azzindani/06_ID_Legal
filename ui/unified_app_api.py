@@ -202,6 +202,57 @@ def format_health_report():
 
 
 # =============================================================================
+# LLM PROVIDER MANAGEMENT
+# =============================================================================
+
+def on_llm_provider_change(provider: str):
+    """
+    Handle LLM provider dropdown change.
+    Shows/hides OpenRouter-specific controls based on selection.
+    """
+    is_openrouter = (provider == "openrouter")
+    return (
+        gr.update(visible=is_openrouter),  # model preset
+        gr.update(visible=is_openrouter),  # api key
+        gr.update(visible=is_openrouter),  # save key checkbox
+        gr.update(visible=is_openrouter),  # status
+        gr.update(visible=is_openrouter),  # apply button
+    )
+
+
+def apply_llm_settings_handler(provider: str, model: str, api_key: str, save_key: bool):
+    """
+    Apply LLM provider settings via API.
+    """
+    global api_client
+    
+    if api_client is None:
+        return "❌ API not connected"
+    
+    try:
+        # Call LLM config endpoint
+        response = api_client._request(
+            "POST", 
+            "/llm/config",
+            data={
+                "provider": provider,
+                "model": model if provider == "openrouter" else None,
+                "api_key": api_key if provider == "openrouter" else None,
+                "save_key": save_key
+            }
+        )
+        
+        if response.get("success"):
+            model_info = response.get("model", model)
+            return f"✅ **Provider set to {provider}**\n\nModel: `{model_info}`\nReady: {'Yes' if response.get('available') else 'No'}"
+        else:
+            return f"❌ Failed: {response.get('error', 'Unknown error')}"
+            
+    except Exception as e:
+        return f"❌ Error: {e}"
+
+
+# =============================================================================
 # DOCUMENT MANAGEMENT - Attachment-style like ChatGPT/Claude
 # =============================================================================
 
@@ -1641,6 +1692,43 @@ def create_gradio_interface():
                                     info="Higher levels provide deeper legal analysis but take more time."
                                 )
                             
+                            # LLM Provider Settings (NEW)
+                            with gr.Group():
+                                gr.Markdown("#### 🤖 LLM Provider")
+                                llm_provider = gr.Dropdown(
+                                    choices=["local", "openrouter", "none"],
+                                    value="local",
+                                    label="Provider",
+                                    info="local=GPU, openrouter=Cloud API, none=RAG only"
+                                )
+                                llm_model_preset = gr.Dropdown(
+                                    choices=[
+                                        ("🆓 Nvidia Nemotron (Free)", "nvidia/nemotron-3-nano-30b-a3b:free"),
+                                        ("🆓 Google Gemini Flash (Free)", "google/gemini-2.0-flash-exp:free"),
+                                        ("🆓 OpenAI GPT OSS (Free)", "openai/gpt-oss-120b:free"),
+                                        ("⭐ Claude Sonnet 4", "anthropic/claude-sonnet-4"),
+                                        ("🧠 DeepSeek R1 (Reasoning)", "deepseek/deepseek-r1"),
+                                    ],
+                                    value="nvidia/nemotron-3-nano-30b-a3b:free",
+                                    label="Model Preset",
+                                    info="Free models for development, premium for production",
+                                    visible=False  # Only show for openrouter
+                                )
+                                openrouter_api_key = gr.Textbox(
+                                    label="OpenRouter API Key",
+                                    type="password",
+                                    placeholder="sk-or-v1-...",
+                                    visible=False,  # Only show for openrouter
+                                    info="Get your key at https://openrouter.ai/keys"
+                                )
+                                save_api_key = gr.Checkbox(
+                                    label="Save API Key Securely",
+                                    value=False,
+                                    visible=False
+                                )
+                                llm_status = gr.Markdown("", visible=False)
+                                apply_llm_settings = gr.Button("💾 Apply LLM Settings", variant="secondary", visible=False)
+                            
                             # Research Team Settings
                             with gr.Group():
                                 gr.Markdown("#### 👥 Research Team Configuration")
@@ -1720,6 +1808,18 @@ def create_gradio_interface():
             reset_btn.click(reset_to_defaults, outputs=config_inputs)
             info_btn.click(get_system_info, outputs=system_output)
             health_btn.click(format_health_report, outputs=system_output)
+            
+            # LLM Provider handlers
+            llm_provider.change(
+                on_llm_provider_change,
+                inputs=[llm_provider],
+                outputs=[llm_model_preset, openrouter_api_key, save_api_key, llm_status, apply_llm_settings]
+            )
+            apply_llm_settings.click(
+                apply_llm_settings_handler,
+                inputs=[llm_provider, llm_model_preset, openrouter_api_key, save_api_key],
+                outputs=[llm_status]
+            )
             
             # Chat handlers (submit_btn is built into Textbox)
             msg_input.submit(

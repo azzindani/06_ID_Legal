@@ -127,6 +127,93 @@ POST /api/v1/rag/chat
 
 ---
 
+## 🤖 LLM Provider System
+
+The API supports flexible LLM backends. Choose between local GPU inference, cloud APIs, or RAG-only mode.
+
+### Starting the Server with Different Providers
+
+```bash
+# Local LLM (default - requires GPU with ~16GB VRAM)
+python -m api.server --llm-provider local
+
+# OpenRouter Cloud API (no GPU needed)
+python -m api.server --llm-provider openrouter
+
+# RAG-only mode (fast startup, no LLM generation)
+python -m api.server --llm-provider none
+```
+
+### Provider Options
+
+| Provider | Requirements | Best For |
+|----------|-------------|----------|
+| `local` | GPU with 16GB+ VRAM | Full control, no API costs |
+| `openrouter` | API key (free tier available) | No GPU, access to 200+ models |
+| `none` | None | Search/retrieval only, testing |
+
+### LLM Management Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/llm/providers` | GET | List available providers |
+| `/api/v1/llm/models` | GET | List models for a provider |
+| `/api/v1/llm/presets` | GET | Get recommended model presets |
+| `/api/v1/llm/config` | POST | Update provider at runtime |
+| `/api/v1/llm/status` | GET | Get current provider status |
+| `/api/v1/llm/keys` | POST | Save API key securely |
+| `/api/v1/llm/usage` | GET | Get token usage stats |
+
+### Example: Switch to OpenRouter at Runtime
+
+```python
+import requests
+
+# Configure OpenRouter
+response = requests.post(
+    "http://localhost:8000/api/v1/llm/config",
+    headers={"X-API-Key": "your_api_key"},
+    json={
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-nano-30b-a3b:free",  # Free model
+        "api_key": "sk-or-v1-your-openrouter-key",
+        "save_key": True  # Save encrypted locally
+    }
+)
+print(response.json())
+# {"success": true, "provider": "openrouter", "model": "nvidia/nemotron-3-nano-30b-a3b:free", "available": true}
+```
+
+### Model Presets (Free for Development)
+
+```bash
+# Get available presets
+curl http://localhost:8000/api/v1/llm/presets
+```
+
+| Preset | Model ID | Notes |
+|--------|----------|-------|
+| `free_default` | `nvidia/nemotron-3-nano-30b-a3b:free` | Fast, free |
+| `free_google` | `google/gemini-2.0-flash-exp:free` | 1M context |
+| `free_openai` | `openai/gpt-oss-120b:free` | OpenAI's open model |
+| `premium_claude` | `anthropic/claude-sonnet-4` | Best for legal |
+| `reasoning` | `deepseek/deepseek-r1` | Extended thinking |
+
+### Environment Variables
+
+```bash
+# Set default provider
+export LLM_PROVIDER=openrouter
+
+# Set OpenRouter API key
+export OPENROUTER_API_KEY=sk-or-v1-...
+
+# Set default model
+export OPENROUTER_MODEL=nvidia/nemotron-3-nano-30b-a3b:free
+```
+
+---
+
 ## 🛡️ Security Features
 
 This API includes a comprehensive modular security system:

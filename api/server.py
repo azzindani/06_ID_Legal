@@ -2,6 +2,7 @@
 FastAPI Server - Indonesian Legal RAG System API
 
 Main server configuration and application factory.
+Supports --llm-provider argument for provider selection.
 """
 
 from fastapi import FastAPI
@@ -10,6 +11,7 @@ from contextlib import asynccontextmanager
 from typing import Optional
 import sys
 import os
+import argparse
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -18,6 +20,38 @@ from conversation import ConversationManager
 from utils.logger_utils import get_logger
 
 logger = get_logger(__name__)
+
+# CLI arguments (parsed at module load or when __main__)
+_cli_args = None
+
+def parse_args():
+    """Parse command line arguments"""
+    global _cli_args
+    if _cli_args is not None:
+        return _cli_args
+    
+    parser = argparse.ArgumentParser(description="Indonesian Legal RAG API Server")
+    parser.add_argument(
+        "--llm-provider",
+        choices=["local", "openrouter", "none"],
+        default=os.getenv("LLM_PROVIDER", "local"),
+        help="LLM provider: local (GPU), openrouter (cloud), none (retrieval only)"
+    )
+    parser.add_argument(
+        "--host",
+        default="0.0.0.0",
+        help="Host to bind to"
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8000,
+        help="Port to listen on"
+    )
+    
+    # Parse known args only (allows uvicorn to add its own)
+    _cli_args, _ = parser.parse_known_args()
+    return _cli_args
 
 # FIXED: Use application state instead of global variables for multi-worker support
 # Application state is stored per-worker and properly isolated
@@ -28,12 +62,42 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager - FIXED: Uses app.state instead of globals"""
 
     logger.info("Starting Indonesian Legal RAG API...")
+    
+    # Get CLI args
+    args = parse_args()
+    llm_provider = args.llm_provider
+    logger.info(f"LLM Provider: {llm_provider}")
+    
+    # Initialize LLM provider based on CLI argument
+    try:
+        from core.llm_providers.factory import LLMProviderFactory
+        
+        provider = LLMProviderFactory.get_provider(
+            provider_type=llm_provider,
+            auto_load=(llm_provider == "local")  # Only auto-load for local
+        )
+        app.state.llm_provider = provider
+        app.state.llm_provider_type = llm_provider
+        logger.info(f"LLM provider initialized: {provider.provider_name}")
+    except Exception as e:
+        logger.warning(f"LLM provider initialization failed: {e}")
+        app.state.llm_provider = None
+        app.state.llm_provider_type = "none"
 
     # Initialize pipeline and store in app.state (worker-safe)
-    app.state.pipeline = RAGPipeline()
-    if not app.state.pipeline.initialize():
-        logger.error("Failed to initialize RAG pipeline")
-        raise RuntimeError("Pipeline initialization failed")
+    # Pass llm_provider to pipeline config
+    pipeline_config = {'llm_provider': llm_provider}
+    app.state.pipeline = RAGPipeline(config=pipeline_config)
+    
+    # Use retrieval-only init if no LLM needed
+    if llm_provider == "none":
+        if not app.state.pipeline.initialize_retrieval_only():
+            logger.error("Failed to initialize RAG pipeline (retrieval-only)")
+            raise RuntimeError("Pipeline initialization failed")
+    else:
+        if not app.state.pipeline.initialize():
+            logger.error("Failed to initialize RAG pipeline")
+            raise RuntimeError("Pipeline initialization failed")
 
     # Initialize conversation manager and store in app.state
     app.state.conversation_manager = ConversationManager()
@@ -59,6 +123,13 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down API...")
     if hasattr(app.state, 'pipeline') and app.state.pipeline:
         app.state.pipeline.shutdown()
+    
+    # Cleanup LLM provider
+    try:
+        from core.llm_providers.factory import LLMProviderFactory
+        LLMProviderFactory.shutdown()
+    except:
+        pass
     
     # Cleanup document parser
     try:
@@ -117,6 +188,8 @@ def create_app() -> FastAPI:
             '/api/v1/ready',
             '/api/v1/live',
             '/api/v1/memory',
+            # LLM endpoints (for provider management)
+            '/api/v1/llm',
             # Document endpoints (for testing - remove in production if needed)
             '/api/v1/documents',
             '/api/v1/rag'
@@ -139,6 +212,7 @@ def create_app() -> FastAPI:
         session_router, rag_enhanced_router
     )
     from .routes.documents import router as documents_router
+    from .routes.llm import router as llm_router
 
     app.include_router(health_router, prefix="/api/v1", tags=["Health"])
     app.include_router(search_router, prefix="/api/v1", tags=["Search"])
@@ -146,6 +220,7 @@ def create_app() -> FastAPI:
     app.include_router(session_router, prefix="/api/v1", tags=["Session"])
     app.include_router(rag_enhanced_router, prefix="/api/v1", tags=["Enhanced RAG"])
     app.include_router(documents_router, prefix="/api/v1", tags=["Documents"])
+    app.include_router(llm_router, prefix="/api/v1", tags=["LLM"])
 
     return app
 
@@ -174,4 +249,6 @@ app = create_app()
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    args = parse_args()
+    print(f"Starting server with --llm-provider={args.llm_provider}")
+    uvicorn.run(app, host=args.host, port=args.port)
