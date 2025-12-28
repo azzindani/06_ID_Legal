@@ -1421,36 +1421,74 @@ If you did NOT see the document context sections above, the issue is:
 # =============================================================================
 
 # 10-Turn LLM Provider Test Configuration
+# Matches test_llm_provider_multi_turn.py with document uploads
 LLM_TEST_TURNS = [
-    {"turn": 1, "description": "Basic Legal Question", "thinking_level": "low",
-     "query": "Apa yang diatur dalam peraturan tentang tata kerja BPK? Jelaskan secara singkat.",
-     "expected_keywords": ["BPK", "tata kerja", "peraturan"]},
-    {"turn": 2, "description": "Follow-up (Memory Test)", "thinking_level": "low",
+    {"turn": 1, "description": "Upload PDF #1 (BPK Regulation) + LOW thinking", 
+     "thinking_level": "low",
+     "upload_file": "tests/test_documents/peraturan_1.pdf",
+     "clear_docs": True,
+     "include_session_docs": True,
+     "query": "Apa yang diatur dalam peraturan BPK yang saya unggah ini? Jelaskan secara singkat.",
+     "expected_keywords": ["BPK", "peraturan", "ketentuan"]},
+    
+    {"turn": 2, "description": "Follow-up (Memory + Doc)", "thinking_level": "low",
+     "upload_file": None,
+     "include_session_docs": True,
      "query": "Lanjutkan, pasal-pasal apa saja yang penting dalam peraturan tersebut?",
      "expected_keywords": ["pasal", "ayat", "ketentuan"]},
-    {"turn": 3, "description": "General Question", "thinking_level": "medium",
+    
+    {"turn": 3, "description": "General Question (No Doc)", "thinking_level": "medium",
+     "upload_file": None,
+     "clear_docs": True,
+     "include_session_docs": False,
      "query": "Apa perbedaan antara hukum pidana dan hukum perdata di Indonesia?",
      "expected_keywords": ["pidana", "perdata", "hukum"]},
-    {"turn": 4, "description": "Contract Law", "thinking_level": "medium",
-     "query": "Jelaskan unsur-unsur penting dalam kontrak kerja menurut hukum Indonesia.",
-     "expected_keywords": ["kontrak", "kerja", "unsur"]},
+    
+    {"turn": 4, "description": "Upload PDF #2 (Contract) + MEDIUM", 
+     "thinking_level": "medium",
+     "upload_file": "tests/test_documents/contract_sample_1.pdf",
+     "clear_docs": True,
+     "include_session_docs": True,
+     "query": "Apa isi kontrak yang saya unggah ini? Siapa para pihak dan apa pokok perjanjiannya?",
+     "expected_keywords": ["kontrak", "perjanjian", "pihak"]},
+    
     {"turn": 5, "description": "Follow-up Contract", "thinking_level": "low",
-     "query": "Apa sanksi jika salah satu pihak melanggar kontrak tersebut?",
-     "expected_keywords": ["sanksi", "pelanggaran", "ganti rugi"]},
-    {"turn": 6, "description": "Complex Analysis (HIGH)", "thinking_level": "high",
-     "query": "Bandingkan pendekatan hukum pidana dan administratif dalam penanganan korupsi di Indonesia.",
-     "expected_keywords": ["korupsi", "pidana", "administratif"]},
-    {"turn": 7, "description": "Legal Procedure", "thinking_level": "medium",
-     "query": "Bagaimana prosedur pengajuan gugatan perdata di Pengadilan Negeri?",
-     "expected_keywords": ["gugatan", "pengadilan", "prosedur"]},
-    {"turn": 8, "description": "Memory Summary", "thinking_level": "low",
-     "query": "Berdasarkan percakapan kita, topik hukum apa saja yang sudah dibahas?",
-     "expected_keywords": ["peraturan", "kontrak", "pidana", "hukum"]},
-    {"turn": 9, "description": "Provider Switch Test", "thinking_level": "low", "is_provider_switch": True,
+     "upload_file": None,
+     "include_session_docs": True,
+     "query": "Apa kewajiban dan hak masing-masing pihak dalam kontrak yang sama?",
+     "expected_keywords": ["kewajiban", "hak", "pihak"]},
+    
+    {"turn": 6, "description": "Upload PDF #3 (Putusan) + HIGH thinking", 
+     "thinking_level": "high",
+     "upload_file": "tests/test_documents/putusan_mahkamah_agung_1.pdf",
+     "clear_docs": False,
+     "include_session_docs": True,
+     "query": "Sekarang saya punya dua dokumen. Jelaskan perbedaan sifat hukum antara kontrak dan putusan pengadilan yang saya unggah.",
+     "expected_keywords": ["kontrak", "putusan", "perbedaan"]},
+    
+    {"turn": 7, "description": "Extract from URL (News)", "thinking_level": "medium",
+     "upload_url": "https://www.cnbcindonesia.com/news/20251226155414-4-697445/kpk-setop-penyidikan-kasus-korupsi-izin-tambang-konawe-utara-rp27-t",
+     "upload_file": None,
+     "clear_docs": True,
+     "include_session_docs": True,
+     "query": "Apa isi berita yang saya berikan melalui URL tadi? Jelaskan kasusnya secara ringkas.",
+     "expected_keywords": ["KPK", "korupsi", "tambang"]},
+    
+    {"turn": 8, "description": "Memory Summary (No Doc)", "thinking_level": "low",
+     "upload_file": None,
+     "clear_docs": True,
+     "include_session_docs": False,
+     "query": "Berdasarkan seluruh percakapan kita, topik hukum apa saja yang sudah kita bahas?",
+     "expected_keywords": ["peraturan", "kontrak", "putusan", "hukum"]},
+    
+    {"turn": 9, "description": "Provider Switch (→ DeepSeek)", "thinking_level": "low", 
+     "is_provider_switch": True,
      "switch_to_model": "deepseek/deepseek-r1-0528:free",
      "query": "Apa definisi hukum pidana menurut doktrin Indonesia?",
      "expected_keywords": ["pidana", "hukum", "tindak"]},
-    {"turn": 10, "description": "Fallback Chain Test", "thinking_level": "low", "is_fallback_test": True,
+    
+    {"turn": 10, "description": "Fallback Chain Test", "thinking_level": "low", 
+     "is_fallback_test": True,
      "primary_model": "invalid/nonexistent-model:free",
      "fallback_model": "nvidia/nemotron-3-nano-30b-a3b:free",
      "query": "Jelaskan tentang asas legalitas dalam hukum Indonesia.",
@@ -1476,6 +1514,8 @@ def run_llm_provider_test(history, config_dict, show_thinking, show_sources, sho
 
 **Features being tested:**
 - ✅ OpenRouter as LLM provider
+- ✅ Document upload (PDF) - Turns 1, 4, 6
+- ✅ URL extraction - Turn 7
 - ✅ Multi-turn conversation memory
 - ✅ Thinking levels (low/medium/high)
 - ✅ Streaming response
@@ -1484,6 +1524,7 @@ def run_llm_provider_test(history, config_dict, show_thinking, show_sources, sho
 
 Starting test..."""
     }]
+
     yield history, ""
     
     for turn in LLM_TEST_TURNS:
@@ -1498,20 +1539,79 @@ Starting test..."""
         history = history[:-1]
         
         try:
+            # Handle document clear
+            if turn.get("clear_docs"):
+                clear_all_documents()
+            
+            # Handle document upload
+            if turn.get("upload_file"):
+                file_path = turn["upload_file"]
+                # Try both relative and Kaggle paths
+                import os
+                if not os.path.exists(file_path):
+                    # Try Kaggle path
+                    kaggle_path = f"/kaggle/working/06_ID_Legal/{file_path}"
+                    if os.path.exists(kaggle_path):
+                        file_path = kaggle_path
+                
+                if os.path.exists(file_path):
+                    history = history + [{
+                        "role": "assistant",
+                        "content": f"📄 **Uploading:** `{os.path.basename(file_path)}`"
+                    }]
+                    yield history, ""
+                    
+                    # Use upload handler
+                    upload_document_handler([file_path])
+                    history[-1]["content"] += f"\n\n✅ Document uploaded"
+                    yield history, ""
+                else:
+                    history = history + [{
+                        "role": "assistant",
+                        "content": f"⚠️ **Document not found:** `{turn['upload_file']}`\n\n_Continuing without document..._"
+                    }]
+                    yield history, ""
+            
+            # Handle URL extraction
+            if turn.get("upload_url"):
+                url = turn["upload_url"]
+                history = history + [{
+                    "role": "assistant",
+                    "content": f"🔗 **Extracting URL:** `{url[:60]}...`"
+                }]
+                yield history, ""
+                
+                result = extract_url_handler(url)
+                if "✅" in result:
+                    history[-1]["content"] += f"\n\n✅ URL content extracted"
+                else:
+                    history[-1]["content"] += f"\n\n⚠️ URL extraction: {result[:50]}"
+                yield history, ""
+            
             # Handle provider switch
             if turn.get("is_provider_switch") and api_client:
                 new_model = turn.get("switch_to_model")
                 history = history + [{
                     "role": "assistant", 
-                    "content": f"🔄 **Switching provider to:** `{new_model}`"
+                    "content": f"🔄 **Switching model to:** `{new_model}`"
                 }]
                 yield history, ""
                 
-                result = api_client.configure_llm("openrouter", model=new_model)
-                if result.get("provider") == "openrouter":
-                    history[-1]["content"] += f"\n\n✅ Switch successful"
-                else:
-                    history[-1]["content"] += f"\n\n❌ Switch failed: {result.get('error', 'Unknown')}"
+                # Use the already-configured API key (just change model)
+                try:
+                    # Make direct API call to change model only
+                    resp = api_client._request(
+                        "POST", 
+                        "/llm/config",
+                        data={"provider": "openrouter", "model": new_model}
+                    )
+                    result = resp.json()
+                    if result.get("provider") == "openrouter":
+                        history[-1]["content"] += f"\n\n✅ Switch successful"
+                    else:
+                        history[-1]["content"] += f"\n\n❌ Switch failed: {result.get('error', 'Unknown')}"
+                except Exception as e:
+                    history[-1]["content"] += f"\n\n❌ Switch failed: {e}"
                 yield history, ""
             
             # Handle fallback test
@@ -1527,17 +1627,26 @@ Starting test..."""
                 
                 # Try primary (should fail)
                 try:
-                    api_client.configure_llm("openrouter", model=primary)
+                    resp = api_client._request(
+                        "POST", 
+                        "/llm/config",
+                        data={"provider": "openrouter", "model": primary}
+                    )
                     # Try a quick test
                     test_result = api_client.test_llm_connection(max_tokens=50)
                     if not test_result.get("success"):
                         raise Exception("Primary failed")
                 except:
                     # Switch to fallback
-                    api_client.configure_llm("openrouter", model=fallback)
+                    resp = api_client._request(
+                        "POST", 
+                        "/llm/config",
+                        data={"provider": "openrouter", "model": fallback}
+                    )
                     history[-1]["content"] += f"\n\n✅ Fallback to `{fallback}` successful"
                 yield history, ""
             
+
             # Run the actual query
             temp_config = dict(config_dict or {})
             temp_config["thinking_level"] = turn["thinking_level"]

@@ -264,6 +264,17 @@ async def update_config(request: Request, config: LLMConfigUpdate):
         kwargs = {}
         if config.api_key:
             kwargs['api_key'] = config.api_key
+        elif config.provider == "openrouter":
+            # Try to get saved key from keystore if not provided
+            try:
+                from core.llm_providers.keystore import get_keystore
+                saved_key = get_keystore().load_key("openrouter")
+                if saved_key:
+                    kwargs['api_key'] = saved_key
+                    logger.info("Using saved API key from keystore")
+            except Exception as e:
+                logger.warning(f"Could not load saved key: {e}")
+        
         if config.model:
             kwargs['model'] = config.model
         
@@ -278,6 +289,7 @@ async def update_config(request: Request, config: LLMConfigUpdate):
             **kwargs
         )
         
+
         # Store in app state
         request.app.state.llm_provider = provider
         
