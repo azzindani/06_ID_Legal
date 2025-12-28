@@ -506,6 +506,184 @@ class LegalRAGAPIClient:
             return response.json()
         except:
             return {}
+    
+    # =========================================================================
+    # LLM Provider Management
+    # =========================================================================
+    
+    def get_llm_status(self) -> Dict[str, Any]:
+        """
+        Get current LLM provider status
+        
+        Returns:
+            Dict with provider, model, status, supports_streaming
+        """
+        try:
+            response = self._request('GET', '/llm/status')
+            return response.json()
+        except Exception as e:
+            return {
+                'provider': 'unknown',
+                'model': 'unknown',
+                'status': 'error',
+                'error': str(e)
+            }
+    
+    def get_llm_providers(self) -> List[str]:
+        """
+        Get list of available LLM providers
+        
+        Returns:
+            List of provider names: ['local', 'openrouter', 'none']
+        """
+        try:
+            response = self._request('GET', '/llm/providers')
+            return response.json().get('providers', [])
+        except:
+            return ['local', 'openrouter', 'none']
+    
+    def configure_llm(
+        self,
+        provider: str,
+        model: Optional[str] = None,
+        api_key: Optional[str] = None,
+        save_key: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Configure LLM provider
+        
+        Args:
+            provider: Provider name (local, openrouter, none)
+            model: Model name (for openrouter)
+            api_key: API key (for openrouter)
+            save_key: Whether to save key in keystore
+            
+        Returns:
+            Dict with configured provider, model, status
+        """
+        payload = {'provider': provider}
+        if model:
+            payload['model'] = model
+        if api_key:
+            payload['api_key'] = api_key
+        if save_key:
+            payload['save_key'] = save_key
+        
+        response = self._request('POST', '/llm/config', payload)
+        return response.json()
+    
+    def get_model_presets(self) -> Dict[str, str]:
+        """
+        Get available model presets
+        
+        Returns:
+            Dict mapping preset name to model ID
+        """
+        try:
+            response = self._request('GET', '/llm/models/presets')
+            return response.json().get('presets', {})
+        except:
+            # Fallback presets
+            return {
+                'free_default': 'nvidia/nemotron-3-nano-30b-a3b:free',
+                'free_deepseek': 'deepseek/deepseek-r1-0528:free',
+                'free_openai': 'openai/gpt-oss-20b:free'
+            }
+    
+    def list_models(
+        self,
+        provider: str = 'openrouter',
+        api_key: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        List available models for a provider
+        
+        Args:
+            provider: Provider name
+            api_key: API key (required for openrouter)
+            
+        Returns:
+            List of model info dicts with id, name, context_length
+        """
+        url = f'/llm/models?provider={provider}'
+        if api_key:
+            url += f'&api_key={api_key}'
+        
+        try:
+            response = self._request('GET', url)
+            return response.json().get('models', [])
+        except:
+            return []
+    
+    def test_llm_connection(
+        self,
+        query: str = "Jelaskan tentang hukum pidana Indonesia secara singkat.",
+        thinking_level: str = 'low',
+        max_tokens: int = 512
+    ) -> Dict[str, Any]:
+        """
+        Test LLM connection with a simple query
+        
+        Args:
+            query: Test query to send
+            thinking_level: Thinking level to use
+            max_tokens: Maximum tokens to generate
+            
+        Returns:
+            Dict with success, provider, model, elapsed, response_preview, error
+        """
+        import time
+        start = time.time()
+        
+        result = {
+            'success': False,
+            'provider': 'unknown',
+            'model': 'unknown',
+            'streaming': False,
+            'elapsed': 0,
+            'tokens': 0,
+            'response_preview': '',
+            'thinking_preview': '',
+            'error': None
+        }
+        
+        try:
+            # Get current status
+            status = self.get_llm_status()
+            result['provider'] = status.get('provider', 'unknown')
+            result['model'] = status.get('model', 'unknown')
+            result['streaming'] = status.get('supports_streaming', False)
+            
+            # Make test request
+            full_text = ''
+            thinking_text = ''
+            
+            for event in self.chat_stream(
+                query=query,
+                thinking_level=thinking_level,
+                max_tokens=max_tokens,
+                top_k=3
+            ):
+                event_type = event.get('type', '')
+                if event_type == 'chunk':
+                    full_text += event.get('content', '')
+                elif event_type == 'thinking':
+                    thinking_text += event.get('content', '')
+                elif event_type == 'done':
+                    break
+            
+            elapsed = time.time() - start
+            result['elapsed'] = round(elapsed, 2)
+            result['tokens'] = len(full_text.split())
+            result['response_preview'] = full_text[:500] + ('...' if len(full_text) > 500 else '')
+            result['thinking_preview'] = thinking_text[:300] + ('...' if len(thinking_text) > 300 else '')
+            result['success'] = len(full_text) > 0
+            
+        except Exception as e:
+            result['error'] = str(e)
+            result['elapsed'] = round(time.time() - start, 2)
+        
+        return result
 
 
 # =============================================================================
@@ -527,3 +705,4 @@ def create_api_client(
     key = api_key or os.environ.get('LEGAL_API_KEY', '')
     
     return LegalRAGAPIClient(base_url=url, api_key=key)
+
