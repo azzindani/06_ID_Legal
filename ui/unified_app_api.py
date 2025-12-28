@@ -231,7 +231,7 @@ def apply_llm_settings_handler(provider: str, model: str, api_key: str, save_key
     
     try:
         # Call LLM config endpoint
-        response = api_client._request(
+        resp = api_client._request(
             "POST", 
             "/llm/config",
             data={
@@ -241,10 +241,11 @@ def apply_llm_settings_handler(provider: str, model: str, api_key: str, save_key
                 "save_key": save_key
             }
         )
+        response = resp.json()  # Convert Response to dict
         
-        if response.get("success"):
+        if response.get("success") or response.get("provider"):
             model_info = response.get("model", model)
-            return f"✅ **Provider set to {provider}**\n\nModel: `{model_info}`\nReady: {'Yes' if response.get('available') else 'No'}"
+            return f"✅ **Provider set to {provider}**\n\nModel: `{model_info}`\nReady: {'Yes' if response.get('available', True) else 'No'}"
         else:
             return f"❌ Failed: {response.get('error', 'Unknown error')}"
             
