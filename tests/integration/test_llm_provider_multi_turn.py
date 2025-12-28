@@ -209,7 +209,7 @@ class OpenRouterTestClient:
                 f"{API_BASE_URL}/llm/config",
                 json={
                     "provider": "openrouter",
-                    "model": "nvidia/nemotron-3-nano-30b-a3b:free",
+                    "model": "openai/gpt-oss-120b:free",
                     "api_key": self.openrouter_key,
                     "save_key": False
                 },
@@ -333,9 +333,10 @@ class OpenRouterTestClient:
                 'include_session_documents': include_docs,
                 'thinking_level': thinking_level,
                 'stream': True,
-                'top_k': 5,
+                'top_k': 10,
                 'max_tokens': max_tokens,
                 'temperature': temperature,
+                # No max_document_chars - use full document
             }
             
             with requests.post(

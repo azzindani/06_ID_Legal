@@ -27,9 +27,9 @@ except ImportError:
 
 # Model presets with free models prioritized
 MODEL_PRESETS = {
-    "free_default": "nvidia/nemotron-3-nano-30b-a3b:free",
+    "free_default": "openai/gpt-oss-120b:free",
     "free_google": "google/gemini-2.0-flash-exp:free",
-    "free_openai": "openai/gpt-oss-120b:free",
+    "free_nvidia": "nvidia/nemotron-3-nano-30b-a3b:free",
     "premium_claude": "anthropic/claude-sonnet-4",
     "premium_gpt4": "openai/gpt-4o",
     "reasoning": "deepseek/deepseek-r1",
@@ -37,9 +37,9 @@ MODEL_PRESETS = {
 
 # Context windows for popular models (in tokens)
 MODEL_CONTEXT_WINDOWS = {
-    "nvidia/nemotron-3-nano-30b-a3b:free": 32768,
-    "google/gemini-2.0-flash-exp:free": 1048576,  # 1M context
     "openai/gpt-oss-120b:free": 131072,
+    "google/gemini-2.0-flash-exp:free": 1048576,  # 1M context
+    "nvidia/nemotron-3-nano-30b-a3b:free": 32768,
     "anthropic/claude-sonnet-4": 200000,
     "openai/gpt-4o": 128000,
     "deepseek/deepseek-r1": 65536,
