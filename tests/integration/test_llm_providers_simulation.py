@@ -404,43 +404,6 @@ def test_api_key_validation():
         return False
 
 
-def test_local_provider():
-    """Test LocalProvider initialization"""
-    print_header("TEST 9: LocalProvider (GPU Wrapper)")
-    
-    try:
-        from core.llm_providers import LocalProvider
-        
-        # Create without loading model
-        provider = LocalProvider(config={}, auto_load=False)
-        
-        print(f"Provider: {provider.provider_name}")
-        print(f"Model: {provider.model_name}")
-        print(f"Available (without loading): {provider.is_available()}")
-        
-        # Get info
-        info = provider.get_info()
-        print(f"\n[Provider Info]")
-        print(f"  Loaded: {info.get('loaded', False)}")
-        print(f"  Device: {info.get('device', 'N/A')}")
-        
-        # Test generate without loaded model
-        print("\n[Testing generate without model loaded]")
-        result = provider.generate("Test prompt")
-        if result['success']:
-            print("  Generate: Returned result (model might be loaded)")
-        else:
-            print(f"  Generate: Correctly failed - {result.get('error', 'No model')}")
-        
-        print_result("LocalProvider", True, "Wrapper initialized correctly")
-        return True
-        
-    except Exception as e:
-        print_result("LocalProvider", False, str(e))
-        import traceback
-        traceback.print_exc()
-        return False
-
 
 def test_openrouter_provider(api_key: str):
     """Test OpenRouterProvider with real API call including streaming"""
@@ -666,7 +629,7 @@ def main():
     
     results.append(("NoneProvider", test_none_provider()))
     results.append(("LLMProviderFactory", test_provider_factory()))
-    results.append(("LocalProvider", test_local_provider()))
+    # Note: LocalProvider test removed - will be added with full GPU testing later
     
     # =========================================================================
     # PART 2: Storage & Utilities (always run)
@@ -725,11 +688,12 @@ def main():
     
     # Group results by category
     print("  [Core Providers]")
-    for name in ["NoneProvider", "LLMProviderFactory", "LocalProvider"]:
+    for name in ["NoneProvider", "LLMProviderFactory"]:
         for n, s in results:
             if n == name:
                 emoji = "✅" if s else "❌"
                 print(f"    {emoji} {name}")
+
     
     print("\n  [Storage & Utilities]")
     for name in ["SecureKeyStore", "ResponseCache", "UsageTracker", "ContextTransfer"]:

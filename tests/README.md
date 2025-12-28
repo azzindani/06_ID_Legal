@@ -393,7 +393,93 @@ Response: ...
 |-----------|---------|--------------|----------------|
 | `test_llm_providers.py` | Unit tests (fast, mocked) | ❌ | ❌ |
 | `test_llm_providers_simulation.py` | Real simulation (comprehensive) | Optional | Optional |
-| `test_llm_provider_multi_turn.py` | Multi-turn + fallback | ❌ | Optional |
+| `test_llm_provider_multi_turn.py` | 8-turn conversation with OpenRouter | ✅ | ✅ |
+
+---
+
+### Running LLM Provider Tests in Kaggle
+
+**Step 1: Start API Server (Background Thread)**
+
+```python
+# Cell 1: Start API in background
+import threading
+import time
+import os
+import sys
+
+os.chdir('/kaggle/working/06_ID_Legal')
+sys.path.insert(0, '/kaggle/working/06_ID_Legal')
+
+def start_api():
+    import uvicorn
+    from api.server import create_app
+    app = create_app(llm_provider="none")
+    uvicorn.run(app, host="127.0.0.1", port=8000, log_level="warning")
+
+api_thread = threading.Thread(target=start_api, daemon=True)
+api_thread.start()
+
+print("⏳ Starting API server (wait 60-90 seconds)...")
+time.sleep(90)
+print("✅ API ready!")
+```
+
+**Step 2: Verify API is Running**
+
+```python
+# Cell 2: Check API health
+import requests
+try:
+    r = requests.get("http://127.0.0.1:8000/api/v1/health", timeout=5)
+    print("✅ API is running!" if r.status_code == 200 else "❌ Not responding")
+except:
+    print("❌ Cannot connect")
+```
+
+**Step 3: Run Tests**
+
+```python
+# Cell 3A: Simulation test (no OpenRouter key needed)
+!python tests/integration/test_llm_providers_simulation.py
+```
+
+```python
+# Cell 3B: Multi-turn test with OpenRouter
+import os
+os.environ["OPENROUTER_API_KEY"] = "sk-or-v1-YOUR-KEY-HERE"
+
+!python tests/integration/test_llm_provider_multi_turn.py
+```
+
+**Alternative: Using Subprocess**
+
+```python
+# Start API in subprocess
+import subprocess
+import time
+import sys
+import os
+
+os.chdir('/kaggle/working/06_ID_Legal')
+
+api_proc = subprocess.Popen(
+    [sys.executable, "-m", "uvicorn", "api.server:app", 
+     "--host", "127.0.0.1", "--port", "8000"],
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE
+)
+
+print("⏳ Waiting 90 seconds...")
+time.sleep(90)
+print("✅ API ready!")
+
+# Run test
+!python tests/integration/test_llm_provider_multi_turn.py --openrouter-key sk-or-v1-...
+
+# Cleanup when done
+api_proc.terminate()
+```
 
 ---
 

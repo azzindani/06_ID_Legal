@@ -83,9 +83,18 @@ class OpenRouterProvider(LLMProviderBase):
             app_name: App name for OpenRouter dashboard
             app_url: App URL for OpenRouter dashboard
         """
+        # Validate API key
         if not api_key:
             raise ValueError("OpenRouter API key is required")
         
+        api_key = api_key.strip()
+        if not api_key:
+            raise ValueError("OpenRouter API key cannot be empty or whitespace")
+        
+        # OpenRouter keys are typically long (50+ chars)
+        if len(api_key) < 20:
+            raise ValueError("OpenRouter API key is too short (minimum 20 characters)")
+
         self.api_key = api_key
         self._model = model or self.DEFAULT_MODEL
         self.base_url = base_url or self.BASE_URL

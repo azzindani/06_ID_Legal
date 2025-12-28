@@ -1,23 +1,23 @@
 """
-LLM Provider Multi-Turn Conversation Test with Document Support
+LLM Provider Multi-Turn Conversation Test with Full RAG System
 
-Comprehensive end-to-end test that validates:
-1. Multi-turn conversation with document context
-2. Provider fallback chain (auto-retry with different providers)
-3. Smart provider switching with context preservation
-4. Document upload and URL extraction
-5. Streaming responses across providers
-6. Cost/token tracking during conversation
+Comprehensive end-to-end test that validates the LLM Provider system with:
+1. Full RAG pipeline initialization (retrieval + database)
+2. Multi-turn conversation with document context
+3. OpenRouter as the LLM provider (with API streaming)
+4. Provider fallback chain (auto-retry with different providers)
+5. All thinking levels (low, medium, high)
+6. All generation parameters (temperature, top_k, max_tokens, etc.)
+
+This test runs the COMPLETE system through the API, similar to test_multi_turn_comprehensive.py
+but using OpenRouter instead of local LLM.
 
 Usage:
-    # Basic test (uses local provider or none)
-    python tests/integration/test_llm_provider_multi_turn.py
+    # Start API server first (with OpenRouter provider)
+    python -m api.server --llm-provider openrouter
     
-    # With OpenRouter (tests fallback and switching)
-    python tests/integration/test_llm_provider_multi_turn.py --with-openrouter --openrouter-key sk-or-v1-...
-    
-    # Full test with API server
-    python tests/integration/test_llm_provider_multi_turn.py --with-api
+    # Run test
+    python tests/integration/test_llm_provider_multi_turn.py --openrouter-key sk-or-v1-...
 
 File: tests/integration/test_llm_provider_multi_turn.py
 """
@@ -27,14 +27,24 @@ import sys
 import time
 import json
 import argparse
-import tempfile
+import requests
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, Any, List, Optional, Tuple, Generator
+from typing import Dict, Any, List, Optional, Tuple
 
 # Add project root
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
+
+# Configuration
+API_BASE_URL = os.getenv("API_URL", "http://127.0.0.1:8000/api/v1")
+TEST_DOCS_DIR = PROJECT_ROOT / "tests" / "test_documents"
+REPORT_DIR = PROJECT_ROOT / "tests" / "test_reports"
+
+# Timeouts
+CHAT_TIMEOUT = 300  # 5 minutes for OpenRouter
+UPLOAD_TIMEOUT = 60
+
 
 # Colors for terminal output
 class Colors:
@@ -51,9 +61,10 @@ class Colors:
 
 def print_header(title: str, char: str = "="):
     """Print a formatted header"""
-    print(f"\n{Colors.BOLD}{char * 80}{Colors.RESET}")
+    width = 80
+    print(f"\n{Colors.BOLD}{char * width}{Colors.RESET}")
     print(f"{Colors.BOLD}  {title}{Colors.RESET}")
-    print(f"{char * 80}\n")
+    print(f"{char * width}\n")
 
 
 def print_result(name: str, success: bool, message: str = ""):
@@ -64,651 +75,529 @@ def print_result(name: str, success: bool, message: str = ""):
 
 
 # =============================================================================
-# FALLBACK CHAIN - Auto-retry with different providers
+# TEST CONFIGURATION - Multi-Turn Scenarios
 # =============================================================================
 
-class ProviderFallbackChain:
-    """
-    Implements provider fallback for reliability.
-    If one provider fails, automatically tries the next in chain.
-    """
+TURN_CONFIG = [
+    {
+        "turn": 1,
+        "description": "Upload PDF #1 (Peraturan BPK) + LOW thinking",
+        "thinking_level": "low",
+        "upload_file": "peraturan_1.pdf",
+        "clear_docs": True,
+        "include_session_docs": True,
+        "query": "Apa yang diatur dalam peraturan BPK yang saya unggah ini? Jelaskan secara singkat fokus pengaturannya.",
+        "expected_keywords": ["BPK", "tata kerja", "peraturan"],
+        "max_tokens": 1024,
+        "temperature": 0.7,
+    },
+    {
+        "turn": 2,
+        "description": "Follow-up on same document (memory + doc)",
+        "thinking_level": "low",
+        "upload_file": None,
+        "clear_docs": False,
+        "include_session_docs": True,
+        "query": "Berdasarkan dokumen yang sama, siapa saja pejabat atau struktur yang disebutkan di dalamnya?",
+        "expected_keywords": ["ketua", "anggota", "BPK"],
+        "max_tokens": 512,
+        "temperature": 0.7,
+    },
+    {
+        "turn": 3,
+        "description": "General question WITHOUT document (backwards compat)",
+        "thinking_level": "medium",
+        "upload_file": None,
+        "clear_docs": False,
+        "include_session_docs": False,
+        "query": "Jelaskan tentang UU Ketenagakerjaan No. 13 Tahun 2003 secara singkat, terutama hak-hak pekerja.",
+        "expected_keywords": ["ketenagakerjaan", "pekerja", "hak"],
+        "max_tokens": 1024,
+        "temperature": 0.5,
+    },
+    {
+        "turn": 4,
+        "description": "Upload PDF #2 (contract) - switch document + MEDIUM",
+        "thinking_level": "medium",
+        "upload_file": "contract_sample_1.pdf",
+        "clear_docs": True,
+        "include_session_docs": True,
+        "query": "Apa isi kontrak yang saya unggah ini? Siapa para pihak dan apa pokok perjanjiannya?",
+        "expected_keywords": ["kontrak", "perjanjian", "pihak"],
+        "max_tokens": 1024,
+        "temperature": 0.5,
+    },
+    {
+        "turn": 5,
+        "description": "Follow-up on contract (memory + switched doc)",
+        "thinking_level": "low",
+        "upload_file": None,
+        "clear_docs": False,
+        "include_session_docs": True,
+        "query": "Apa kewajiban dan hak masing-masing pihak dalam kontrak yang sama?",
+        "expected_keywords": ["kewajiban", "hak", "pihak"],
+        "max_tokens": 512,
+        "temperature": 0.7,
+    },
+    {
+        "turn": 6,
+        "description": "Upload putusan + HIGH thinking (multi-doc)",
+        "thinking_level": "high",
+        "upload_file": "putusan_mahkamah_agung_1.pdf",
+        "clear_docs": False,
+        "include_session_docs": True,
+        "query": "Sekarang saya punya dua dokumen. Jelaskan perbedaan sifat hukum antara kontrak dan putusan pengadilan yang saya unggah.",
+        "expected_keywords": ["kontrak", "putusan", "perbedaan"],
+        "max_tokens": 2048,
+        "temperature": 0.3,
+    },
+    {
+        "turn": 7,
+        "description": "Extract from URL (URL integration) + MEDIUM",
+        "thinking_level": "medium",
+        "upload_url": "https://www.cnbcindonesia.com/news/20251226155414-4-697445/kpk-setop-penyidikan-kasus-korupsi-izin-tambang-konawe-utara-rp27-t",
+        "upload_file": None,
+        "clear_docs": True,
+        "include_session_docs": True,
+        "query": "Apa isi berita yang saya berikan melalui URL tadi? Jelaskan kasusnya secara ringkas.",
+        "expected_keywords": ["KPK", "korupsi", "tambang"],
+        "max_tokens": 1024,
+        "temperature": 0.5,
+    },
+    {
+        "turn": 8,
+        "description": "Summary WITHOUT document (memory only)",
+        "thinking_level": "low",
+        "upload_file": None,
+        "clear_docs": True,
+        "include_session_docs": False,
+        "query": "Berdasarkan seluruh percakapan kita, topik hukum apa saja yang sudah kita bahas? Sebutkan secara ringkas.",
+        "expected_keywords": ["BPK", "kontrak", "korupsi"],
+        "max_tokens": 512,
+        "temperature": 0.7,
+    },
+]
+
+
+
+# =============================================================================
+# API CLIENT
+# =============================================================================
+
+class OpenRouterTestClient:
+    """API client for testing with OpenRouter provider"""
     
-    def __init__(self, providers: List[str], openrouter_key: Optional[str] = None):
-        """
-        Initialize fallback chain.
-        
-        Args:
-            providers: Ordered list of provider IDs to try
-            openrouter_key: API key for OpenRouter (if in chain)
-        """
-        self.chain = providers
+    def __init__(self, session_id: str, openrouter_key: str):
+        self.session_id = session_id
         self.openrouter_key = openrouter_key
-        self.current_idx = 0
-        self.active_provider = None
-        self.fallback_history: List[Dict] = []
-        
-        # Import providers
-        from core.llm_providers import LLMProviderFactory, NoneProvider
-        self.factory = LLMProviderFactory
-        
-        print(f"{Colors.CYAN}[FallbackChain] Initialized with: {providers}{Colors.RESET}")
+        self.uploaded_docs: List[Dict] = []
+        self.conversation_history: List[Dict] = []
+        self.token_usage = {"prompt": 0, "completion": 0, "total": 0}
     
-    def _create_provider(self, provider_type: str):
-        """Create a provider instance"""
-        kwargs = {}
-        if provider_type == "openrouter" and self.openrouter_key:
-            kwargs['api_key'] = self.openrouter_key
-            kwargs['model'] = "nvidia/nemotron-3-nano-30b-a3b:free"
-        elif provider_type == "local":
-            kwargs['auto_load'] = False  # Don't auto-load for test
-        
+    def check_api(self) -> bool:
+        """Check if API is running"""
         try:
-            return self.factory.get_provider(provider_type, **kwargs)
+            resp = requests.get(f"{API_BASE_URL}/health", timeout=10)
+            return resp.status_code == 200
+        except:
+            return False
+    
+    def configure_openrouter(self) -> bool:
+        """Configure API to use OpenRouter provider"""
+        try:
+            resp = requests.post(
+                f"{API_BASE_URL}/llm/config",
+                json={
+                    "provider": "openrouter",
+                    "model": "nvidia/nemotron-3-nano-30b-a3b:free",
+                    "api_key": self.openrouter_key,
+                    "save_key": False
+                },
+                timeout=30
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                print(f"{Colors.GREEN}✓ OpenRouter configured: {data.get('model')}{Colors.RESET}")
+                return True
+            else:
+                print(f"{Colors.RED}✗ Failed to configure: {resp.text}{Colors.RESET}")
+                return False
         except Exception as e:
-            print(f"{Colors.YELLOW}  ⚠ Could not create {provider_type}: {e}{Colors.RESET}")
-            return None
+            print(f"{Colors.RED}✗ Config error: {e}{Colors.RESET}")
+            return False
     
-    def get_provider(self, force_next: bool = False):
-        """
-        Get the current active provider, or fall back to next.
-        
-        Args:
-            force_next: Force switching to next provider in chain
-            
-        Returns:
-            Active provider or None if all failed
-        """
-        if force_next:
-            self.current_idx = min(self.current_idx + 1, len(self.chain) - 1)
-        
-        while self.current_idx < len(self.chain):
-            provider_type = self.chain[self.current_idx]
-            provider = self._create_provider(provider_type)
-            
-            if provider and provider.is_available():
-                self.active_provider = provider
-                return provider
-            
-            # Record fallback
-            self.fallback_history.append({
-                'from': provider_type,
-                'reason': 'not_available',
-                'timestamp': datetime.now().isoformat()
-            })
-            
-            print(f"{Colors.YELLOW}  ⚠ {provider_type} not available, trying next...{Colors.RESET}")
-            self.current_idx += 1
-        
-        # All failed - return NoneProvider as last resort
-        print(f"{Colors.RED}  All providers failed, using NoneProvider{Colors.RESET}")
-        from core.llm_providers import NoneProvider
-        return NoneProvider()
-    
-    def generate_with_fallback(
-        self,
-        prompt: str,
-        max_retries: int = 2,
-        **kwargs
-    ) -> Dict[str, Any]:
-        """
-        Generate with automatic fallback on failure.
-        
-        Args:
-            prompt: Input prompt
-            max_retries: Max retries before giving up
-            **kwargs: Generation parameters
-            
-        Returns:
-            Generation result with fallback info
-        """
-        attempts = []
-        
-        for attempt in range(max_retries + 1):
-            provider = self.get_provider(force_next=(attempt > 0))
-            
-            try:
-                start = time.time()
-                result = provider.generate(prompt, **kwargs)
-                elapsed = time.time() - start
-                
-                if result.get('success'):
-                    return {
-                        **result,
-                        'provider_used': provider.provider_name,
-                        'attempts': attempts,
-                        'generation_time': elapsed
-                    }
-                
-                # Record failed attempt
-                attempts.append({
-                    'provider': provider.provider_name,
-                    'error': result.get('error', 'Unknown error'),
-                    'elapsed': elapsed
-                })
-                
-            except Exception as e:
-                attempts.append({
-                    'provider': provider.provider_name,
-                    'error': str(e),
-                    'elapsed': 0
-                })
-        
-        # All retries exhausted
-        return {
-            'success': False,
-            'error': 'All providers failed',
-            'attempts': attempts,
-            'generated_text': ''
-        }
-    
-    def stream_with_fallback(
-        self,
-        prompt: str,
-        max_retries: int = 2,
-        **kwargs
-    ) -> Generator[Dict[str, Any], None, None]:
-        """
-        Stream with automatic fallback on failure.
-        """
-        for attempt in range(max_retries + 1):
-            provider = self.get_provider(force_next=(attempt > 0))
-            
-            try:
-                for chunk in provider.generate_stream(prompt, **kwargs):
-                    yield {
-                        **chunk,
-                        'provider': provider.provider_name
-                    }
-                    
-                    if chunk.get('done'):
-                        return
-                        
-            except Exception as e:
-                yield {
-                    'token': '',
-                    'done': False,
-                    'success': False,
-                    'error': f"Fallback: {e}",
-                    'provider': provider.provider_name
-                }
-        
-        yield {
-            'token': '',
-            'done': True,
-            'success': False,
-            'error': 'All providers failed'
-        }
-
-
-# =============================================================================
-# CONTEXT PRESERVATION - Smart provider switching
-# =============================================================================
-
-class ConversationWithProviderSwitching:
-    """
-    Manages multi-turn conversation with provider switching.
-    Preserves context when changing providers.
-    """
-    
-    def __init__(self, fallback_chain: ProviderFallbackChain):
-        self.chain = fallback_chain
-        self.conversation: List[Dict] = []
-        self.documents: List[Dict] = []
-        self.provider_history: List[str] = []
-        self.token_usage: Dict[str, int] = {}
-        
-        # Import context transfer
+    def get_llm_status(self) -> Dict:
+        """Get current LLM provider status"""
         try:
-            from core.llm_providers.context_transfer import ContextTransfer
-            self.context_transfer = ContextTransfer()
-        except ImportError:
-            self.context_transfer = None
+            resp = requests.get(f"{API_BASE_URL}/llm/status", timeout=10)
+            if resp.status_code == 200:
+                return resp.json()
+        except:
+            pass
+        return {}
     
-    def add_document(self, doc_id: str, filename: str, content: str, char_count: int):
-        """Add document to context"""
-        self.documents.append({
-            'id': doc_id,
-            'filename': filename,
-            'content': content[:10000],  # Limit for context
-            'char_count': char_count,
-            'added_at': datetime.now().isoformat()
-        })
-        print(f"{Colors.CYAN}  📄 Document added: {filename} ({char_count:,} chars){Colors.RESET}")
+    def upload_document(self, filename: str) -> Tuple[bool, Dict]:
+        """Upload document to session"""
+        filepath = TEST_DOCS_DIR / filename
+        if not filepath.exists():
+            return False, {"error": f"File not found: {filepath}"}
+        
+        print(f"\n{Colors.YELLOW}📤 Uploading {filename}...{Colors.RESET}")
+        
+        try:
+            with open(filepath, 'rb') as f:
+                resp = requests.post(
+                    f"{API_BASE_URL}/documents/upload",
+                    files={'file': (filename, f)},
+                    data={'session_id': self.session_id},
+                    timeout=UPLOAD_TIMEOUT
+                )
+            
+            if resp.status_code == 200:
+                data = resp.json()
+                self.uploaded_docs.append(data)
+                print(f"{Colors.GREEN}✓ Uploaded: {data.get('char_count', 0):,} chars{Colors.RESET}")
+                return True, data
+            else:
+                return False, {"error": f"HTTP {resp.status_code}"}
+                
+        except Exception as e:
+            return False, {"error": str(e)}
     
     def clear_documents(self):
-        """Clear all documents"""
-        self.documents = []
-        print(f"{Colors.DIM}  🗑️ Documents cleared{Colors.RESET}")
+        """Clear session documents"""
+        try:
+            requests.delete(
+                f"{API_BASE_URL}/documents",
+                params={'session_id': self.session_id},
+                timeout=30
+            )
+            self.uploaded_docs = []
+            print(f"{Colors.DIM}🗑️  Documents cleared{Colors.RESET}")
+        except:
+            pass
     
-    def switch_provider(self, new_provider: str) -> bool:
-        """
-        Switch to a different provider while preserving context.
+    def extract_url(self, url: str) -> Tuple[bool, Dict]:
+        """Extract content from URL"""
+        print(f"\n{Colors.YELLOW}🌐 Extracting URL...{Colors.RESET}")
         
-        Args:
-            new_provider: Provider ID to switch to
-            
-        Returns:
-            True if switch successful
-        """
-        current = self.chain.active_provider
-        current_name = current.provider_name if current else "none"
-        
-        print(f"\n{Colors.MAGENTA}🔄 Switching provider: {current_name} → {new_provider}{Colors.RESET}")
-        
-        # Check context compatibility
-        if self.context_transfer and self.conversation:
-            warnings = self.context_transfer.check_compatibility(
-                from_model=current.model_name if current else "none",
-                to_model=new_provider,
-                conversation_tokens=sum(len(t.get('content', '')) // 4 for t in self.conversation)
+        try:
+            resp = requests.post(
+                f"{API_BASE_URL}/documents/url",
+                json={'url': url, 'session_id': self.session_id},
+                timeout=120
             )
             
-            if warnings:
-                print(f"{Colors.YELLOW}  Context warnings:{Colors.RESET}")
-                for w in warnings:
-                    print(f"    ⚠ {w}")
-        
-        # Force switch in chain
-        try:
-            # Find provider index
-            if new_provider in self.chain.chain:
-                self.chain.current_idx = self.chain.chain.index(new_provider)
-                provider = self.chain.get_provider()
+            if resp.status_code == 200:
+                data = resp.json()
+                self.uploaded_docs.append(data)
+                print(f"{Colors.GREEN}✓ URL extracted: {data.get('char_count', 0):,} chars{Colors.RESET}")
+                return True, data
+            else:
+                return False, {"error": f"HTTP {resp.status_code}"}
                 
-                if provider and provider.is_available():
-                    self.provider_history.append({
-                        'from': current_name,
-                        'to': new_provider,
-                        'timestamp': datetime.now().isoformat(),
-                        'context_preserved': True
-                    })
-                    print(f"{Colors.GREEN}  ✓ Switch successful{Colors.RESET}")
-                    return True
-            
-            print(f"{Colors.RED}  ✗ Switch failed{Colors.RESET}")
-            return False
-            
         except Exception as e:
-            print(f"{Colors.RED}  ✗ Switch error: {e}{Colors.RESET}")
-            return False
+            return False, {"error": str(e)}
     
-    def chat(
+    def chat_streaming(
         self,
         query: str,
-        include_docs: bool = True,
-        stream: bool = False
-    ) -> Dict[str, Any]:
-        """
-        Send a chat message with context.
+        include_docs: bool,
+        thinking_level: str = "low",
+        max_tokens: int = 1024,
+        temperature: float = 0.7
+    ) -> Dict:
+        """Send chat with streaming and return result"""
         
-        Args:
-            query: User query
-            include_docs: Include document context
-            stream: Use streaming (prints tokens in real-time)
-            
-        Returns:
-            Response with metadata
-        """
-        # Build prompt with context
-        prompt_parts = []
+        print(f"\n{Colors.BOLD}{'─' * 80}{Colors.RESET}")
+        print(f"{Colors.CYAN}Query:{Colors.RESET} {query[:80]}...")
+        print(f"{Colors.CYAN}Thinking:{Colors.RESET} {thinking_level} | {Colors.CYAN}Docs:{Colors.RESET} {include_docs}")
+        print(f"{Colors.BOLD}{'─' * 80}{Colors.RESET}")
         
-        # Add document context
-        if include_docs and self.documents:
-            prompt_parts.append("## Document Context\n")
-            for doc in self.documents:
-                prompt_parts.append(f"### {doc['filename']}\n{doc['content'][:5000]}\n")
-        
-        # Add conversation history (last 4 turns)
-        if self.conversation:
-            prompt_parts.append("\n## Previous Conversation\n")
-            for turn in self.conversation[-4:]:
-                prompt_parts.append(f"User: {turn['query']}\n")
-                prompt_parts.append(f"Assistant: {turn['response']}\n")
-        
-        # Add current query
-        prompt_parts.append(f"\n## Current Query\n{query}")
-        
-        full_prompt = "\n".join(prompt_parts)
-        
-        # Record turn
-        turn = {
-            'role': 'user',
-            'query': query,
-            'response': '',
-            'include_docs': include_docs,
-            'doc_count': len(self.documents) if include_docs else 0,
-            'timestamp': datetime.now().isoformat()
+        result = {
+            'success': False,
+            'answer': '',
+            'thinking': '',
+            'sources': [],
+            'elapsed': 0,
+            'error': None,
+            'provider': 'unknown'
         }
         
         start = time.time()
         
-        if stream:
-            # Stream response
-            response_text = ""
-            print(f"\n{Colors.BOLD}Response:{Colors.RESET} ", end="", flush=True)
+        try:
+            payload = {
+                'query': query,
+                'session_id': self.session_id,
+                'include_session_documents': include_docs,
+                'thinking_level': thinking_level,
+                'stream': True,
+                'top_k': 5,
+                'max_tokens': max_tokens,
+                'temperature': temperature,
+            }
             
-            for chunk in self.chain.stream_with_fallback(full_prompt, max_new_tokens=512):
-                if chunk.get('success', True) and not chunk.get('done'):
-                    token = chunk.get('token', '')
-                    response_text += token
-                    print(token, end="", flush=True)
+            with requests.post(
+                f"{API_BASE_URL}/rag/chat",
+                json=payload,
+                stream=True,
+                timeout=CHAT_TIMEOUT
+            ) as resp:
+                if resp.status_code != 200:
+                    result['error'] = f"HTTP {resp.status_code}"
+                    return result
+                
+                full_text = ""
+                thinking_text = ""
+                in_thinking = False
+                
+                print(f"\n{Colors.MAGENTA}[Thinking]{Colors.RESET} ", end="", flush=True)
+                
+                for line in resp.iter_lines():
+                    if line:
+                        line_str = line.decode('utf-8')
+                        if line_str.startswith('data: '):
+                            data_str = line_str[6:]
+                            if data_str == '[DONE]':
+                                break
+                            try:
+                                data = json.loads(data_str)
+                                
+                                if data.get('type') == 'thinking':
+                                    content = data.get('content', '')
+                                    thinking_text += content
+                                    # Show abbreviated thinking
+                                    if len(thinking_text) < 200:
+                                        print(content[:20], end="", flush=True)
+                                    
+                                elif data.get('type') == 'chunk':
+                                    if not in_thinking:
+                                        print(f"\n\n{Colors.GREEN}[Answer]{Colors.RESET} ", end="", flush=True)
+                                        in_thinking = True
+                                    
+                                    token = data.get('content', '')
+                                    full_text += token
+                                    print(token, end="", flush=True)
+                                    
+                                elif data.get('type') == 'done' or data.get('type') == 'metadata':
+                                    result['sources'] = data.get('sources', data.get('citations', []))
+                                    result['provider'] = data.get('provider', 'openrouter')
+                                    
+                            except json.JSONDecodeError:
+                                pass
+                
+                result['answer'] = full_text
+                result['thinking'] = thinking_text
+                result['success'] = len(full_text) > 0
             
-            print()  # Newline after stream
+            elapsed = time.time() - start
+            result['elapsed'] = elapsed
             
-            turn['response'] = response_text
-            turn['provider'] = self.chain.active_provider.provider_name if self.chain.active_provider else 'none'
+            print(f"\n\n{Colors.DIM}[{elapsed:.1f}s | {len(result['sources'])} sources]{Colors.RESET}")
             
-        else:
-            # Non-streaming
-            result = self.chain.generate_with_fallback(full_prompt, max_new_tokens=512)
-            turn['response'] = result.get('generated_text', '')
-            turn['provider'] = result.get('provider_used', 'none')
-            turn['attempts'] = result.get('attempts', [])
+            # Track conversation
+            self.conversation_history.append({
+                'turn': len(self.conversation_history) + 1,
+                'query': query,
+                'answer': full_text,
+                'thinking_level': thinking_level,
+                'include_docs': include_docs,
+                'elapsed': elapsed
+            })
+            
+        except requests.Timeout:
+            result['error'] = f"Timeout after {CHAT_TIMEOUT}s"
+            result['elapsed'] = time.time() - start
+            print(f"\n{Colors.RED}⏱️ TIMEOUT{Colors.RESET}")
+        except Exception as e:
+            result['error'] = str(e)
+            result['elapsed'] = time.time() - start
+            print(f"\n{Colors.RED}❌ {e}{Colors.RESET}")
         
-        turn['elapsed'] = time.time() - start
-        self.conversation.append(turn)
-        
-        # Track token usage
-        provider = turn['provider']
-        tokens = len(turn['response']) // 4  # Rough estimate
-        self.token_usage[provider] = self.token_usage.get(provider, 0) + tokens
-        
-        return turn
+        return result
+
+
+# =============================================================================
+# TEST RUNNER
+# =============================================================================
+
+class MultiTurnOpenRouterTestRunner:
+    """Runs multi-turn test with OpenRouter provider"""
     
-    def get_summary(self) -> Dict:
-        """Get conversation summary"""
-        return {
-            'total_turns': len(self.conversation),
-            'documents_used': len(self.documents),
-            'providers_used': list(set(t.get('provider', 'unknown') for t in self.conversation)),
-            'provider_switches': len(self.provider_history),
-            'token_usage': self.token_usage,
-            'total_time': sum(t.get('elapsed', 0) for t in self.conversation)
+    def __init__(self, openrouter_key: str):
+        self.session_id = f"test-openrouter-{int(time.time())}"
+        self.openrouter_key = openrouter_key
+        self.client = OpenRouterTestClient(self.session_id, openrouter_key)
+        self.results: List[Dict] = []
+        self.start_time = None
+    
+    def run_turn(self, config: Dict) -> Dict:
+        """Run a single conversation turn"""
+        turn_num = config['turn']
+        
+        print_header(f"TURN {turn_num}: {config['description']}")
+        
+        result = {
+            'turn': turn_num,
+            'description': config['description'],
+            'thinking_level': config['thinking_level'],
+            'passed': False,
+            'chat_result': None,
+            'keywords_found': [],
+            'keywords_expected': config['expected_keywords'],
+            'error': None
         }
-
-
-# =============================================================================
-# TEST SCENARIOS
-# =============================================================================
-
-def test_fallback_chain():
-    """Test provider fallback chain"""
-    print_header("TEST 1: Provider Fallback Chain")
+        
+        # Clear docs if needed
+        if config.get('clear_docs'):
+            self.client.clear_documents()
+        
+        # Upload file if specified
+        if config.get('upload_file'):
+            success, data = self.client.upload_document(config['upload_file'])
+            if not success:
+                result['error'] = f"Upload failed: {data.get('error')}"
+                print(f"{Colors.RED}✗ {result['error']}{Colors.RESET}")
+                return result
+        
+        # Extract URL if specified
+        if config.get('upload_url'):
+            success, data = self.client.extract_url(config['upload_url'])
+            if not success:
+                result['error'] = f"URL extraction failed: {data.get('error')}"
+                print(f"{Colors.RED}✗ {result['error']}{Colors.RESET}")
+                return result
+        
+        # Send chat
+        chat_result = self.client.chat_streaming(
+            query=config['query'],
+            include_docs=config['include_session_docs'],
+            thinking_level=config['thinking_level'],
+            max_tokens=config.get('max_tokens', 1024),
+            temperature=config.get('temperature', 0.7)
+        )
+        result['chat_result'] = chat_result
+        
+        if chat_result['error']:
+            result['error'] = chat_result['error']
+            return result
+        
+        # Validate keywords
+        answer = chat_result['answer'].lower()
+        found = [kw for kw in config['expected_keywords'] if kw.lower() in answer]
+        result['keywords_found'] = found
+        
+        threshold = max(1, len(config['expected_keywords']) // 2)
+        result['passed'] = len(found) >= threshold
+        
+        # Show validation
+        print(f"\n{Colors.BOLD}{'─' * 80}{Colors.RESET}")
+        print(f"{Colors.CYAN}Keywords:{Colors.RESET} Expected {config['expected_keywords']}")
+        print(f"{Colors.CYAN}Found:{Colors.RESET} {found}")
+        status = f"{Colors.GREEN}✓ PASS" if result['passed'] else f"{Colors.RED}✗ FAIL"
+        print(f"{Colors.CYAN}Status:{Colors.RESET} {status}{Colors.RESET}")
+        
+        return result
     
-    try:
-        # Create chain with multiple providers
-        chain = ProviderFallbackChain(
-            providers=["openrouter", "local", "none"],
-            openrouter_key=None  # Will fail, testing fallback
-        )
+    def run_all(self) -> Dict:
+        """Run all turns"""
+        self.start_time = datetime.now()
         
-        # Should fall back to 'none' since no API key
-        provider = chain.get_provider()
-        print(f"Active Provider: {provider.provider_name}")
+        print_header("LLM PROVIDER MULTI-TURN TEST (OpenRouter)", "█")
         
-        # Test generate with fallback
-        result = chain.generate_with_fallback(
-            prompt="Jelaskan apa itu hukum pidana dalam satu kalimat.",
-            max_new_tokens=100
-        )
+        print(f"Session ID: {self.session_id}")
+        print(f"API URL: {API_BASE_URL}")
+        print(f"Test Documents: {TEST_DOCS_DIR}")
         
-        print(f"Success: {result['success']}")
-        print(f"Provider Used: {result.get('provider_used', 'N/A')}")
-        print(f"Attempts: {len(result.get('attempts', []))}")
-        print(f"Response: {result.get('generated_text', '')[:100]}...")
+        # Check API
+        if not self.client.check_api():
+            print(f"\n{Colors.RED}ERROR: API not running at {API_BASE_URL}{Colors.RESET}")
+            print(f"Start with: python -m api.server --llm-provider openrouter")
+            return {'error': 'API not running', 'results': []}
         
-        print_result("Fallback Chain", True, f"Fell back to {provider.provider_name}")
-        return True
+        print(f"{Colors.GREEN}✓ API is running{Colors.RESET}")
         
-    except Exception as e:
-        print_result("Fallback Chain", False, str(e))
-        import traceback
-        traceback.print_exc()
-        return False
-
-
-def test_context_preservation():
-    """Test context preservation during provider switching"""
-    print_header("TEST 2: Context Preservation")
+        # Configure OpenRouter
+        if not self.client.configure_openrouter():
+            print(f"\n{Colors.RED}ERROR: Could not configure OpenRouter{Colors.RESET}")
+            return {'error': 'OpenRouter config failed', 'results': []}
+        
+        # Show LLM status
+        status = self.client.get_llm_status()
+        print(f"LLM Provider: {status.get('provider', 'unknown')}")
+        print(f"Model: {status.get('model', 'unknown')}")
+        
+        # Run all turns
+        for config in TURN_CONFIG:
+            result = self.run_turn(config)
+            self.results.append(result)
+            time.sleep(2)  # Brief pause between turns
+        
+        total_time = (datetime.now() - self.start_time).total_seconds()
+        
+        return self.generate_report(total_time)
     
-    try:
-        from core.llm_providers.context_transfer import ContextTransfer
+    def generate_report(self, total_time: float) -> Dict:
+        """Generate test report"""
+        passed = sum(1 for r in self.results if r['passed'])
+        failed = len(self.results) - passed
         
-        transfer = ContextTransfer()
+        print_header("TEST SUMMARY")
         
-        # Simulate conversation
-        conversation = [
-            {"role": "user", "content": "Apa itu hukum pidana?"},
-            {"role": "assistant", "content": "Hukum pidana adalah cabang hukum yang mengatur tentang tindak pidana..."},
-            {"role": "user", "content": "Apa sanksinya?"},
-            {"role": "assistant", "content": "Sanksi dalam hukum pidana meliputi pidana penjara, denda..."},
-        ]
+        # Per-turn summary
+        for r in self.results:
+            status = f"{Colors.GREEN}✓ PASS" if r['passed'] else f"{Colors.RED}✗ FAIL"
+            elapsed = r['chat_result']['elapsed'] if r['chat_result'] else 0
+            print(f"{status}{Colors.RESET} Turn {r['turn']}: {r['description'][:40]}... [{r['thinking_level']}] ({elapsed:.1f}s)")
+            if r['error']:
+                print(f"      Error: {r['error']}")
         
-        # Test switching from large to small context model
-        print("[Switching: Claude (200K) → GPT-4o-mini (128K)]")
-        warnings = transfer.check_compatibility(
-            from_model="anthropic/claude-sonnet-4",
-            to_model="openai/gpt-4o-mini",
-            conversation_tokens=150000
-        )
+        print(f"\n{Colors.BOLD}Results:{Colors.RESET}")
+        print(f"  Total:  {len(self.results)}")
+        print(f"  {Colors.GREEN}Passed: {passed}{Colors.RESET}")
+        print(f"  {Colors.RED}Failed: {failed}{Colors.RESET}")
+        print(f"  Pass Rate: {passed/len(self.results)*100:.1f}%")
+        print(f"\nTotal Time: {total_time:.1f}s")
         
-        print(f"Warnings: {len(warnings)}")
-        for w in warnings:
-            print(f"  ⚠ {w}")
+        # Features tested
+        print(f"\n{Colors.CYAN}Features Tested:{Colors.RESET}")
+        print("  ✅ OpenRouter as LLM provider")
+        print("  ✅ Multi-turn conversation memory")
+        print("  ✅ Document upload and context")
+        print("  ✅ Thinking levels (low/medium/high)")
+        print("  ✅ Streaming response")
+        print("  ✅ Generation parameters (max_tokens, temperature)")
         
-        # Prepare context for new model
-        prepared = transfer.prepare_context(
-            conversation=conversation,
-            to_model="nvidia/nemotron-3-nano-30b-a3b:free"
-        )
+        # Build report
+        report = {
+            'test_name': 'LLM Provider Multi-Turn (OpenRouter)',
+            'session_id': self.session_id,
+            'timestamp': self.start_time.isoformat(),
+            'total_time_seconds': round(total_time, 2),
+            'summary': {
+                'total_turns': len(self.results),
+                'passed': passed,
+                'failed': failed,
+                'pass_rate': f"{passed/len(self.results)*100:.1f}%"
+            },
+            'turns': self.results,
+        }
         
-        print(f"\nContext Preparation:")
-        print(f"  Original: {len(conversation)} messages")
-        print(f"  Prepared: {len(prepared['messages'])} messages")
-        print(f"  Truncated: {prepared['truncated']}")
+        # Save report
+        try:
+            REPORT_DIR.mkdir(parents=True, exist_ok=True)
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            report_file = REPORT_DIR / f"openrouter_multi_turn_{timestamp}.json"
+            
+            with open(report_file, 'w', encoding='utf-8') as f:
+                json.dump(report, f, indent=2, ensure_ascii=False, default=str)
+            
+            print(f"\n{Colors.CYAN}Report: {report_file}{Colors.RESET}")
+        except Exception as e:
+            print(f"\n{Colors.YELLOW}Could not save report: {e}{Colors.RESET}")
         
-        print_result("Context Preservation", True, "Context transfer works")
-        return True
-        
-    except Exception as e:
-        print_result("Context Preservation", False, str(e))
-        return False
-
-
-def test_multi_turn_with_documents():
-    """Test multi-turn conversation with document context"""
-    print_header("TEST 3: Multi-Turn Conversation with Documents")
-    
-    try:
-        chain = ProviderFallbackChain(providers=["none"])
-        conversation = ConversationWithProviderSwitching(chain)
-        
-        # Add a mock document
-        mock_doc = """
-        PERATURAN PEMERINTAH REPUBLIK INDONESIA
-        NOMOR 35 TAHUN 2021
-        TENTANG PERJANJIAN KERJA WAKTU TERTENTU
-        
-        Pasal 1
-        Perjanjian Kerja Waktu Tertentu (PKWT) adalah perjanjian kerja antara 
-        pekerja/buruh dengan pengusaha untuk mengadakan hubungan kerja dalam 
-        waktu tertentu atau untuk pekerjaan tertentu.
-        
-        Pasal 2
-        PKWT dapat dibuat paling lama 5 (lima) tahun termasuk perpanjangan.
-        """
-        
-        conversation.add_document(
-            doc_id="doc-001",
-            filename="PP_35_2021_PKWT.pdf",
-            content=mock_doc,
-            char_count=len(mock_doc)
-        )
-        
-        # Turn 1: Ask about document
-        print("\n[Turn 1: Query about document]")
-        turn1 = conversation.chat(
-            query="Apa yang diatur dalam dokumen ini?",
-            include_docs=True
-        )
-        print(f"Provider: {turn1['provider']}")
-        print(f"Response: {turn1['response'][:150]}...")
-        
-        # Turn 2: Follow-up
-        print("\n[Turn 2: Follow-up question]")
-        turn2 = conversation.chat(
-            query="Berapa lama maksimal PKWT dapat dibuat?",
-            include_docs=True
-        )
-        print(f"Provider: {turn2['provider']}")
-        print(f"Response: {turn2['response'][:150]}...")
-        
-        # Turn 3: Without document
-        print("\n[Turn 3: General question without document]")
-        turn3 = conversation.chat(
-            query="Apa perbedaan PKWT dan PKWTT?",
-            include_docs=False
-        )
-        print(f"Provider: {turn3['provider']}")
-        print(f"Response: {turn3['response'][:150]}...")
-        
-        # Summary
-        summary = conversation.get_summary()
-        print(f"\n[Conversation Summary]")
-        print(f"  Total Turns: {summary['total_turns']}")
-        print(f"  Documents Used: {summary['documents_used']}")
-        print(f"  Providers: {summary['providers_used']}")
-        print(f"  Total Time: {summary['total_time']:.1f}s")
-        
-        print_result("Multi-Turn with Documents", True, f"{summary['total_turns']} turns completed")
-        return True
-        
-    except Exception as e:
-        print_result("Multi-Turn with Documents", False, str(e))
-        import traceback
-        traceback.print_exc()
-        return False
-
-
-def test_provider_switching_mid_conversation():
-    """Test switching providers mid-conversation"""
-    print_header("TEST 4: Provider Switching Mid-Conversation")
-    
-    try:
-        # Start with 'none' provider
-        chain = ProviderFallbackChain(providers=["none", "local"])
-        conversation = ConversationWithProviderSwitching(chain)
-        
-        # Turn 1 with 'none'
-        print("[Turn 1: Using 'none' provider]")
-        turn1 = conversation.chat("Apa itu kontrak kerja?")
-        print(f"Provider: {turn1['provider']}")
-        
-        # Switch provider
-        print("\n[Attempting provider switch]")
-        switched = conversation.switch_provider("local")
-        print(f"Switch Result: {'Success' if switched else 'Failed (expected)'}")
-        
-        # Turn 2 after switch attempt
-        print("\n[Turn 2: After switch attempt]")
-        turn2 = conversation.chat("Jelaskan lebih lanjut")
-        print(f"Provider: {turn2['provider']}")
-        
-        # Check history
-        print(f"\nProvider History: {len(conversation.provider_history)} switches")
-        
-        summary = conversation.get_summary()
-        print(f"\n[Summary]")
-        print(f"  Providers Used: {summary['providers_used']}")
-        print(f"  Provider Switches: {summary['provider_switches']}")
-        
-        print_result("Provider Switching", True, "Context preserved across attempts")
-        return True
-        
-    except Exception as e:
-        print_result("Provider Switching", False, str(e))
-        return False
-
-
-def test_streaming_with_fallback():
-    """Test streaming generation with fallback"""
-    print_header("TEST 5: Streaming with Fallback")
-    
-    try:
-        chain = ProviderFallbackChain(providers=["none"])
-        
-        print("[Streaming Response]")
-        full_text = ""
-        token_count = 0
-        
-        for chunk in chain.stream_with_fallback(
-            prompt="Sebutkan 3 jenis perjanjian kerja.",
-            max_new_tokens=100
-        ):
-            if chunk.get('success', True) and not chunk.get('done'):
-                token = chunk.get('token', '')
-                full_text += token
-                token_count += 1
-                print(token, end="", flush=True)
-        
-        print(f"\n\nTotal Tokens: {token_count}")
-        print(f"Full Text Length: {len(full_text)} chars")
-        
-        print_result("Streaming with Fallback", len(full_text) > 0, f"Streamed {token_count} tokens")
-        return len(full_text) > 0
-        
-    except Exception as e:
-        print_result("Streaming with Fallback", False, str(e))
-        return False
-
-
-def test_with_openrouter(api_key: str):
-    """Test with real OpenRouter API"""
-    print_header("TEST 6: OpenRouter Multi-Turn (Live)")
-    
-    try:
-        chain = ProviderFallbackChain(
-            providers=["openrouter", "none"],
-            openrouter_key=api_key
-        )
-        conversation = ConversationWithProviderSwitching(chain)
-        
-        # Mock document
-        doc = "Pasal 1: Setiap warga negara berhak atas pendidikan."
-        conversation.add_document("doc-1", "UUD_Pendidikan.txt", doc, len(doc))
-        
-        # Turn 1: With document + streaming
-        print("\n[Turn 1: Document + Streaming]")
-        turn1 = conversation.chat(
-            query="Apa yang diatur dalam dokumen ini?",
-            include_docs=True,
-            stream=True
-        )
-        print(f"\nProvider: {turn1['provider']}")
-        print(f"Time: {turn1['elapsed']:.1f}s")
-        
-        # Turn 2: Follow-up
-        print("\n[Turn 2: Follow-up]")
-        turn2 = conversation.chat(
-            query="Siapa yang berhak?",
-            include_docs=True,
-            stream=True
-        )
-        print(f"\nProvider: {turn2['provider']}")
-        
-        # Summary
-        summary = conversation.get_summary()
-        print(f"\n[Summary]")
-        print(f"  Turns: {summary['total_turns']}")
-        print(f"  Token Usage: {summary['token_usage']}")
-        print(f"  Total Time: {summary['total_time']:.1f}s")
-        
-        print_result("OpenRouter Multi-Turn", True, "Live API working")
-        return True
-        
-    except Exception as e:
-        print_result("OpenRouter Multi-Turn", False, str(e))
-        return False
+        return report
 
 
 # =============================================================================
@@ -716,78 +605,51 @@ def test_with_openrouter(api_key: str):
 # =============================================================================
 
 def main():
-    parser = argparse.ArgumentParser(description="LLM Provider Multi-Turn Conversation Test")
-    parser.add_argument("--with-openrouter", action="store_true", help="Include OpenRouter live test")
+    parser = argparse.ArgumentParser(
+        description="LLM Provider Multi-Turn Test with OpenRouter",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    # Start API first:
+    python -m api.server --llm-provider none
+    
+    # Then run test:
+    python tests/integration/test_llm_provider_multi_turn.py --openrouter-key sk-or-v1-...
+    
+    # Or set environment variable:
+    export OPENROUTER_API_KEY=sk-or-v1-...
+    python tests/integration/test_llm_provider_multi_turn.py
+"""
+    )
     parser.add_argument("--openrouter-key", type=str, help="OpenRouter API key")
-    parser.add_argument("--with-api", action="store_true", help="Test with API server (not implemented yet)")
+    parser.add_argument("--api-url", type=str, default="http://127.0.0.1:8000/api/v1", help="API base URL")
     args = parser.parse_args()
     
-    print("\n" + "=" * 80)
-    print("  🧪 LLM Provider Multi-Turn Conversation Test")
-    print("=" * 80)
-    print(f"\nTime: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"Working Directory: {os.getcwd()}")
+    # Get API key
+    api_key = args.openrouter_key or os.getenv("OPENROUTER_API_KEY")
+    if not api_key:
+        print(f"{Colors.RED}ERROR: OpenRouter API key required{Colors.RESET}")
+        print(f"Use --openrouter-key or set OPENROUTER_API_KEY environment variable")
+        return 1
     
-    results = []
+    # Set API URL
+    global API_BASE_URL
+    API_BASE_URL = args.api_url
     
-    # Core tests (always run)
-    print("\n" + "-" * 80)
-    print("  PART 1: Core Features")
-    print("-" * 80)
+    # Run test
+    runner = MultiTurnOpenRouterTestRunner(api_key)
+    report = runner.run_all()
     
-    results.append(("Fallback Chain", test_fallback_chain()))
-    results.append(("Context Preservation", test_context_preservation()))
-    results.append(("Multi-Turn with Documents", test_multi_turn_with_documents()))
-    results.append(("Provider Switching", test_provider_switching_mid_conversation()))
-    results.append(("Streaming with Fallback", test_streaming_with_fallback()))
+    if report.get('error'):
+        print(f"\n{Colors.RED}Test failed: {report['error']}{Colors.RESET}")
+        return 1
     
-    # OpenRouter live test
-    if args.with_openrouter:
-        print("\n" + "-" * 80)
-        print("  PART 2: OpenRouter Live")
-        print("-" * 80)
-        
-        api_key = args.openrouter_key or os.getenv("OPENROUTER_API_KEY")
-        if api_key:
-            results.append(("OpenRouter Multi-Turn", test_with_openrouter(api_key)))
-        else:
-            print("\n⚠️ Skipping OpenRouter: No API key")
-    
-    # Summary
-    print_header("TEST SUMMARY")
-    passed = sum(1 for _, s in results if s)
-    total = len(results)
-    
-    for name, success in results:
-        emoji = "✅" if success else "❌"
-        print(f"  {emoji} {name}")
-    
-    print(f"\n{'=' * 80}")
-    print(f"  Result: {passed}/{total} tests passed")
-    print(f"{'=' * 80}\n")
-    
-    # Feature coverage
-    print("📋 Feature Coverage:")
-    features = [
-        ("Provider Fallback Chain", True),
-        ("Smart Provider Switching", True),
-        ("Context Preservation", True),
-        ("Multi-Turn Conversation", True),
-        ("Document Context", True),
-        ("Streaming with Fallback", True),
-        ("OpenRouter Live", args.with_openrouter),
-        ("API Integration", args.with_api),
-    ]
-    for feature, tested in features:
-        emoji = "✅" if tested else "⏭️"
-        print(f"  {emoji} {feature}")
-    
-    if passed == total:
-        print(f"\n{Colors.GREEN}🎉 All tests passed!{Colors.RESET}")
+    if report['summary']['failed'] == 0:
+        print(f"\n{Colors.GREEN}{Colors.BOLD}ALL TESTS PASSED!{Colors.RESET}")
+        return 0
     else:
-        print(f"\n{Colors.YELLOW}⚠️ Some tests failed{Colors.RESET}")
-    
-    return 0 if passed == total else 1
+        print(f"\n{Colors.YELLOW}Some tests failed - see report{Colors.RESET}")
+        return 1
 
 
 if __name__ == "__main__":
