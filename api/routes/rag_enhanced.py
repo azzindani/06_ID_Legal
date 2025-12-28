@@ -381,13 +381,17 @@ async def conversational_rag(req: ChatRequest, request: Request):
         pipeline = get_pipeline(request)
         manager = get_conversation_manager(request)
         
+        # Get actual provider type from app.state
+        current_provider = getattr(request.app.state, 'llm_provider_type', 'local')
+        
         # Create service
         service = create_conversational_service(
             pipeline=pipeline,
             conversation_manager=manager,
-            current_provider='local'
+            current_provider=current_provider
         )
         
+
         # Get conversation context
         context = None
         if req.session_id:
