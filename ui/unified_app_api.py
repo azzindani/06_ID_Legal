@@ -1091,7 +1091,7 @@ def run_conversational_test(history, config_dict, show_thinking, show_sources, s
             print(f"[TEST Q{i}] Calling chat_with_legal_rag...")
             updated_history = history
             chunk_count = 0
-            for updated_history, cleared_input in chat_with_legal_rag(
+            for updated_history, cleared_input, _ in chat_with_legal_rag(
                 question, history, config_dict, show_thinking, show_sources, show_metadata
             ):
                 chunk_count += 1
@@ -1159,7 +1159,7 @@ def run_stress_test(history, config_dict, show_thinking, show_sources, show_meta
         
         history = history[:-1]
         
-        for updated_history, cleared_input in chat_with_legal_rag(
+        for updated_history, cleared_input, _ in chat_with_legal_rag(
             question, history, stress_config, show_thinking, show_sources, show_metadata
         ):
             yield updated_history, cleared_input
@@ -1331,8 +1331,8 @@ The "📄 Dokumen dalam konteks" section should appear in responses.
         history = history[:-1]
         
         try:
-            # Call chat - it only yields 2 values, so we wrap it
-            for updated_history, cleared_input in chat_with_legal_rag(
+            # Call chat - now yields 3 values (history, input, docs_display)
+            for updated_history, cleared_input, _ in chat_with_legal_rag(
                 question, history, doc_config, show_thinking, show_sources, show_metadata
             ):
                 yield updated_history, cleared_input, get_docs_display()
