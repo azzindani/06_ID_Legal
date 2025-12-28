@@ -546,7 +546,7 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                         live_output.append(new_text)
                 
                 yield history + [
-                    {"role": "user", "content": message},
+                    {"role": "user", "content": user_content},
                     {"role": "assistant", "content": ''.join(live_output)}
                 ], ""
             
@@ -568,6 +568,11 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
         # Add config info at the top (shows settings were applied)
         config_info = f"_⚙️ Config: Top-K={top_k}, Temp={temperature}, Tokens={max_tokens}, Team={team_size}, Think={thinking_mode}_"
         
+        # Add document context section (collapsible) if documents were used
+        if include_docs and attached_documents:
+            doc_list = "\n".join([f"- {d['filename']} ({d['char_count']:,} karakter)" for d in attached_documents])
+            final_output += f'<details open><summary>📄 <strong>Dokumen dalam Konteks</strong></summary>\n\n{doc_list}\n</details>\n\n---\n\n'
+        
         # Add thinking section if available
         if show_thinking and thinking_text:
             final_output += f'<details><summary>🧠 <strong>Proses Berpikir</strong></summary>\n\n{thinking_text}\n</details>\n\n---\n\n### ✅ Jawaban\n\n{response_text}'
@@ -585,8 +590,11 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
         # Add config metadata at the bottom
         final_output += f'\n\n---\n\n{config_info}'
         
+        # Clear attached documents after sending (move to chat)
+        attached_documents = []
+        
         yield history + [
-            {"role": "user", "content": message},
+            {"role": "user", "content": user_content},
             {"role": "assistant", "content": final_output}
         ], ""
         
@@ -594,7 +602,7 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
         import traceback
         traceback.print_exc()
         yield history + [
-            {"role": "user", "content": message},
+            {"role": "user", "content": user_content},
             {"role": "assistant", "content": f"❌ **Error:** {e}"}
         ], ""
 
