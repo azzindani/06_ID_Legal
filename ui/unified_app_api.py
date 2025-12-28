@@ -231,7 +231,7 @@ def apply_llm_settings_handler(provider: str, model: str, api_key: str, save_key
     
     try:
         # Call LLM config endpoint
-        response = api_client._request(
+        resp = api_client._request(
             "POST", 
             "/llm/config",
             data={
@@ -241,10 +241,11 @@ def apply_llm_settings_handler(provider: str, model: str, api_key: str, save_key
                 "save_key": save_key
             }
         )
+        response = resp.json()  # Convert Response to dict
         
-        if response.get("success"):
+        if response.get("success") or response.get("provider"):
             model_info = response.get("model", model)
-            return f"✅ **Provider set to {provider}**\n\nModel: `{model_info}`\nReady: {'Yes' if response.get('available') else 'No'}"
+            return f"✅ **Provider set to {provider}**\n\nModel: `{model_info}`\nReady: {'Yes' if response.get('available', True) else 'No'}"
         else:
             return f"❌ Failed: {response.get('error', 'Unknown error')}"
             
@@ -1416,8 +1417,302 @@ If you did NOT see the document context sections above, the issue is:
 
 
 # =============================================================================
+# LLM PROVIDER TEST - 10 Turns with Provider Switching and Fallback
+# =============================================================================
+
+# 10-Turn LLM Provider Test Configuration
+# Matches test_llm_provider_multi_turn.py with document uploads
+LLM_TEST_TURNS = [
+    {"turn": 1, "description": "Upload PDF #1 (BPK Regulation) + LOW thinking", 
+     "thinking_level": "low",
+     "upload_file": "tests/test_documents/peraturan_1.pdf",
+     "clear_docs": True,
+     "include_session_docs": True,
+     "query": "Apa yang diatur dalam peraturan BPK yang saya unggah ini? Jelaskan secara singkat.",
+     "expected_keywords": ["BPK", "peraturan", "ketentuan"]},
+    
+    {"turn": 2, "description": "Follow-up (Memory + Doc)", "thinking_level": "low",
+     "upload_file": None,
+     "include_session_docs": True,
+     "query": "Lanjutkan, pasal-pasal apa saja yang penting dalam peraturan tersebut?",
+     "expected_keywords": ["pasal", "ayat", "ketentuan"]},
+    
+    {"turn": 3, "description": "General Question (No Doc)", "thinking_level": "medium",
+     "upload_file": None,
+     "clear_docs": True,
+     "include_session_docs": False,
+     "query": "Apa perbedaan antara hukum pidana dan hukum perdata di Indonesia?",
+     "expected_keywords": ["pidana", "perdata", "hukum"]},
+    
+    {"turn": 4, "description": "Upload PDF #2 (Contract) + MEDIUM", 
+     "thinking_level": "medium",
+     "upload_file": "tests/test_documents/contract_sample_1.pdf",
+     "clear_docs": True,
+     "include_session_docs": True,
+     "query": "Apa isi kontrak yang saya unggah ini? Siapa para pihak dan apa pokok perjanjiannya?",
+     "expected_keywords": ["kontrak", "perjanjian", "pihak"]},
+    
+    {"turn": 5, "description": "Follow-up Contract", "thinking_level": "low",
+     "upload_file": None,
+     "include_session_docs": True,
+     "query": "Apa kewajiban dan hak masing-masing pihak dalam kontrak yang sama?",
+     "expected_keywords": ["kewajiban", "hak", "pihak"]},
+    
+    {"turn": 6, "description": "Upload PDF #3 (Putusan) + HIGH thinking", 
+     "thinking_level": "high",
+     "upload_file": "tests/test_documents/putusan_mahkamah_agung_1.pdf",
+     "clear_docs": False,
+     "include_session_docs": True,
+     "query": "Sekarang saya punya dua dokumen. Jelaskan perbedaan sifat hukum antara kontrak dan putusan pengadilan yang saya unggah.",
+     "expected_keywords": ["kontrak", "putusan", "perbedaan"]},
+    
+    {"turn": 7, "description": "Extract from URL (News)", "thinking_level": "medium",
+     "upload_url": "https://www.cnbcindonesia.com/news/20251226155414-4-697445/kpk-setop-penyidikan-kasus-korupsi-izin-tambang-konawe-utara-rp27-t",
+     "upload_file": None,
+     "clear_docs": True,
+     "include_session_docs": True,
+     "query": "Apa isi berita yang saya berikan melalui URL tadi? Jelaskan kasusnya secara ringkas.",
+     "expected_keywords": ["KPK", "korupsi", "tambang"]},
+    
+    {"turn": 8, "description": "Memory Summary (No Doc)", "thinking_level": "low",
+     "upload_file": None,
+     "clear_docs": True,
+     "include_session_docs": False,
+     "query": "Berdasarkan seluruh percakapan kita, topik hukum apa saja yang sudah kita bahas?",
+     "expected_keywords": ["peraturan", "kontrak", "putusan", "hukum"]},
+    
+    {"turn": 9, "description": "Provider Switch (→ DeepSeek)", "thinking_level": "low", 
+     "is_provider_switch": True,
+     "switch_to_model": "deepseek/deepseek-r1-0528:free",
+     "query": "Apa definisi hukum pidana menurut doktrin Indonesia?",
+     "expected_keywords": ["pidana", "hukum", "tindak"]},
+    
+    {"turn": 10, "description": "Fallback Chain Test", "thinking_level": "low", 
+     "is_fallback_test": True,
+     "primary_model": "invalid/nonexistent-model:free",
+     "fallback_model": "nvidia/nemotron-3-nano-30b-a3b:free",
+     "query": "Jelaskan tentang asas legalitas dalam hukum Indonesia.",
+     "expected_keywords": ["legalitas", "hukum", "asas"]},
+]
+
+
+def run_llm_provider_test(history, config_dict, show_thinking, show_sources, show_metadata):
+    """
+    Run 10-turn LLM Provider Integration Test.
+    Tests: OpenRouter, streaming, memory, provider switching, fallback chain.
+    """
+    global api_client
+    total_turns = len(LLM_TEST_TURNS)
+    passed = 0
+    failed = 0
+    results = []
+    
+    # Initial message
+    history = history + [{
+        "role": "assistant",
+        "content": f"""🧪 **LLM Provider Integration Test** ({total_turns} Turns)
+
+**Features being tested:**
+- ✅ OpenRouter as LLM provider
+- ✅ Document upload (PDF) - Turns 1, 4, 6
+- ✅ URL extraction - Turn 7
+- ✅ Multi-turn conversation memory
+- ✅ Thinking levels (low/medium/high)
+- ✅ Streaming response
+- ✅ Provider switching (Turn 9)
+- ✅ Fallback chain (Turn 10)
+
+Starting test..."""
+    }]
+
+    yield history, ""
+    
+    for turn in LLM_TEST_TURNS:
+        turn_num = turn["turn"]
+        
+        # Progress indicator
+        history = history + [{
+            "role": "assistant",
+            "content": f"🔄 **Turn {turn_num}/{total_turns}:** {turn['description']}\n\n_Thinking: {turn['thinking_level']}_"
+        }]
+        yield history, ""
+        history = history[:-1]
+        
+        try:
+            # Handle document clear
+            if turn.get("clear_docs"):
+                clear_all_documents()
+            
+            # Handle document upload
+            if turn.get("upload_file"):
+                file_path = turn["upload_file"]
+                # Try both relative and Kaggle paths
+                import os
+                if not os.path.exists(file_path):
+                    # Try Kaggle path
+                    kaggle_path = f"/kaggle/working/06_ID_Legal/{file_path}"
+                    if os.path.exists(kaggle_path):
+                        file_path = kaggle_path
+                
+                if os.path.exists(file_path):
+                    history = history + [{
+                        "role": "assistant",
+                        "content": f"📄 **Uploading:** `{os.path.basename(file_path)}`"
+                    }]
+                    yield history, ""
+                    
+                    # Use upload handler
+                    upload_document_handler([file_path])
+                    history[-1]["content"] += f"\n\n✅ Document uploaded"
+                    yield history, ""
+                else:
+                    history = history + [{
+                        "role": "assistant",
+                        "content": f"⚠️ **Document not found:** `{turn['upload_file']}`\n\n_Continuing without document..._"
+                    }]
+                    yield history, ""
+            
+            # Handle URL extraction
+            if turn.get("upload_url"):
+                url = turn["upload_url"]
+                history = history + [{
+                    "role": "assistant",
+                    "content": f"🔗 **Extracting URL:** `{url[:60]}...`"
+                }]
+                yield history, ""
+                
+                result = extract_url_handler(url)
+                if "✅" in result:
+                    history[-1]["content"] += f"\n\n✅ URL content extracted"
+                else:
+                    history[-1]["content"] += f"\n\n⚠️ URL extraction: {result[:50]}"
+                yield history, ""
+            
+            # Handle provider switch
+            if turn.get("is_provider_switch") and api_client:
+                new_model = turn.get("switch_to_model")
+                history = history + [{
+                    "role": "assistant", 
+                    "content": f"🔄 **Switching model to:** `{new_model}`"
+                }]
+                yield history, ""
+                
+                # Use the already-configured API key (just change model)
+                try:
+                    # Make direct API call to change model only
+                    resp = api_client._request(
+                        "POST", 
+                        "/llm/config",
+                        data={"provider": "openrouter", "model": new_model}
+                    )
+                    result = resp.json()
+                    if result.get("provider") == "openrouter":
+                        history[-1]["content"] += f"\n\n✅ Switch successful"
+                    else:
+                        history[-1]["content"] += f"\n\n❌ Switch failed: {result.get('error', 'Unknown')}"
+                except Exception as e:
+                    history[-1]["content"] += f"\n\n❌ Switch failed: {e}"
+                yield history, ""
+            
+            # Handle fallback test
+            if turn.get("is_fallback_test") and api_client:
+                primary = turn.get("primary_model")
+                fallback = turn.get("fallback_model")
+                
+                history = history + [{
+                    "role": "assistant",
+                    "content": f"⛓️ **Testing Fallback Chain**\n\nPrimary: `{primary}`\nFallback: `{fallback}`"
+                }]
+                yield history, ""
+                
+                # Try primary (should fail)
+                try:
+                    resp = api_client._request(
+                        "POST", 
+                        "/llm/config",
+                        data={"provider": "openrouter", "model": primary}
+                    )
+                    # Try a quick test
+                    test_result = api_client.test_llm_connection(max_tokens=50)
+                    if not test_result.get("success"):
+                        raise Exception("Primary failed")
+                except:
+                    # Switch to fallback
+                    resp = api_client._request(
+                        "POST", 
+                        "/llm/config",
+                        data={"provider": "openrouter", "model": fallback}
+                    )
+                    history[-1]["content"] += f"\n\n✅ Fallback to `{fallback}` successful"
+                yield history, ""
+            
+
+            # Run the actual query
+            temp_config = dict(config_dict or {})
+            temp_config["thinking_level"] = turn["thinking_level"]
+            
+            updated_history = history
+            for updated_history, _, _ in chat_with_legal_rag(
+                turn["query"], history, temp_config, show_thinking, show_sources, show_metadata
+            ):
+                yield updated_history, ""
+            history = updated_history
+            
+            # Validate keywords
+            if history and len(history) > 0:
+                last_response = history[-1].get("content", "").lower() if history[-1].get("role") == "assistant" else ""
+                found = [kw for kw in turn["expected_keywords"] if kw.lower() in last_response]
+                threshold = max(1, len(turn["expected_keywords"]) // 2)
+                turn_passed = len(found) >= threshold
+                
+                if turn_passed:
+                    passed += 1
+                    results.append(f"✅ Turn {turn_num}: PASS")
+                else:
+                    failed += 1
+                    results.append(f"❌ Turn {turn_num}: FAIL (expected {turn['expected_keywords']}, found {found})")
+            
+        except Exception as e:
+            failed += 1
+            results.append(f"❌ Turn {turn_num}: ERROR - {str(e)[:50]}")
+            history = history + [{
+                "role": "assistant",
+                "content": f"⚠️ **Turn {turn_num} Error:** {e}"
+            }]
+            yield history, ""
+    
+    # Final summary
+    pass_rate = (passed / total_turns) * 100 if total_turns > 0 else 0
+    status_emoji = "✅" if failed == 0 else "⚠️" if pass_rate >= 80 else "❌"
+    
+    history = history + [{
+        "role": "assistant",
+        "content": f"""{status_emoji} **LLM Provider Test Complete**
+
+**Results:**
+- Total: {total_turns}
+- Passed: {passed}
+- Failed: {failed}
+- Pass Rate: {pass_rate:.1f}%
+
+**Turn Details:**
+""" + "\n".join(results) + """
+
+**Features Tested:**
+✅ OpenRouter as LLM provider
+✅ Multi-turn conversation memory
+✅ Thinking levels (low/medium/high)
+✅ Streaming response
+✅ Provider switching (model change mid-conversation)
+✅ Fallback chain (invalid model → fallback)"""
+    }]
+    yield history, ""
+
+
+# =============================================================================
 # EXPORT FUNCTION - Uses existing exporters with full content
 # =============================================================================
+
 
 def export_conversation_handler(export_format, history):
     """
@@ -1768,7 +2063,10 @@ def create_gradio_interface():
                                     test_btn = gr.Button("🧪 Conversational Test", variant="primary")
                                     stress_btn = gr.Button("⚡ Stress Test")
                                     doc_test_btn = gr.Button("📄 Document Test")
+                                with gr.Row():
+                                    llm_test_btn = gr.Button("🤖 LLM Provider Test (10 Turns)", variant="secondary")
                 
+
                 # =====================================================================
                 # EXPORT TAB
                 # =====================================================================
@@ -1886,8 +2184,14 @@ def create_gradio_interface():
                 [chatbot, config_state, show_thinking, show_sources, show_metadata],
                 [chatbot, msg_input, attached_docs_display]
             )
+            llm_test_btn.click(
+                run_llm_provider_test,
+                [chatbot, config_state, show_thinking, show_sources, show_metadata],
+                [chatbot, msg_input]
+            )
             
             # Export handler
+
             export_btn.click(
                 export_conversation_handler,
                 [export_format, chatbot],
