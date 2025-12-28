@@ -299,7 +299,7 @@ class GenerationEngine:
 
         full_response = ""
         tokens_generated = 0
-        in_thinking_block = True  # Start assuming thinking (model instructed to use <think> first)
+        in_thinking_block = False
         think_start_detected = False  # Track if we've seen <think>
         think_end_detected = False    # Track if we've seen </think>
 
@@ -322,7 +322,7 @@ class GenerationEngine:
                                 self.logger.debug("Detected thinking tag start in stream")
                         
                         # Detect thinking end (only once, after start detected)
-                        if not think_end_detected:
+                        if think_start_detected and not think_end_detected:
                             if '</think>' in full_lower or '</thinking>' in full_lower:
                                 think_end_detected = True
                                 in_thinking_block = False
