@@ -177,7 +177,37 @@ TURN_CONFIG = [
         "max_tokens": 512,
         "temperature": 0.7,
     },
+    {
+        "turn": 9,
+        "description": "PROVIDER SWITCH: Change to DeepSeek model",
+        "thinking_level": "low",
+        "is_provider_switch": True,  # Special flag for provider switching
+        "switch_to_model": "deepseek/deepseek-r1-0528:free",
+        "upload_file": None,
+        "clear_docs": False,
+        "include_session_docs": False,
+        "query": "Apa definisi hukum pidana menurut doktrin Indonesia?",
+        "expected_keywords": ["pidana", "hukum", "tindak"],
+        "max_tokens": 1024,
+        "temperature": 0.5,
+    },
+    {
+        "turn": 10,
+        "description": "FALLBACK TEST: Invalid model triggers fallback",
+        "thinking_level": "low",
+        "is_fallback_test": True,  # Special flag for fallback testing
+        "primary_model": "invalid/nonexistent-model:free",  # Will fail
+        "fallback_model": "nvidia/nemotron-3-nano-30b-a3b:free",  # Should succeed
+        "upload_file": None,
+        "clear_docs": False,
+        "include_session_docs": False,
+        "query": "Jelaskan tentang asas legalitas dalam hukum Indonesia.",
+        "expected_keywords": ["legalitas", "hukum", "asas"],
+        "max_tokens": 1024,
+        "temperature": 0.5,
+    },
 ]
+
 
 
 
@@ -194,6 +224,7 @@ class OpenRouterTestClient:
         self.uploaded_docs: List[Dict] = []
         self.conversation_history: List[Dict] = []
         self.token_usage = {"prompt": 0, "completion": 0, "total": 0}
+        self.current_model = "nvidia/nemotron-3-nano-30b-a3b:free"
     
     def check_api(self) -> bool:
         """Check if API is running"""
@@ -223,6 +254,7 @@ class OpenRouterTestClient:
 
             if resp.status_code == 200:
                 data = resp.json()
+                self.current_model = data.get('model', self.current_model)
                 print(f"{Colors.GREEN}✓ OpenRouter configured: {data.get('model')}{Colors.RESET}")
                 return True
             else:
@@ -232,6 +264,59 @@ class OpenRouterTestClient:
             print(f"{Colors.RED}✗ Config error: {e}{Colors.RESET}")
             return False
     
+    def switch_model(self, model: str) -> Tuple[bool, str]:
+        """Switch to a different model (provider switching test)"""
+        print(f"\n{Colors.YELLOW}🔄 Switching model to: {model}{Colors.RESET}")
+        old_model = self.current_model
+        
+        try:
+            resp = requests.post(
+                f"{API_BASE_URL}/llm/config",
+                json={
+                    "provider": "openrouter",
+                    "model": model,
+                    "api_key": self.openrouter_key,
+                    "save_key": False
+                },
+                timeout=30
+            )
+            
+            if resp.status_code == 200:
+                data = resp.json()
+                self.current_model = data.get('model', model)
+                print(f"{Colors.GREEN}✓ Switched from {old_model} to {self.current_model}{Colors.RESET}")
+                return True, self.current_model
+            else:
+                error = resp.json().get('detail', resp.text[:100])
+                print(f"{Colors.RED}✗ Switch failed: {error}{Colors.RESET}")
+                return False, error
+                
+        except Exception as e:
+            print(f"{Colors.RED}✗ Switch error: {e}{Colors.RESET}")
+            return False, str(e)
+    
+    def test_fallback(self, primary_model: str, fallback_model: str) -> Tuple[bool, str]:
+        """Test fallback chain: try primary, if fails use fallback"""
+        print(f"\n{Colors.YELLOW}⛓️ Testing fallback chain:{Colors.RESET}")
+        print(f"   Primary: {primary_model}")
+        print(f"   Fallback: {fallback_model}")
+        
+        # Try primary model
+        success, result = self.switch_model(primary_model)
+        if success:
+            print(f"{Colors.CYAN}   Primary model worked (unexpected for fallback test){Colors.RESET}")
+            return True, primary_model
+        
+        # Primary failed, try fallback
+        print(f"{Colors.YELLOW}   Primary failed, trying fallback...{Colors.RESET}")
+        success, result = self.switch_model(fallback_model)
+        if success:
+            print(f"{Colors.GREEN}✓ Fallback succeeded: {fallback_model}{Colors.RESET}")
+            return True, fallback_model
+        else:
+            print(f"{Colors.RED}✗ Fallback also failed: {result}{Colors.RESET}")
+            return False, result
+
     def get_llm_status(self) -> Dict:
         """Get current LLM provider status"""
         try:
@@ -476,7 +561,32 @@ class MultiTurnOpenRouterTestRunner:
                 print(f"{Colors.RED}✗ {result['error']}{Colors.RESET}")
                 return result
         
+        # Handle provider switch test
+        if config.get('is_provider_switch'):
+            new_model = config.get('switch_to_model')
+            if new_model:
+                success, switch_result = self.client.switch_model(new_model)
+                if not success:
+                    result['error'] = f"Provider switch failed: {switch_result}"
+                    print(f"{Colors.RED}✗ {result['error']}{Colors.RESET}")
+                    return result
+                result['switched_model'] = switch_result
+        
+        # Handle fallback test
+        if config.get('is_fallback_test'):
+            primary = config.get('primary_model')
+            fallback = config.get('fallback_model')
+            if primary and fallback:
+                success, chain_result = self.client.test_fallback(primary, fallback)
+                if not success:
+                    result['error'] = f"Fallback chain failed: {chain_result}"
+                    print(f"{Colors.RED}✗ {result['error']}{Colors.RESET}")
+                    return result
+                result['fallback_used'] = chain_result == fallback
+                result['active_model'] = chain_result
+        
         # Send chat
+
         chat_result = self.client.chat_streaming(
             query=config['query'],
             include_docs=config['include_session_docs'],
@@ -575,6 +685,8 @@ class MultiTurnOpenRouterTestRunner:
         print("  ✅ Thinking levels (low/medium/high)")
         print("  ✅ Streaming response")
         print("  ✅ Generation parameters (max_tokens, temperature)")
+        print("  ✅ Provider switching (model change mid-conversation)")
+        print("  ✅ Fallback chain (invalid model → fallback)")
         
         # Build report
         report = {

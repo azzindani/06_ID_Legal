@@ -769,27 +769,64 @@ Jawab dengan lengkap dan sitasi sumber regulasi yang relevan."""
                     full_text += token
                     tokens_generated += 1
                     
-                    # Detect thinking section
-                    # Pattern 1: <thinking>...</thinking> or <think>...</think>
-                    # Pattern 2: Some models stream reasoning directly and only mark end with </think>
-                    has_think_start = '<thinking>' in full_text or '<think>' in full_text
-                    has_think_end = '</thinking>' in full_text or '</think>' in full_text
+                    # Detect thinking/reasoning section
+                    # Supported patterns:
+                    # 1. <thinking>...</thinking>
+                    # 2. <think>...</think>
+                    # 3. <reasoning>...</reasoning>
+                    # 4. NO start tag - model streams reasoning directly, ends with </think> or similar
+                    #    (e.g., DeepSeek R1 models)
                     
-                    # If we have start tag but no end, we're in thinking
-                    # If we have end tag before any answer text (len < 500), treat pre-end as thinking
+                    start_tags = ['<thinking>', '<think>', '<reasoning>']
+                    end_tags = ['</thinking>', '</think>', '</reasoning>']
+                    
+                    has_start = any(tag in full_text for tag in start_tags)
+                    has_end = any(tag in full_text for tag in end_tags)
+                    
+                    # For models without start tag (like DeepSeek R1), we detect this pattern:
+                    # - No start tag appears, but eventually an end tag appears
+                    # - In HIGH thinking mode, assume content before answer is reasoning
+                    # Heuristic: if thinking_mode is 'high' and we haven't seen start but see end later,
+                    # the model is using no-start-tag pattern
+                    
                     in_thinking = False
-                    if has_think_start and not has_think_end:
+                    
+                    if has_start and not has_end:
+                        # Case 1: Standard - found start tag, waiting for end tag
                         in_thinking = True
-                    elif not has_think_start and '</think>' in full_text:
-                        # Model streams reasoning without start tag
-                        # Everything before </think> is thinking
-                        think_end_pos = full_text.rfind('</think>')
-                        if think_end_pos > 0 and len(full_text) - think_end_pos < len(token) + 20:
-                            # We just crossed the </think> boundary
-                            in_thinking = False
-                        elif '</think>' not in full_text[:-len(token)] if token else False:
-                            # Still building up to </think>
+                    elif has_start and has_end:
+                        # Case 2: Both tags present - check position
+                        last_start = max(
+                            (full_text.rfind(tag) for tag in start_tags if tag in full_text),
+                            default=-1
+                        )
+                        last_end = max(
+                            (full_text.rfind(tag) for tag in end_tags if tag in full_text),
+                            default=-1
+                        )
+                        in_thinking = last_start > last_end
+                    elif not has_start and not has_end:
+                        # Case 3: No tags yet
+                        # For HIGH thinking mode with reasoning models (DeepSeek R1, etc.),
+                        # assume we're in thinking until we see content that looks like final answer
+                        # Heuristic: if response is short (<500 chars) and in high mode, might be thinking
+                        if thinking_mode == 'high' and len(full_text) < 1000:
+                            # Could be reasoning, but we can't know for sure
+                            # Mark as thinking - if no end tag ever comes, it's answer
+                            # This gets corrected in post-processing
                             in_thinking = True
+                        else:
+                            in_thinking = False
+                    elif not has_start and has_end:
+                        # Case 4: Model used NO start tag, now we see end tag
+                        # Past content was thinking, now we're in answer section
+                        in_thinking = False
+                    
+                    # If current token contains an end tag, we're definitely not in thinking
+                    for end_tag in end_tags:
+                        if end_tag in token:
+                            in_thinking = False
+                            break
                     
                     if in_thinking:
                         thinking_text += token
