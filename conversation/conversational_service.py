@@ -118,7 +118,19 @@ class ConversationalRAGService:
             yield {'type': 'progress', 'data': {'message': f'👥 Assembling research team ({team_size} members)...'}}
 
             # Execute pipeline with streaming
+            # Enable streaming for local provider OR external LLM providers (OpenRouter)
             use_streaming = (self.current_provider == 'local')
+            
+            # Also enable streaming if an external LLM provider is configured
+            if not use_streaming:
+                try:
+                    from core.llm_providers.factory import LLMProviderFactory
+                    provider = LLMProviderFactory.get_current_provider()
+                    if provider and provider.provider_name not in ('none', None):
+                        use_streaming = True
+                        self.logger.info(f"Using streaming with external provider: {provider.provider_name}")
+                except:
+                    pass
 
             if use_streaming:
                 # Stream results
