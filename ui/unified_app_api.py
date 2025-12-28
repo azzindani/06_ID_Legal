@@ -383,7 +383,7 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
     
     if not message.strip():
         print("[CHAT] Empty message, returning", flush=True)
-        return history, ""
+        return history, "", get_attached_docs_display()
     
     global api_client, current_session, attached_documents
     print(f"[CHAT] api_client is {'set' if api_client else 'None'}, current_session={current_session}", flush=True)
@@ -395,7 +395,7 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
         print("[CHAT] API still None after init, returning error")
         history.append({"role": "user", "content": message})
         history.append({"role": "assistant", "content": "❌ API not connected. Please refresh and try again."})
-        yield history, ""
+        yield history, "", get_attached_docs_display()
         return
     
     # Auto-detect and fetch URLs in message
@@ -462,7 +462,7 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
         yield history + [
             {"role": "user", "content": user_content},
             {"role": "assistant", "content": initial_response}
-        ], ""
+        ], "", get_attached_docs_display()
         
         print("[CHAT] Calling api_client.chat_stream()...", flush=True)
         
@@ -548,7 +548,7 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
                 yield history + [
                     {"role": "user", "content": user_content},
                     {"role": "assistant", "content": ''.join(live_output)}
-                ], ""
+                ], "", get_attached_docs_display()
             
             elif chunk_type == 'done':
                 result_data = chunk
@@ -571,7 +571,7 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
         # Add document context section (collapsible) if documents were used
         if include_docs and attached_documents:
             doc_list = "\n".join([f"- {d['filename']} ({d['char_count']:,} karakter)" for d in attached_documents])
-            final_output += f'<details open><summary>📄 <strong>Dokumen dalam Konteks</strong></summary>\n\n{doc_list}\n</details>\n\n---\n\n'
+            final_output += f'<details><summary>📄 <strong>Dokumen dalam Konteks</strong></summary>\n\n{doc_list}\n</details>\n\n---\n\n'
         
         # Add thinking section if available
         if show_thinking and thinking_text:
@@ -596,7 +596,7 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
         yield history + [
             {"role": "user", "content": user_content},
             {"role": "assistant", "content": final_output}
-        ], ""
+        ], "", ""  # Empty string clears attachment display
         
     except Exception as e:
         import traceback
@@ -604,7 +604,7 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
         yield history + [
             {"role": "user", "content": user_content},
             {"role": "assistant", "content": f"❌ **Error:** {e}"}
-        ], ""
+        ], "", ""
 
 
 # =============================================================================
@@ -1721,7 +1721,7 @@ def create_gradio_interface():
             msg_input.submit(
                 chat_with_legal_rag,
                 [msg_input, chatbot, config_state, show_thinking, show_sources, show_metadata],
-                [chatbot, msg_input]
+                [chatbot, msg_input, attached_docs_display]
             )
             
             # Document attachment handlers
