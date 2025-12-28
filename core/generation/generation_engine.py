@@ -314,17 +314,19 @@ class GenerationEngine:
                         # Real-time thinking detection using accumulated response
                         full_lower = full_response.lower()
                         
-                        # Detect <think> start (only once)
-                        if not think_start_detected and '<think>' in full_lower:
-                            think_start_detected = True
-                            in_thinking_block = True
-                            self.logger.debug("Detected <think> tag start in stream")
+                        # Detect thinking start (only once) - handle both <think> and <thinking> tags
+                        if not think_start_detected:
+                            if '<think>' in full_lower or '<thinking>' in full_lower:
+                                think_start_detected = True
+                                in_thinking_block = True
+                                self.logger.debug("Detected thinking tag start in stream")
                         
-                        # Detect </think> end (only once, after start detected)
-                        if think_start_detected and not think_end_detected and '</think>' in full_lower:
-                            think_end_detected = True
-                            in_thinking_block = False
-                            self.logger.debug("Detected </think> tag end in stream")
+                        # Detect thinking end (only once, after start detected)
+                        if think_start_detected and not think_end_detected:
+                            if '</think>' in full_lower or '</thinking>' in full_lower:
+                                think_end_detected = True
+                                in_thinking_block = False
+                                self.logger.debug("Detected thinking tag end in stream")
 
                         yield {
                             'type': 'thinking' if in_thinking_block else 'token',
