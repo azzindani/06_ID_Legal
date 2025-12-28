@@ -437,24 +437,29 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
         
         print(f"[CHAT] Config: top_k={top_k}, temp={temperature}, tokens={max_tokens}, team={team_size}, think={thinking_mode}", flush=True)
         
-        # Build user message content with attached documents
+        # SAVE attached documents to local variable, then CLEAR immediately
+        # This makes the attachment display clear as soon as send is clicked
+        docs_for_this_message = list(attached_documents)  # Copy
+        attached_documents.clear()  # Clear immediately for display update
+        
+        # Build user message content with attached documents (using saved copy)
         user_content = message
-        if attached_documents:
-            doc_list = "\n".join([f"📄 {d['filename']} ({d['char_count']:,} chars)" for d in attached_documents])
+        if docs_for_this_message:
+            doc_list = "\n".join([f"📄 {d['filename']} ({d['char_count']:,} chars)" for d in docs_for_this_message])
             user_content = f"{message}\n\n---\n**📎 Dokumen terlampir:**\n{doc_list}"
         
-        # Check if documents are attached
-        include_docs = bool(config_dict.get('include_documents', True) and attached_documents)
+        # Check if documents are attached (using saved copy)
+        include_docs = bool(config_dict.get('include_documents', True) and docs_for_this_message)
         max_doc_chars = int(config_dict.get('max_document_chars', 20000))
         
-        # Build document info section for response
+        # Build document info section for response (using saved copy)
         doc_info_section = ""
         if include_docs:
             doc_info_section = "📄 **Dokumen dalam konteks:**\n"
-            for d in attached_documents:
+            for d in docs_for_this_message:
                 doc_info_section += f"- {d['filename']} ({d['char_count']:,} karakter)\n"
             doc_info_section += "\n---\n\n"
-            print(f"[CHAT] Including {len(attached_documents)} documents in context", flush=True)
+            print(f"[CHAT] Including {len(docs_for_this_message)} documents in context", flush=True)
         
         # Initial processing message with document info
         initial_response = doc_info_section + f"🔄 **Memproses permintaan...**\n_Settings: Top-K={top_k}, Temp={temperature}, Tokens={max_tokens}, Team={team_size}_"
@@ -569,8 +574,8 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
         config_info = f"_⚙️ Config: Top-K={top_k}, Temp={temperature}, Tokens={max_tokens}, Team={team_size}, Think={thinking_mode}_"
         
         # Add document context section (collapsible) if documents were used
-        if include_docs and attached_documents:
-            doc_list = "\n".join([f"- {d['filename']} ({d['char_count']:,} karakter)" for d in attached_documents])
+        if include_docs and docs_for_this_message:
+            doc_list = "\n".join([f"- {d['filename']} ({d['char_count']:,} karakter)" for d in docs_for_this_message])
             final_output += f'<details><summary>📄 <strong>Dokumen dalam Konteks</strong></summary>\n\n{doc_list}\n</details>\n\n---\n\n'
         
         # Add thinking section if available
@@ -590,8 +595,7 @@ def chat_with_legal_rag(message, history, config_dict, show_thinking=True, show_
         # Add config metadata at the bottom
         final_output += f'\n\n---\n\n{config_info}'
         
-        # Clear attached documents after sending (move to chat)
-        attached_documents = []
+        # Note: attached_documents already cleared at start of function
         
         yield history + [
             {"role": "user", "content": user_content},
