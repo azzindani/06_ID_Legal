@@ -149,20 +149,19 @@ class RAGPipeline:
             self.logger.info("Step 4/5: Initializing generation engine...")
             from core.generation.generation_engine import GenerationEngine
             
-            # Only pass external providers (openrouter) to GenerationEngine
-            # For local provider, let GenerationEngine load its own LLM (more stable)
+            # Pass existing LLM provider to GenerationEngine
+            # - For local: GenerationEngine will extract and reuse its LLMEngine (single load)
+            # - For openrouter: GenerationEngine will use it as external provider
+            # - For none: No LLM needed
             llm_provider = None
             try:
                 from core.llm_providers.factory import LLMProviderFactory
                 existing_provider = LLMProviderFactory.get_current_provider()
                 if existing_provider is not None:
                     provider_type = getattr(existing_provider, 'provider_name', 'unknown')
-                    # Only use openrouter as external provider
-                    if provider_type == 'openrouter':
+                    if provider_type in ('local', 'openrouter'):
                         llm_provider = existing_provider
-                        self.logger.info(f"Using external LLM provider: {provider_type}")
-                    # For 'local' - let GenerationEngine create its own LLMEngine
-                    # For 'none' - no LLM needed
+                        self.logger.info(f"Passing LLM provider to GenerationEngine: {provider_type}")
             except Exception as e:
                 self.logger.debug(f"No existing provider to reuse: {e}")
 

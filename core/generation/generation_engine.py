@@ -30,11 +30,21 @@ class GenerationEngine:
         # LLM provider - can be injected or created internally
         self._external_provider = llm_provider
         
-        # Initialize LLM engine only if no external provider
+        # Initialize LLM engine - handle different provider types
         if llm_provider is None:
+            # No external provider - create our own LLMEngine
             self.llm_engine = LLMEngine(config)
+        elif hasattr(llm_provider, 'provider_name') and llm_provider.provider_name == 'local':
+            # LocalProvider - extract and reuse its LLMEngine to avoid duplicate loading
+            if hasattr(llm_provider, '_engine') and llm_provider._engine is not None:
+                self.llm_engine = llm_provider._engine
+                self._external_provider = None  # Use the engine directly, not as external
+                self.logger.info("Reusing LLMEngine from LocalProvider (single load)")
+            else:
+                # LocalProvider without loaded engine - create our own
+                self.llm_engine = LLMEngine(config)
         else:
-            # Wrap external provider to match LLMEngine interface
+            # External provider (OpenRouter, etc.) - use it as external
             self.llm_engine = None
             self.logger.info("Using external LLM provider", {
                 "provider": getattr(llm_provider, 'provider_name', 'unknown')
@@ -50,12 +60,16 @@ class GenerationEngine:
         self.enable_enhancement = config.get('enable_enhancement', True)
         self.strict_validation = config.get('strict_validation', False)
         
+        using_external = self._external_provider is not None
+        using_shared = hasattr(self, 'llm_engine') and self.llm_engine is not None and llm_provider is not None
         self.logger.info("GenerationEngine initialized", {
             "validation_enabled": self.enable_validation,
             "enhancement_enabled": self.enable_enhancement,
-            "using_external_provider": llm_provider is not None
+            "using_external_provider": using_external,
+            "using_shared_engine": using_shared
         })
     
+
     def initialize(self) -> bool:
         """
         Initialize generation engine (load models)
