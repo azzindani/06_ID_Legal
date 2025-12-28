@@ -213,45 +213,69 @@ def upload_document_handler(files):
     """
     Handle document upload from UI.
     Uploads files to API and returns updated display.
+    Falls back to local-only mode if API upload fails.
     """
     global api_client, current_session, attached_documents
+    import uuid
     
     print(f"[UPLOAD] Called with files: {files}", flush=True)
     
     if not files:
         return get_attached_docs_display()
     
+    # Initialize API if needed
     if api_client is None:
         initialize_api()
     
     # Ensure session exists
     if not current_session:
-        import uuid
         current_session = f"ui-session-{uuid.uuid4().hex[:8]}"
         print(f"[UPLOAD] Created session: {current_session}", flush=True)
     
-    results = []
     for file_obj in files if isinstance(files, list) else [files]:
         try:
             file_path = file_obj.name if hasattr(file_obj, 'name') else str(file_obj)
-            print(f"[UPLOAD] Uploading: {file_path}", flush=True)
+            filename = os.path.basename(file_path)
+            print(f"[UPLOAD] Processing: {filename}", flush=True)
             
-            doc_info = api_client.upload_document(file_path, current_session)
-            print(f"[UPLOAD] Result: {doc_info}", flush=True)
+            # Get file size for char count estimate
+            try:
+                file_size = os.path.getsize(file_path)
+                char_estimate = file_size  # Rough estimate
+            except:
+                char_estimate = 0
             
+            # Try API upload if available
+            api_success = False
+            doc_id = f"local-{uuid.uuid4().hex[:8]}"
+            char_count = char_estimate
+            
+            if api_client:
+                try:
+                    doc_info = api_client.upload_document(file_path, current_session)
+                    print(f"[UPLOAD] API Result: {doc_info}", flush=True)
+                    doc_id = doc_info.get('document_id', doc_id)
+                    char_count = doc_info.get('char_count', char_estimate)
+                    api_success = True
+                except Exception as api_err:
+                    print(f"[UPLOAD] API Error (using local fallback): {api_err}", flush=True)
+            
+            # Always add to local list (even if API failed)
             attached_documents.append({
-                'id': doc_info.get('document_id', ''),
-                'filename': doc_info.get('filename', os.path.basename(file_path)),
-                'char_count': doc_info.get('char_count', 0),
-                'format': doc_info.get('format', 'unknown')
+                'id': doc_id,
+                'filename': filename,
+                'char_count': char_count,
+                'format': os.path.splitext(filename)[1].lstrip('.') or 'unknown',
+                'api_uploaded': api_success
             })
-            results.append(f"✅ {os.path.basename(file_path)}")
+            print(f"[UPLOAD] Added to attached_documents: {filename} (API: {api_success})", flush=True)
+            
         except Exception as e:
             print(f"[UPLOAD] Error: {e}", flush=True)
-            results.append(f"❌ {os.path.basename(str(file_obj))}: {e}")
     
     display = get_attached_docs_display()
-    print(f"[UPLOAD] Display: {display}", flush=True)
+    print(f"[UPLOAD] Final display: {display}", flush=True)
+    print(f"[UPLOAD] attached_documents count: {len(attached_documents)}", flush=True)
     return display
 
 
@@ -1142,9 +1166,21 @@ def run_document_test(history, config_dict, show_thinking, show_sources, show_me
     Run document integration test - simulates document uploads and chats with them.
     Works on Kaggle without requiring local test files.
     4 turns with simulated document context.
+    
+    Yields: (history, input_text, attached_docs_display)
     """
     global api_client, current_session, attached_documents
     import uuid
+    
+    def get_docs_display():
+        """Get current attached docs display string"""
+        if not attached_documents:
+            return ""
+        lines = []
+        for d in attached_documents:
+            chars = f"{d['char_count']:,}" if d.get('char_count') else "?"
+            lines.append(f"📄 **{d['filename']}** ({chars} chars)")
+        return "\n".join(lines)
     
     # Test configuration
     doc_config = dict(config_dict)
@@ -1171,7 +1207,7 @@ The "📄 Dokumen dalam konteks" section should appear in responses.
 
 **Starting test...**"""
     }]
-    yield history, ""
+    yield history, "", get_docs_display()
     
     # Check if API is available
     if api_client is None:
@@ -1182,7 +1218,7 @@ The "📄 Dokumen dalam konteks" section should appear in responses.
             "role": "assistant",
             "content": "❌ **Error:** API not connected. Please check API server."
         }]
-        yield history, ""
+        yield history, "", get_docs_display()
         return
     
     # Clear any existing documents first
@@ -1245,7 +1281,7 @@ The "📄 Dokumen dalam konteks" section should appear in responses.
                 "role": "assistant",
                 "content": f"🗑️ **Turn {turn}:** Cleared previous documents..."
             }]
-            yield history, ""
+            yield history, "", get_docs_display()
         
         # Load simulated document if specified
         if config.get("simulated_doc"):
@@ -1256,7 +1292,7 @@ The "📄 Dokumen dalam konteks" section should appear in responses.
                 "role": "assistant",
                 "content": f"📤 **Turn {turn}:** Loading simulated document: {doc_data['filename']}..."
             }]
-            yield history, ""
+            yield history, "", get_docs_display()
             
             # Add to attached_documents list (simulated)
             attached_documents.append({
@@ -1270,7 +1306,8 @@ The "📄 Dokumen dalam konteks" section should appear in responses.
                 "role": "assistant",
                 "content": f"✅ **Document loaded:** {doc_data['filename']} ({doc_data['char_count']:,} chars)\n\n_Content: {doc_data['content_summary']}_"
             }]
-            yield history, ""
+            # Update attachment display after adding document
+            yield history, "", get_docs_display()
         
         # Ask question
         question = config["question"]
@@ -1278,21 +1315,22 @@ The "📄 Dokumen dalam konteks" section should appear in responses.
             "role": "assistant",
             "content": f"💬 **Turn {turn}/4:** Processing question with document context..."
         }]
-        yield history, ""
+        yield history, "", get_docs_display()
         history = history[:-1]
         
         try:
+            # Call chat - it only yields 2 values, so we wrap it
             for updated_history, cleared_input in chat_with_legal_rag(
                 question, history, doc_config, show_thinking, show_sources, show_metadata
             ):
-                yield updated_history, cleared_input
+                yield updated_history, cleared_input, get_docs_display()
             history = updated_history
         except Exception as e:
             history = history + [{
                 "role": "assistant",
                 "content": f"⚠️ **Error in Turn {turn}:** {e}"
             }]
-            yield history, ""
+            yield history, "", get_docs_display()
     
     # Completion message
     history = history + [{
@@ -1311,7 +1349,7 @@ If you did NOT see the document context sections above, the issue is:
 
 **Current attached_documents count:** {len(attached_documents)}"""
     }]
-    yield history, ""
+    yield history, "", get_docs_display()
 
 
 # =============================================================================
@@ -1734,7 +1772,7 @@ def create_gradio_interface():
             doc_test_btn.click(
                 run_document_test,
                 [chatbot, config_state, show_thinking, show_sources, show_metadata],
-                [chatbot, msg_input]
+                [chatbot, msg_input, attached_docs_display]
             )
             
             # Export handler
