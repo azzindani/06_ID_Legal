@@ -147,7 +147,7 @@ EMBEDDING_DTYPE = os.getenv("EMBEDDING_DTYPE", "float32")  # float32, float16, b
 # LLM PROVIDER CONFIGURATION
 # =============================================================================
 
-# Provider: local, openai, anthropic, google, openrouter
+# Provider: local, openrouter, none
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "local")
 
 # API Keys for cloud providers
@@ -156,15 +156,31 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 
-# API Model names (when using cloud providers)
+# OpenRouter Configuration
+OPENROUTER_BASE_URL = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
+OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "nvidia/nemotron-3-nano-30b-a3b:free")
+OPENROUTER_TIMEOUT = int(os.getenv("OPENROUTER_TIMEOUT", "120"))
+OPENROUTER_MAX_RETRIES = int(os.getenv("OPENROUTER_MAX_RETRIES", "3"))
+
+# Model presets (prioritizing free models by default)
+LLM_MODEL_PRESETS = {
+    "free_default": "nvidia/nemotron-3-nano-30b-a3b:free",
+    "free_google": "google/gemini-2.0-flash-exp:free",
+    "free_openai": "openai/gpt-oss-120b:free",
+    "premium_claude": "anthropic/claude-sonnet-4",
+    "premium_gpt4": "openai/gpt-4o",
+    "reasoning": "deepseek/deepseek-r1",
+}
+
+# Legacy API model names (kept for backward compatibility)
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
 ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-20250514")
 GOOGLE_MODEL = os.getenv("GOOGLE_MODEL", "gemini-1.5-pro")
-OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "anthropic/claude-sonnet-4")
 
 # API Configuration
 API_TIMEOUT = int(os.getenv("API_TIMEOUT", "120"))
 API_MAX_RETRIES = int(os.getenv("API_MAX_RETRIES", "3"))
+
 
 # =============================================================================
 # CONTEXT CACHE CONFIGURATION

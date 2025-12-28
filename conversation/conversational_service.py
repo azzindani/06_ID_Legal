@@ -118,7 +118,19 @@ class ConversationalRAGService:
             yield {'type': 'progress', 'data': {'message': f'👥 Assembling research team ({team_size} members)...'}}
 
             # Execute pipeline with streaming
+            # Enable streaming for local provider OR external LLM providers (OpenRouter)
             use_streaming = (self.current_provider == 'local')
+            
+            # Also enable streaming if an external LLM provider is configured
+            if not use_streaming:
+                try:
+                    from core.llm_providers.factory import LLMProviderFactory
+                    provider = LLMProviderFactory.get_current_provider()
+                    if provider and provider.provider_name not in ('none', None):
+                        use_streaming = True
+                        self.logger.info(f"Using streaming with external provider: {provider.provider_name}")
+                except:
+                    pass
 
             if use_streaming:
                 # Stream results
@@ -290,15 +302,15 @@ class ConversationalRAGService:
                     if stream_callback:
                         stream_callback(token)
                     
-                    # Yield as streaming_chunk so gradio_app.py processes it
-                    # The <think> tag parsing in gradio_app.py handles display
+                    # Yield as thinking_chunk so rag_enhanced.py can distinguish
+                    # and send proper 'type: thinking' SSE events
                     yield {
-                        'type': 'streaming_chunk',
+                        'type': 'thinking_chunk',
                         'data': {
                             'chunk': token,
                             'accumulated': streamed_answer,
                             'chunk_count': chunk_count,
-                            'is_thinking': True  # Flag for context
+                            'is_thinking': True
                         }
                     }
 

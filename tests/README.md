@@ -244,6 +244,228 @@ print("✅ API ready")
 
 ---
 
+## 🤖 LLM Provider Test Suite (NEW)
+
+Tests for the flexible LLM Provider system that supports multiple backends (OpenRouter, Local, None).
+
+### Test 1: Unit Tests (Mocked, Fast)
+
+**File:** `tests/unit/test_llm_providers.py`
+
+Quick pytest-based tests for all provider components.
+
+```bash
+python -m pytest tests/unit/test_llm_providers.py -v
+```
+
+**What It Tests:**
+- NoneProvider (RAG-only mode)
+- OpenRouterProvider (initialization, model presets)
+- LocalProvider (GPU wrapper)
+- LLMProviderFactory (creation, singleton, shutdown)
+- SecureKeyStore (save, load, delete encrypted keys)
+- ResponseCache (LRU caching, TTL, stats)
+- UsageTracker (token/cost tracking)
+
+---
+
+### Test 2: Real Simulation Test (No Mocking)
+
+**File:** `tests/integration/test_llm_providers_simulation.py`
+
+Comprehensive end-to-end simulation with real execution (no mocks).
+
+```bash
+# Basic test (9 tests, no server needed)
+python tests/integration/test_llm_providers_simulation.py
+
+# With API server testing
+python tests/integration/test_llm_providers_simulation.py --with-api
+
+# With OpenRouter live API
+python tests/integration/test_llm_providers_simulation.py --with-openrouter --openrouter-key sk-or-v1-...
+
+# Full test (all features)
+python tests/integration/test_llm_providers_simulation.py --full --openrouter-key sk-or-v1-...
+```
+
+**What It Tests:**
+
+| Test | Description |
+|------|-------------|
+| NoneProvider | Creates provider, generate, stream, info |
+| LLMProviderFactory | Singleton, provider creation, shutdown |
+| SecureKeyStore | Encrypted storage (save/load/delete) |
+| ResponseCache | LRU eviction, TTL, cache stats |
+| UsageTracker | Token recording, session stats |
+| ContextTransfer | Context compatibility checks |
+| Model Presets | Free priority, config access |
+| API Key Validation | Invalid format rejection |
+| LocalProvider | GPU wrapper initialization |
+| OpenRouterProvider | Live API + SSE streaming (optional) |
+| API Endpoints | All /llm/* endpoints (optional) |
+| Runtime Switching | Provider switch via API (optional) |
+
+**Feature Coverage Displayed at End:**
+```
+📋 Feature Coverage:
+  ✅ 3 Providers (OpenRouter, Local, None): Tested
+  ✅ Encrypted API key storage: Tested
+  ✅ Token tracking: Tested
+  ✅ Response caching: Tested
+  ✅ Free model presets (priority): Tested
+  ✅ API key validation: Tested
+  ✅ Smart provider switching: Tested
+  ⏭️ SSE Streaming: Skipped (use --with-openrouter)
+```
+
+---
+
+### Test 3: Multi-Turn Conversation Test (Fallback + Switching)
+
+**File:** `tests/integration/test_llm_provider_multi_turn.py`
+
+Tests multi-turn conversation with document context, provider fallback, and smart switching.
+
+```bash
+# Basic test (no API key needed)
+python tests/integration/test_llm_provider_multi_turn.py
+
+# With OpenRouter live API
+python tests/integration/test_llm_provider_multi_turn.py --with-openrouter --openrouter-key sk-or-v1-...
+```
+
+**What It Tests:**
+
+| Test | Description |
+|------|-------------|
+| Fallback Chain | Auto-retry with different providers on failure |
+| Context Preservation | Preserve conversation when switching providers |
+| Multi-Turn + Documents | 3-turn conversation with document context |
+| Provider Switching | Switch providers mid-conversation |
+| Streaming + Fallback | Stream tokens with automatic fallback |
+| OpenRouter Live | Full multi-turn with real API (optional) |
+
+**Key Classes:**
+```python
+# Fallback chain for reliability
+from tests.integration.test_llm_provider_multi_turn import ProviderFallbackChain
+
+chain = ProviderFallbackChain(
+    providers=["openrouter", "local", "none"],
+    openrouter_key="sk-or-v1-..."
+)
+result = chain.generate_with_fallback("Your prompt here")
+
+# Conversation with provider switching
+from tests.integration.test_llm_provider_multi_turn import ConversationWithProviderSwitching
+
+conv = ConversationWithProviderSwitching(chain)
+conv.add_document("doc-1", "contract.pdf", content, 5000)
+conv.chat("Question about document", include_docs=True, stream=True)
+conv.switch_provider("openrouter")  # Preserves context
+```
+
+**Sample Output:**
+```
+============================================================
+  TEST 3: Multi-Turn Conversation with Documents
+============================================================
+
+  📄 Document added: PP_35_2021_PKWT.pdf (523 chars)
+
+[Turn 1: Query about document]
+Provider: none
+Response: ⚠️ **Mode RAG-Only Aktif**...
+
+[Turn 2: Follow-up question]
+Provider: none
+Response: ...
+
+✅ Multi-Turn with Documents: 3 turns completed
+```
+
+---
+
+### LLM Provider Test Summary
+
+| Test File | Purpose | API Required | OpenRouter Key |
+|-----------|---------|--------------|----------------|
+| `test_llm_providers.py` | Unit tests (fast, mocked) | ❌ | ❌ |
+| `test_llm_providers_simulation.py` | Real simulation (comprehensive) | Optional | Optional |
+| `test_llm_provider_multi_turn.py` | 8-turn conversation with OpenRouter | ✅ | ✅ |
+
+---
+
+### Running LLM Provider Tests in Kaggle
+
+**Step 1: Start API Server (Skip Local LLM)**
+
+```python
+# Cell 1: Start API with --llm-provider none (no local LLM loading)
+import threading
+import time
+import os
+import sys
+
+os.chdir('/kaggle/working/06_ID_Legal')
+sys.path.insert(0, '/kaggle/working/06_ID_Legal')
+
+# IMPORTANT: Set CLI args BEFORE importing the app
+sys.argv = ['api.server', '--llm-provider', 'none']
+
+def start_api():
+    import uvicorn
+    from api.server import app
+    uvicorn.run(app, host="127.0.0.1", port=8000, log_level="info")
+
+api_thread = threading.Thread(target=start_api, daemon=True)
+api_thread.start()
+
+print("⏳ Starting API with --llm-provider none...")
+print("   (Skips local LLM, will configure OpenRouter at runtime)")
+print("   Wait ~30-60 seconds for RAG pipeline...")
+time.sleep(60)
+print("✅ API should be ready!")
+```
+
+**Step 2: Verify API is Running**
+
+```python
+# Cell 2: Check API health and LLM status
+import requests
+try:
+    r = requests.get("http://127.0.0.1:8000/api/v1/health", timeout=5)
+    if r.status_code == 200:
+        print("✅ API is running!")
+        # Check LLM provider status
+        s = requests.get("http://127.0.0.1:8000/api/v1/llm/status", timeout=5)
+        print(f"LLM Provider: {s.json()}")
+    else:
+        print(f"❌ Status: {r.status_code}")
+except Exception as e:
+    print(f"❌ Cannot connect: {e}")
+```
+
+**Step 3: Run Tests**
+
+```python
+# Cell 3A: Simulation test (no OpenRouter key needed, no server needed)
+!python tests/integration/test_llm_providers_simulation.py
+```
+
+```python
+# Cell 3B: Multi-turn test with OpenRouter (requires API running)
+import os
+os.environ["OPENROUTER_API_KEY"] = "sk-or-v1-YOUR-KEY-HERE"
+
+!python tests/integration/test_llm_provider_multi_turn.py
+```
+
+> **Note:** The multi-turn test will configure OpenRouter at runtime via the `/llm/config` API endpoint.
+
+---
+
 ## 🔍 Multi-Turn API Blocking Diagnostic Tests (NEW)
 
 These diagnostic tests help identify blocking issues in multi-turn conversations. Use them when the system works for the first request but blocks on subsequent requests.
