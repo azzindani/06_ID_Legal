@@ -72,11 +72,11 @@ async def lifespan(app: FastAPI):
     try:
         from core.llm_providers.factory import LLMProviderFactory
         
-        # Don't auto-load for local - GenerationEngine will load once during pipeline init
-        # This avoids loading the model twice and wasting VRAM
+        # Auto-load for local provider to ensure model is ready
+        # Note: May load twice (here + GenerationEngine), but ensures stability
         provider = LLMProviderFactory.get_provider(
             provider_type=llm_provider,
-            auto_load=False  # Let GenerationEngine handle loading
+            auto_load=(llm_provider == "local")  # Auto-load for local provider
         )
         app.state.llm_provider = provider
         app.state.llm_provider_type = llm_provider
