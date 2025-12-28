@@ -205,12 +205,15 @@ class OpenRouterTestClient:
     def configure_openrouter(self) -> bool:
         """Configure API to use OpenRouter provider"""
         try:
-            # Use Gemini Flash - better compatibility with free tier privacy settings
+            # Free models that work well (user-tested):
+            # - nvidia/nemotron-3-nano-30b-a3b:free (default, fast)
+            # - deepseek/deepseek-r1-0528:free (reasoning)
+            # - openai/gpt-oss-20b:free (smaller, faster)
             resp = requests.post(
                 f"{API_BASE_URL}/llm/config",
                 json={
                     "provider": "openrouter",
-                    "model": "google/gemini-2.0-flash-exp:free",
+                    "model": "nvidia/nemotron-3-nano-30b-a3b:free",
                     "api_key": self.openrouter_key,
                     "save_key": False
                 },

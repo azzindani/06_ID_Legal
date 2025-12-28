@@ -98,7 +98,7 @@ class TestOpenRouterProvider:
         # Key must be at least 20 characters
         provider = OpenRouterProvider(api_key="test-key-12345678901234567890")
         assert provider.provider_name == "openrouter"
-        assert provider._model == "openai/gpt-oss-120b:free"
+        assert provider._model == "nvidia/nemotron-3-nano-30b-a3b:free"
     
     def test_openrouter_provider_custom_model(self):
         """Test initialization with custom model"""
@@ -117,8 +117,9 @@ class TestOpenRouterProvider:
         
         presets = get_model_presets()
         assert 'free_default' in presets
-        assert 'free_google' in presets
-        assert presets['free_default'] == "openai/gpt-oss-120b:free"
+        assert 'free_deepseek' in presets
+        assert presets['free_default'] == "nvidia/nemotron-3-nano-30b-a3b:free"
+
     
     @pytest.mark.skipif(not os.getenv("OPENROUTER_API_KEY"), reason="No API key")
     def test_openrouter_real_request(self):

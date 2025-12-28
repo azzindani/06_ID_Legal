@@ -26,10 +26,15 @@ except ImportError:
 
 
 # Model presets with free models prioritized
+# User-tested free models that work well:
+# - nvidia/nemotron-3-nano-30b-a3b:free (default, fast, 30B)
+# - deepseek/deepseek-r1-0528:free (reasoning, good for complex questions)
+# - openai/gpt-oss-20b:free (smaller, faster)
 MODEL_PRESETS = {
-    "free_default": "openai/gpt-oss-120b:free",
+    "free_default": "nvidia/nemotron-3-nano-30b-a3b:free",
     "free_google": "google/gemini-2.0-flash-exp:free",
-    "free_nvidia": "nvidia/nemotron-3-nano-30b-a3b:free",
+    "free_deepseek": "deepseek/deepseek-r1-0528:free",
+    "free_openai": "openai/gpt-oss-20b:free",
     "premium_claude": "anthropic/claude-sonnet-4",
     "premium_gpt4": "openai/gpt-4o",
     "reasoning": "deepseek/deepseek-r1",
@@ -37,9 +42,10 @@ MODEL_PRESETS = {
 
 # Context windows for popular models (in tokens)
 MODEL_CONTEXT_WINDOWS = {
-    "openai/gpt-oss-120b:free": 131072,
-    "google/gemini-2.0-flash-exp:free": 1048576,  # 1M context
     "nvidia/nemotron-3-nano-30b-a3b:free": 32768,
+    "google/gemini-2.0-flash-exp:free": 1048576,  # 1M context
+    "deepseek/deepseek-r1-0528:free": 65536,
+    "openai/gpt-oss-20b:free": 32768,
     "anthropic/claude-sonnet-4": 200000,
     "openai/gpt-4o": 128000,
     "deepseek/deepseek-r1": 65536,
