@@ -302,15 +302,15 @@ class ConversationalRAGService:
                     if stream_callback:
                         stream_callback(token)
                     
-                    # Yield as streaming_chunk so gradio_app.py processes it
-                    # The <think> tag parsing in gradio_app.py handles display
+                    # Yield as thinking_chunk so rag_enhanced.py can distinguish
+                    # and send proper 'type: thinking' SSE events
                     yield {
-                        'type': 'streaming_chunk',
+                        'type': 'thinking_chunk',
                         'data': {
                             'chunk': token,
                             'accumulated': streamed_answer,
                             'chunk_count': chunk_count,
-                            'is_thinking': True  # Flag for context
+                            'is_thinking': True
                         }
                     }
 

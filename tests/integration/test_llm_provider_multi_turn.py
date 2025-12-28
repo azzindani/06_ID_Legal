@@ -572,33 +572,78 @@ class MultiTurnOpenRouterTestRunner:
                     return result
                 result['switched_model'] = switch_result
         
-        # Handle fallback test
+        # Handle fallback test - special case that tests fallback at chat level
         if config.get('is_fallback_test'):
             primary = config.get('primary_model')
             fallback = config.get('fallback_model')
             if primary and fallback:
-                success, chain_result = self.client.test_fallback(primary, fallback)
-                if not success:
-                    result['error'] = f"Fallback chain failed: {chain_result}"
-                    print(f"{Colors.RED}✗ {result['error']}{Colors.RESET}")
+                print(f"\n{Colors.YELLOW}⛓️ Testing fallback chain:{Colors.RESET}")
+                print(f"   Primary: {primary}")
+                print(f"   Fallback: {fallback}")
+                
+                # Step 1: Switch to primary (invalid) model
+                self.client.switch_model(primary)
+                
+                # Step 2: Try chat with primary model - expect failure
+                print(f"\n{Colors.CYAN}Testing with primary model...{Colors.RESET}")
+                chat_result = self.client.chat_streaming(
+                    query=config['query'],
+                    include_docs=config['include_session_docs'],
+                    thinking_level=config['thinking_level'],
+                    max_tokens=config.get('max_tokens', 1024),
+                    temperature=config.get('temperature', 0.7)
+                )
+                
+                if not chat_result['success'] or chat_result['error']:
+                    # Primary failed as expected, switch to fallback
+                    print(f"{Colors.YELLOW}   Primary failed (expected), switching to fallback...{Colors.RESET}")
+                    success, switch_result = self.client.switch_model(fallback)
+                    if success:
+                        print(f"{Colors.GREEN}✓ Switched to fallback: {fallback}{Colors.RESET}")
+                        result['fallback_used'] = True
+                        result['active_model'] = fallback
+                        
+                        # Retry chat with fallback
+                        print(f"\n{Colors.CYAN}Retrying with fallback model...{Colors.RESET}")
+                        chat_result = self.client.chat_streaming(
+                            query=config['query'],
+                            include_docs=config['include_session_docs'],
+                            thinking_level=config['thinking_level'],
+                            max_tokens=config.get('max_tokens', 1024),
+                            temperature=config.get('temperature', 0.7)
+                        )
+                    else:
+                        result['error'] = f"Fallback switch failed: {switch_result}"
+                        print(f"{Colors.RED}✗ {result['error']}{Colors.RESET}")
+                        return result
+                else:
+                    # Primary worked (unexpected)
+                    print(f"{Colors.CYAN}   Primary model worked (unexpected){Colors.RESET}")
+                    result['fallback_used'] = False
+                    result['active_model'] = primary
+                
+                result['chat_result'] = chat_result
+                
+                if chat_result['error']:
+                    result['error'] = chat_result['error']
                     return result
-                result['fallback_used'] = chain_result == fallback
-                result['active_model'] = chain_result
-        
-        # Send chat
-
-        chat_result = self.client.chat_streaming(
-            query=config['query'],
-            include_docs=config['include_session_docs'],
-            thinking_level=config['thinking_level'],
-            max_tokens=config.get('max_tokens', 1024),
-            temperature=config.get('temperature', 0.7)
-        )
-        result['chat_result'] = chat_result
-        
-        if chat_result['error']:
-            result['error'] = chat_result['error']
-            return result
+                
+                # Skip normal chat - already handled
+                # Continue to keyword validation below
+        else:
+            # Normal chat flow (non-fallback tests)
+            chat_result = self.client.chat_streaming(
+                query=config['query'],
+                include_docs=config['include_session_docs'],
+                thinking_level=config['thinking_level'],
+                max_tokens=config.get('max_tokens', 1024),
+                temperature=config.get('temperature', 0.7)
+            )
+            result['chat_result'] = chat_result
+            
+            if chat_result['error']:
+                result['error'] = chat_result['error']
+                return result
         
         # Validate keywords
         answer = chat_result['answer'].lower()
