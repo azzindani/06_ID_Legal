@@ -741,11 +741,29 @@ Jawab dengan lengkap dan sitasi sumber regulasi yang relevan."""
             tokens_generated = 0
             generation_start = time.time()
             
+            self.logger.info("Starting OpenRouter streaming", {
+                "model": provider.model_name,
+                "prompt_length": len(prompt)
+            })
+            
             for chunk in provider.generate_stream(
                 prompt=prompt,
                 max_new_tokens=4096,
                 temperature=0.7 if thinking_mode == "low" else 0.5
             ):
+                # Log first few chunks for debugging
+                if tokens_generated < 3:
+                    self.logger.debug(f"Chunk {tokens_generated}: {chunk}")
+                
+                if chunk.get('error'):
+                    self.logger.error(f"OpenRouter error: {chunk.get('error')}")
+                    yield {
+                        'type': 'error',
+                        'error': chunk.get('error'),
+                        'done': True
+                    }
+                    return
+                
                 if chunk.get('token'):
                     token = chunk['token']
                     full_text += token
@@ -767,7 +785,12 @@ Jawab dengan lengkap dan sitasi sumber regulasi yang relevan."""
                         }
                 
                 if chunk.get('done'):
+                    self.logger.info("OpenRouter streaming done", {
+                        "tokens": tokens_generated,
+                        "full_text_length": len(full_text)
+                    })
                     break
+
             
             generation_time = time.time() - generation_start
             total_time = time.time() - start_time
