@@ -269,6 +269,45 @@ flowchart TB
     CTX --> RAG[RAG Pipeline]
 ```
 
+### Query Processing Flow (NEW)
+
+The system intelligently routes queries based on their type:
+
+```mermaid
+flowchart TD
+    Q[User Query] --> DETECT[Query Analysis]
+    
+    DETECT --> CHECK{Skip Retrieval?}
+    
+    CHECK -->|Greetings, Thanks, Meta| DIRECT[Direct LLM Response]
+    DIRECT --> RESP[Stream Response]
+    
+    CHECK -->|Legal Question| REWRITE{Short/Ambiguous?}
+    
+    REWRITE -->|Yes| RW[Query Rewriting]
+    REWRITE -->|No| ENHANCE[Query Enhancement]
+    
+    RW --> ENHANCE
+    ENHANCE --> ORCH[RAG Orchestrator]
+    ORCH --> RESP
+```
+
+**Skip Retrieval Categories:**
+| Category | Example | Action |
+|----------|---------|--------|
+| Greetings | "Halo", "Selamat pagi" | Direct LLM response |
+| Thanks | "Terima kasih" | Direct LLM response |
+| Meta | "Siapa kamu?" | Direct LLM response |
+| Acknowledgments | "Ok", "Baik" | Direct LLM response |
+
+**Query Rewriting Examples:**
+| Original | Rewritten |
+|----------|-----------|
+| "kerja kontrak" | "perjanjian kerja waktu tertentu PKWT" |
+| "dipecat" | "pemutusan hubungan kerja PHK" |
+| "pesangon" | "uang pesangon" |
+
+
 ### Iterative Expansion Engine (8 Strategies)
 
 ```mermaid

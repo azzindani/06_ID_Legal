@@ -420,3 +420,398 @@ LEGAL_DOMAINS = {
     'bankruptcy': ['pailit', 'utang', 'kreditor', 'pkpu'],
     'competition': ['monopoli', 'persaingan usaha', 'kppu'],
 }
+
+# =============================================================================
+# INDONESIAN STOPWORDS (Expanded)
+# Words that are too common and don't help in search
+# =============================================================================
+
+INDONESIAN_STOPWORDS = {
+    # Basic conjunctions and prepositions
+    'yang', 'dan', 'di', 'ke', 'dari', 'dalam', 'untuk', 'pada', 'dengan', 'adalah',
+    'ini', 'itu', 'atau', 'jika', 'maka', 'akan', 'telah', 'dapat', 'harus', 'tidak',
+    'ada', 'oleh', 'sebagai', 'karena', 'sehingga', 'bahwa', 'tentang', 'antara',
+    'seperti', 'setelah', 'sebelum', 'sampai', 'hingga', 'namun', 'tetapi', 'juga',
+    
+    # Additional common words
+    'atas', 'bawah', 'yaitu', 'yakni', 'maupun', 'serta', 'baik', 'makin', 'lebih',
+    'kurang', 'sudah', 'pernah', 'belum', 'sedang', 'masih', 'baru', 'lama', 'sangat',
+    'amat', 'paling', 'cukup', 'agak', 'rada', 'selalu', 'sering', 'jarang', 'kadang',
+    
+    # Pronouns
+    'saya', 'aku', 'kamu', 'anda', 'dia', 'ia', 'kami', 'kita', 'mereka', 'beliau',
+    'engkau', 'kalian', 'siapa', 'apa', 'mana', 'bagaimana', 'mengapa', 'kenapa',
+    
+    # Question words and modal verbs
+    'apakah', 'bisakah', 'bolehkah', 'haruskah', 'maukah', 'dapatkah', 'akankah',
+    'bisa', 'boleh', 'harus', 'mau', 'ingin', 'hendak', 'perlu', 'patut', 'wajib',
+    
+    # Demonstratives and articles
+    'tersebut', 'berikut', 'demikian', 'begitu', 'semua', 'seluruh', 'setiap', 'tiap',
+    'para', 'suatu', 'sebuah', 'satu', 'dua', 'beberapa', 'banyak', 'sedikit',
+    
+    # Connectors
+    'kemudian', 'lalu', 'selanjutnya', 'akhirnya', 'bahkan', 'justru', 'malah',
+    'sebaliknya', 'sedangkan', 'sementara', 'padahal', 'meskipun', 'walaupun', 'walau',
+}
+
+# =============================================================================
+# REGULATION PATTERNS (Comprehensive Indonesian Legal Document Types)
+# =============================================================================
+
+REGULATION_TYPE_PATTERNS = {
+    # Primary legislation (Undang-Undang)
+    'undang-undang': [
+        'undang-undang', 'uu', 'undang undang', 'uud', 'undang-undang dasar',
+        'undang undang dasar', 'uu no', 'uu nomor', 'uu tahun'
+    ],
+    
+    # Executive regulations
+    'peraturan_pemerintah': [
+        'peraturan pemerintah', 'pp', 'perpem', 'pp nomor', 'pp no', 'pp tahun'
+    ],
+    'peraturan_presiden': [
+        'peraturan presiden', 'perpres', 'pres', 'perpres nomor', 'perpres no'
+    ],
+    'peraturan_menteri': [
+        'peraturan menteri', 'permen', 'permenkeu', 'permendikbud', 'permenkes',
+        'permenpan', 'permendagri', 'permenhub', 'permenaker', 'permenlu',
+        'permenkumham', 'permenristekdikti', 'permenag', 'permenatb', 'permenlhk',
+        'permen pupr', 'permen esdm', 'permenperin', 'permendag', 'permentan',
+        'permenkominfo', 'permen sosial', 'permen pppa'
+    ],
+    
+    # Presidential decisions
+    'keputusan_presiden': [
+        'keputusan presiden', 'keppres', 'kepres', 'keppres nomor', 'keppres no'
+    ],
+    'instruksi_presiden': [
+        'instruksi presiden', 'inpres', 'inpres nomor', 'inpres no'
+    ],
+    
+    # Local/regional regulations
+    'peraturan_daerah': [
+        'peraturan daerah', 'perda', 'peraturan daerah provinsi', 
+        'peraturan daerah kabupaten', 'peraturan daerah kota',
+        'perda provinsi', 'perda kabupaten', 'perda kota'
+    ],
+    'peraturan_gubernur': [
+        'peraturan gubernur', 'pergub', 'pergub dki', 'pergub jabar',
+        'pergub jatim', 'pergub jateng', 'pergub bali'
+    ],
+    'peraturan_bupati': [
+        'peraturan bupati', 'perbup', 'perbup nomor', 'perbup no'
+    ],
+    'peraturan_walikota': [
+        'peraturan walikota', 'perwali', 'perwal', 'perwali nomor'
+    ],
+    
+    # Institutional regulations
+    'peraturan_bi': [
+        'peraturan bank indonesia', 'pbi', 'surat edaran bi', 'sebi'
+    ],
+    'peraturan_ojk': [
+        'peraturan ojk', 'pojk', 'surat edaran ojk', 'seojk'
+    ],
+    'peraturan_menkeu': [
+        'peraturan menteri keuangan', 'pmk', 'pmk nomor', 'pmk no'
+    ],
+    
+    # Court decisions
+    'putusan_mk': [
+        'putusan mahkamah konstitusi', 'putusan mk', 'putusan mkri'
+    ],
+    'putusan_ma': [
+        'putusan mahkamah agung', 'putusan ma', 'yurisprudensi'
+    ],
+    
+    # Other documents
+    'surat_edaran': [
+        'surat edaran', 'se', 'surat edaran menteri', 'sem'
+    ],
+    'keputusan_menteri': [
+        'keputusan menteri', 'kepmen', 'kepmenkeu', 'kepmendikbud'
+    ],
+}
+
+# =============================================================================
+# YEAR AND DATE PATTERNS
+# =============================================================================
+
+YEAR_SEPARATORS = [
+    'tahun', 'th', 'th.', '/', '-', 'thn', 'thn.', 'year',
+    't.', 'taon', 'per tanggal', 'tanggal'
+]
+
+# =============================================================================
+# REGULATION PRONOUNS (Referring to previously mentioned regulations)
+# =============================================================================
+
+REGULATION_PRONOUNS = [
+    # Explicit references
+    'peraturan tersebut', 'peraturan ini', 'peraturan dimaksud',
+    'peraturan yang dimaksud', 'peraturan sebagaimana dimaksud',
+    
+    # UU references
+    'undang-undang tersebut', 'undang-undang ini', 'undang-undang dimaksud',
+    'uu tersebut', 'uu ini', 'uu dimaksud',
+    
+    # PP references
+    'pp tersebut', 'pp ini', 'pp dimaksud',
+    'peraturan pemerintah tersebut', 'peraturan pemerintah ini',
+    
+    # Perpres references
+    'perpres tersebut', 'perpres ini', 'perpres dimaksud',
+    
+    # Permen references
+    'permen tersebut', 'permen ini', 'permen dimaksud',
+    
+    # Perda references
+    'perda tersebut', 'perda ini', 'perda dimaksud',
+    
+    # Generic regulation references
+    'regulasi tersebut', 'regulasi ini', 'regulasi dimaksud',
+    'ketentuan tersebut', 'ketentuan ini', 'ketentuan dimaksud',
+    'aturan tersebut', 'aturan ini', 'aturan dimaksud',
+    
+    # Article references
+    'pasal tersebut', 'pasal ini', 'pasal sebelumnya',
+    'ayat tersebut', 'ayat ini', 'ayat di atas',
+    
+    # Document references
+    'dokumen tersebut', 'dokumen ini', 'hal tersebut', 'hal ini',
+    'ketentuan diatas', 'ketentuan di atas',
+]
+
+# =============================================================================
+# FOLLOWUP INDICATORS (Signals continuing a conversation)
+# =============================================================================
+
+FOLLOWUP_INDICATORS = [
+    # Content questions
+    'apa yang diatur', 'mengatur apa', 'isi dari', 'membahas apa',
+    'tentang apa', 'mengenai apa', 'berisi apa', 'materi apa',
+    'ketentuan apa', 'pasal apa', 'ayat apa', 'huruf apa',
+    
+    # Continuation signals
+    'bagaimana dengan', 'lalu bagaimana', 'terus bagaimana',
+    'kemudian bagaimana', 'selanjutnya bagaimana',
+    'terus', 'kemudian', 'selanjutnya', 'dan', 'serta', 'lanjut',
+    
+    # Elaboration requests
+    'bisa dijelaskan', 'tolong jelaskan', 'jelaskan lebih',
+    'uraikan', 'jabarkan', 'rincikan', 'perinci',
+    
+    # Comparison
+    'bandingkan dengan', 'berbeda dengan', 'sama seperti',
+    'hubungannya dengan', 'kaitannya dengan', 'terkait dengan',
+    
+    # Deeper exploration
+    'lebih detail', 'lebih lengkap', 'lebih dalam', 'lebih rinci',
+    'secara detail', 'secara lengkap', 'secara rinci',
+]
+
+# =============================================================================
+# CLARIFICATION INDICATORS (User asking for correction/clarification)
+# =============================================================================
+
+CLARIFICATION_INDICATORS = [
+    # Negation/correction
+    'tidak melihat', 'tidak ada', 'tidak menemukan', 'bukan tentang',
+    'bukan itu', 'salah', 'keliru', 'kurang tepat',
+    
+    # User intent clarification
+    'seharusnya', 'maksud saya', 'yang saya maksud', 'saya kira',
+    'yang saya inginkan', 'yang saya tanyakan', 'bukan yang saya mau',
+    
+    # Contrast words
+    'tetapi', 'namun', 'tapi', 'kok', 'kenapa', 'mengapa',
+    'padahal', 'seharusnya', 'mestinya', 'harusnya',
+    
+    # Confusion signals
+    'bingung', 'tidak paham', 'tidak mengerti', 'tidak jelas',
+    'kurang jelas', 'membingungkan', 'tidak nyambung',
+    
+    # Request for different info
+    'yang lain', 'selain itu', 'ada lagi', 'alternatif lain',
+    'pilihan lain', 'versi lain', 'pendapat lain',
+]
+
+# =============================================================================
+# SKIP RETRIEVAL PATTERNS (Conversational queries - no search needed)
+# =============================================================================
+
+SKIP_RETRIEVAL_PATTERNS = {
+    'greetings': [
+        # Indonesian greetings
+        'halo', 'hai', 'hey', 'hei', 'hi',
+        'selamat pagi', 'selamat siang', 'selamat sore', 'selamat malam',
+        'pagi', 'siang', 'sore', 'malam',
+        'assalamualaikum', 'assalamu alaikum', 'salam', 'salam sejahtera',
+        'apa kabar', 'kabar baik', 'bagaimana kabarnya',
+        
+        # English greetings
+        'hello', 'good morning', 'good afternoon', 'good evening',
+        'howdy', 'greetings', "what's up", 'whats up',
+    ],
+    
+    'thanks': [
+        # Indonesian thanks
+        'terima kasih', 'terimakasih', 'makasih', 'trimakasih', 'trims',
+        'terima kasih banyak', 'makasih banyak', 'makasih ya',
+        'tengkyu', 'tenkyu', 'tq', 'ty',
+        
+        # English thanks
+        'thanks', 'thank you', 'thank you so much', 'thx',
+        'thanks a lot', 'much appreciated', 'appreciate it',
+    ],
+    
+    'acknowledgments': [
+        # Short acknowledgments
+        'ok', 'oke', 'okay', 'okey', 'o', 'k',
+        'baik', 'baiklah', 'bagus', 'sip', 'siap', 'mantap',
+        'iya', 'ya', 'yup', 'yep', 'yes', 'yoi', 'yow',
+        
+        # Understanding signals
+        'mengerti', 'paham', 'ngerti', 'faham', 'understood',
+        'oh begitu', 'oh gitu', 'i see', 'got it',
+        
+        # Agreement
+        'setuju', 'sepakat', 'benar', 'betul', 'tepat',
+    ],
+    
+    'meta_questions': [
+        # Identity questions
+        'siapa kamu', 'siapa anda', 'kamu siapa', 'anda siapa',
+        'nama kamu', 'nama anda', 'siapa namamu', 'siapa nama anda',
+        'kamu ini apa', 'anda ini apa', 'ini apa', 'ini siapa',
+        
+        # Capability questions
+        'kamu bisa apa', 'anda bisa apa', 'bisa apa kamu', 'bisa apa anda',
+        'apa yang bisa kamu', 'apa yang bisa anda', 'apa yang kamu bisa',
+        'kemampuan kamu', 'kemampuan anda', 'fitur kamu', 'fitur anda',
+        'fungsi kamu', 'fungsi anda', 'kegunaan kamu',
+        
+        # How it works
+        'bagaimana cara kerja', 'cara kerjamu', 'cara kerja anda',
+        'bagaimana kamu bekerja', 'bagaimana anda bekerja',
+        'dibuat pakai apa', 'menggunakan teknologi apa',
+        
+        # English equivalents
+        'who are you', 'what are you', 'what can you do',
+        'how do you work', 'what is your name',
+    ],
+    
+    'simple_followup': [
+        # Clarification requests (without context)
+        'maksudnya', 'maksud kamu', 'maksud anda', 'artinya',
+        'maksudnya apa', 'artinya apa', 'apa maksudnya', 'apa artinya',
+        
+        # Repeat requests
+        'jelaskan lagi', 'ulangi', 'bisa diulang', 'sekali lagi',
+        'ulang lagi', 'katakan lagi', 'bilang lagi',
+        
+        # Simple questions
+        'gimana', 'bagaimana', 'kenapa', 'mengapa',
+        'terus', 'lalu', 'dan', 'jadi',
+    ],
+    
+    'farewells': [
+        # Indonesian farewells
+        'bye', 'dadah', 'dah', 'sampai jumpa', 'sampai nanti',
+        'selamat tinggal', 'pamit', 'permisi dulu', 'undur diri',
+        'wassalam', 'wassalamualaikum',
+        
+        # English farewells
+        'goodbye', 'good bye', 'see you', 'see you later',
+        'take care', 'have a nice day', 'bye bye',
+    ],
+    
+    'emotions': [
+        # Positive
+        'haha', 'hehe', 'hihi', 'wkwk', 'wkwkwk', 'lol', 'lmao',
+        'keren', 'mantap', 'wow', 'amazing', 'great',
+        
+        # Negative (simple expressions)
+        'aduh', 'waduh', 'duh', 'yah', 'hmm', 'hm',
+    ],
+}
+
+# =============================================================================
+# CONTENT QUERY KEYWORDS (Signals for content-seeking queries)
+# =============================================================================
+
+CONTENT_QUERY_KEYWORDS = [
+    # Regulation content
+    'mengatur', 'diatur', 'pengaturan', 'ketentuan', 'isi', 'materi',
+    'membahas', 'berisi', 'tentang', 'mengenai', 'menyangkut', 'terkait',
+    'mencakup', 'meliputi', 'termasuk', 'terdiri dari',
+    
+    # Legal structure
+    'pasal', 'ayat', 'huruf', 'angka', 'bagian', 'bab',
+    'lampiran', 'penjelasan', 'poin', 'butir',
+    
+    # Legal actions
+    'menetapkan', 'menentukan', 'mengharuskan', 'mewajibkan',
+    'melarang', 'memperbolehkan', 'mengizinkan', 'membatasi',
+    
+    # Requirements
+    'syarat', 'persyaratan', 'kriteria', 'standar', 'ketentuan',
+    'prosedur', 'tata cara', 'mekanisme', 'proses',
+    
+    # Rights and obligations
+    'hak', 'kewajiban', 'tanggung jawab', 'wewenang',
+    'tugas', 'fungsi', 'peran', 'kewenangan',
+]
+
+# =============================================================================
+# QUERY TERM REWRITES (Colloquial to Formal Legal Terms)
+# Used for query rewriting to improve search accuracy
+# =============================================================================
+
+QUERY_TERM_REWRITES = {
+    # Employment terms
+    'kerja kontrak': 'perjanjian kerja waktu tertentu PKWT',
+    'pegawai tetap': 'perjanjian kerja waktu tidak tertentu PKWTT',
+    'karyawan tetap': 'perjanjian kerja waktu tidak tertentu PKWTT',
+    'dipecat': 'pemutusan hubungan kerja PHK',
+    'di pecat': 'pemutusan hubungan kerja PHK',
+    'kena phk': 'pemutusan hubungan kerja PHK',
+    'phk': 'pemutusan hubungan kerja PHK',
+    'gaji': 'upah',
+    'lembur': 'kerja lembur waktu kerja lembur',
+    'cuti': 'hak cuti karyawan istirahat tahunan',
+    'pesangon': 'uang pesangon kompensasi PHK',
+    'bonus': 'tunjangan hari raya THR bonus',
+    
+    # Criminal terms
+    'penjara': 'pidana penjara kurungan',
+    'denda': 'sanksi denda pidana denda',
+    'korupsi': 'tindak pidana korupsi tipikor',
+    'suap': 'gratifikasi suap penyuapan',
+    'penipuan': 'tindak pidana penipuan',
+    
+    # Civil terms
+    'kontrak': 'perjanjian kontrak perikatan',
+    'sewa': 'perjanjian sewa menyewa',
+    'jual beli': 'perjanjian jual beli',
+    'hutang': 'utang piutang kewajiban pembayaran',
+    'warisan': 'hukum waris pewarisan ahli waris',
+    'cerai': 'perceraian gugatan cerai talak',
+    
+    # Administrative terms
+    'perizinan': 'perizinan berusaha izin usaha',
+    'izin usaha': 'perizinan berusaha NIB',
+    'pajak': 'perpajakan pajak penghasilan',
+    'tilang': 'tilang pelanggaran lalu lintas denda tilang',
+    
+    # Property terms
+    'tanah': 'pertanahan hak atas tanah sertifikat',
+    'sertifikat': 'sertifikat hak milik SHM HGB',
+    
+    # General legal terms
+    'hukum': 'ketentuan hukum peraturan perundang-undangan',
+    'aturan': 'peraturan perundang-undangan regulasi',
+    'sanksi': 'sanksi pidana sanksi administratif hukuman',
+}
+

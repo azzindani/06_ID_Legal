@@ -15,12 +15,13 @@ from config import (
     FOLLOWUP_INDICATORS,
     CLARIFICATION_INDICATORS,
     CONTENT_QUERY_KEYWORDS,
-    INDONESIAN_STOPWORDS
+    INDONESIAN_STOPWORDS,
+    SKIP_RETRIEVAL_PATTERNS
 )
 
 # Import comprehensive legal vocabulary from parent core directory
 # legal_vocab.py is in core/, query_detection.py is in core/search/
-from ..legal_vocab import INDONESIAN_LEGAL_SYNONYMS, LEGAL_DOMAINS
+from ..legal_vocab import INDONESIAN_LEGAL_SYNONYMS, LEGAL_DOMAINS, QUERY_TERM_REWRITES
 
 
 class QueryDetector:
@@ -72,6 +73,9 @@ class QueryDetector:
         # Determine search phases to enable
         enabled_phases = self._determine_phases(query_type, entities)
         
+        # Check if query should skip retrieval (conversational queries)
+        skip_retrieval, skip_reason = self._should_skip_retrieval(query_lower)
+        
         result = {
             'query_type': query_type,
             'entities': entities,
@@ -82,8 +86,13 @@ class QueryDetector:
             'is_clarification': is_clarification,
             'has_specific_article': bool(entities.get('article_references')),
             'has_regulation_ref': bool(entities.get('regulation_type') or entities.get('regulation_number')),
-            'complexity_score': self._calculate_complexity(query_lower, entities)
+            'complexity_score': self._calculate_complexity(query_lower, entities),
+            'skip_retrieval': skip_retrieval,
+            'skip_reason': skip_reason
         }
+        
+        if skip_retrieval:
+            self.logger.info("Query marked for skip retrieval", {"reason": skip_reason})
         
         self.logger.info("Query analysis completed", {
             "type": query_type,
@@ -185,6 +194,43 @@ class QueryDetector:
         
         return False
     
+    def _should_skip_retrieval(self, query_lower: str) -> Tuple[bool, Optional[str]]:
+        """
+        Check if query should skip document retrieval.
+        These are conversational queries that can be answered directly by LLM.
+        
+        Args:
+            query_lower: Lowercase query string
+            
+        Returns:
+            Tuple of (should_skip: bool, reason: str or None)
+        """
+        # Clean query for matching
+        query_clean = query_lower.strip()
+        
+        # Check for exact or near-exact matches in each category
+        for category, patterns in SKIP_RETRIEVAL_PATTERNS.items():
+            for pattern in patterns:
+                # Exact match or query is just the pattern (with punctuation)
+                if query_clean == pattern or query_clean.rstrip('?!.,') == pattern:
+                    return True, category
+                
+                # Query starts with pattern (e.g., "halo, saya mau tanya")
+                # But only for greetings and farewells
+                if category in ['greetings', 'farewells'] and query_clean.startswith(pattern):
+                    # Make sure query is short enough to be just a greeting
+                    if len(query_clean.split()) <= 5:
+                        return True, category
+        
+        # Check for very short acknowledgment queries (1-2 words)
+        words = query_clean.split()
+        if len(words) <= 2:
+            for pattern in SKIP_RETRIEVAL_PATTERNS.get('acknowledgments', []):
+                if pattern in words:
+                    return True, 'acknowledgments'
+        
+        return False, None
+    
     def _get_team_composition(self, query_type: str) -> List[str]:
         """Get optimal team composition for query type"""
         
@@ -273,6 +319,61 @@ class QueryDetector:
         })
 
         return enhanced
+    
+    def rewrite_query(self, query: str, analysis: Dict[str, Any]) -> Tuple[str, bool]:
+        """
+        Rewrite ambiguous or short queries for better search results.
+        
+        This method improves poorly-phrased queries by:
+        1. Expanding colloquial terms to formal legal terminology
+        2. Adding context for very short queries
+        3. Clarifying ambiguous terms
+        
+        Args:
+            query: Original query string
+            analysis: Query analysis results from analyze_query()
+            
+        Returns:
+            Tuple of (rewritten_query, was_rewritten)
+        """
+        query_lower = query.lower().strip()
+        words = query_lower.split()
+        was_rewritten = False
+        rewritten = query
+        
+        # Use QUERY_TERM_REWRITES from legal_vocab for colloquial → formal mapping
+        # Check for term rewrites
+        for colloquial, formal in QUERY_TERM_REWRITES.items():
+            if colloquial in query_lower and formal.lower() not in query_lower:
+                rewritten = rewritten.replace(colloquial, formal)
+                if colloquial.title() in rewritten:
+                    rewritten = rewritten.replace(colloquial.title(), formal)
+                was_rewritten = True
+        
+        # Handle very short queries (1-2 words) - add context
+        if len(words) <= 2 and not analysis.get('has_regulation_ref'):
+            # Add question context for single terms
+            if len(words) == 1:
+                term = words[0]
+                # Check if it's a known legal concept
+                legal_concepts = ['sanksi', 'pidana', 'denda', 'upah', 'cuti', 'phk', 
+                                 'perizinan', 'kontrak', 'perjanjian', 'pajak']
+                if term in legal_concepts:
+                    rewritten = f"apa yang dimaksud dengan {rewritten} dan bagaimana ketentuannya"
+                    was_rewritten = True
+            elif len(words) == 2:
+                # Check for regulation type + number patterns
+                if not analysis.get('has_regulation_ref'):
+                    rewritten = f"ketentuan tentang {rewritten}"
+                    was_rewritten = True
+        
+        if was_rewritten:
+            self.logger.info("Query rewritten", {
+                "original": query,
+                "rewritten": rewritten
+            })
+        
+        return rewritten, was_rewritten
     
     def expand_query_with_synonyms(self, query: str) -> List[str]:
         """
