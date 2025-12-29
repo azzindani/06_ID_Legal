@@ -70,87 +70,307 @@ All tests have been completed and verified:
 
 ## System Architecture
 
-### High-Level Architecture
+### High-Level Microservices Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        User Interfaces                          │
-├─────────────┬─────────────┬─────────────┬─────────────────────┤
-│   Gradio    │   FastAPI   │     CLI     │   Form Generator    │
-│  (Web UI)   │  (REST API) │  (Terminal) │   & Analytics       │
-└──────┬──────┴──────┬──────┴──────┬──────┴──────────┬──────────┘
-       │             │             │                 │
-       └─────────────┴──────┬──────┴─────────────────┘
-                            │
-┌───────────────────────────▼───────────────────────────────────┐
-│                  Conversational Service Layer                 │
-├───────────────────────────────────────────────────────────────┤
-│  ┌──────────────────────────────────────────────────────┐     │
-│  │         ConversationalRAGService                     │     │
-│  │  (Reusable business logic for all interfaces)       │     │
-│  └──────────────────────────────────────────────────────┘     │
-└───────────────────────────┬───────────────────────────────────┘
-                            │
-┌───────────────────────────▼───────────────────────────────────┐
-│                     RAG Pipeline Layer                        │
-├───────────────────────────────────────────────────────────────┤
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐   │
-│  │   Memory    │  │   Context   │  │    Conversation     │   │
-│  │   Manager   │  │    Cache    │  │      Manager        │   │
-│  └─────────────┘  └─────────────┘  └─────────────────────┘   │
-└───────────────────────────┬───────────────────────────────────┘
-                            │
-┌───────────────────────────▼───────────────────────────────────┐
-│                 LangGraph Orchestrator                        │
-├───────────────────────────────────────────────────────────────┤
-│  ┌─────────┐ ┌──────────┐ ┌─────────┐ ┌─────────┐ ┌────────┐ │
-│  │  Query  │→│  Hybrid  │→│Expansion│→│ Stages  │→│Reranker│ │
-│  │Detection│ │  Search  │ │ Engine  │ │Research │ │        │ │
-│  └─────────┘ └──────────┘ └─────────┘ └─────────┘ └────────┘ │
-└───────────────────────────┬───────────────────────────────────┘
-                            │
-┌───────────────────────────▼───────────────────────────────────┐
-│                   Generation Engine                           │
-├───────────────────────────────────────────────────────────────┤
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐   │
-│  │   Prompt    │  │     LLM     │  │     Citation        │   │
-│  │   Builder   │  │    Engine   │  │     Formatter       │   │
-│  └─────────────┘  └─────────────┘  └─────────────────────┘   │
-└───────────────────────────┬───────────────────────────────────┘
-                            │
-┌───────────────────────────▼───────────────────────────────────┐
-│                    Core Components & Utilities                │
-├─────────────┬─────────────┬─────────────┬────────────────────┤
-│   Model     │    Data     │  Knowledge  │     Security       │
-│   Manager   │   Loader    │    Graph    │   (rate limit,     │
-│             │             │             │    auth, input)    │
-└─────────────┴─────────────┴─────────────┴────────────────────┘
+The system is designed with a **microservices-like pattern** where components can be hot-swapped at runtime without restarting the server.
+
+```mermaid
+flowchart TB
+    subgraph "🖥️ User Interfaces"
+        UI1[Gradio Web UI<br/>gradio_app.py]
+        UI2[Unified API UI<br/>unified_app_api.py]
+        UI3[Search UI<br/>search_app.py]
+        CLI[CLI<br/>main.py]
+    end
+
+    subgraph "🌐 API Layer"
+        API[FastAPI Server<br/>api/server.py]
+        
+        subgraph "Routes"
+            R1[/rag/chat]
+            R2[/rag/research]
+            R3[/search]
+            R4[/llm/config]
+            R5[/documents]
+            R6[/sessions]
+        end
+    end
+
+    subgraph "🔧 Service Layer"
+        CONV[Conversational<br/>Service]
+        PIPE[RAG Pipeline]
+        DOC[Document Parser]
+        SESS[Session Manager]
+    end
+
+    subgraph "🤖 LLM Provider System"
+        direction TB
+        FACTORY[LLM Provider Factory<br/>Hot-swappable at runtime]
+        
+        LOCAL[Local LLM<br/>DeepSeek GPU]
+        OPENROUTER[OpenRouter<br/>200+ Cloud Models]
+        NONE[None Provider<br/>RAG-Only Mode]
+    end
+
+    subgraph "🔍 RAG Engine"
+        ORCH[LangGraph Orchestrator]
+        SEARCH[Hybrid Search<br/>FAISS + BM25]
+        EXPAND[Expansion Engine<br/>8 Strategies]
+        STAGE[Stages Research<br/>5 Personas]
+        CONSENSUS[Consensus Builder]
+        RERANK[Reranker<br/>Qwen3]
+    end
+
+    subgraph "✍️ Generation Engine"
+        PROMPT[Prompt Builder]
+        GEN[Generation Engine]
+        CITE[Citation Formatter]
+        VALID[Response Validator]
+    end
+
+    subgraph "📊 Core Infrastructure"
+        KG[Knowledge Graph]
+        LOADER[Data Loader]
+        EMBED[Embeddings<br/>Qwen3-0.6B]
+        CACHE[Query Cache]
+    end
+
+    UI1 & UI2 & UI3 --> API
+    CLI --> PIPE
+    
+    API --> R1 & R2 & R3 & R4 & R5 & R6
+    R1 & R2 --> CONV
+    R4 --> FACTORY
+    R5 --> DOC
+    R6 --> SESS
+    
+    CONV --> PIPE
+    PIPE --> ORCH
+    PIPE --> FACTORY
+    
+    FACTORY -.-> LOCAL
+    FACTORY -.-> OPENROUTER
+    FACTORY -.-> NONE
+    
+    ORCH --> SEARCH --> EXPAND --> STAGE --> CONSENSUS --> RERANK
+    
+    LOCAL --> GEN
+    OPENROUTER --> GEN
+    RERANK --> PROMPT --> GEN --> CITE --> VALID
+    
+    SEARCH --> KG & EMBED & LOADER
+    EXPAND --> KG
+    GEN --> CACHE
 ```
 
-### Data Flow
+### LLM Provider System (Hot-Swappable)
+
+Switch between providers at runtime via `/api/v1/llm/config`:
+
+```mermaid
+flowchart LR
+    subgraph "LLM Provider Factory"
+        direction TB
+        F[Factory<br/>Singleton Pattern]
+        
+        subgraph "Providers"
+            L[LocalProvider<br/>GPU Required]
+            O[OpenRouterProvider<br/>Cloud API]
+            N[NoneProvider<br/>RAG-Only]
+        end
+        
+        subgraph "Supporting Services"
+            K[SecureKeyStore<br/>Encrypted Storage]
+            C[ResponseCache<br/>LRU + TTL]
+            U[UsageTracker<br/>Tokens & Cost]
+            T[ContextTransfer<br/>Provider Migration]
+        end
+    end
+    
+    API["/llm/config"] --> F
+    F --> L & O & N
+    O --> K
+    L & O --> C
+    L & O --> U
+    L <--> T <--> O
+```
+
+| Provider | Description | Requires | Best For |
+|----------|-------------|----------|----------|
+| `local` | GPU-based LLM (DeepSeek) | CUDA GPU | Production, offline |
+| `openrouter` | 200+ cloud models | API Key | Testing, flexibility |
+| `none` | Retrieval only, no LLM | Nothing | RAG-only mode |
+
+### Data Flow (Query → Response)
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant API as FastAPI
+    participant CONV as ConversationalService
+    participant PIPE as RAGPipeline
+    participant ORCH as LangGraph Orchestrator
+    participant LLM as LLM Provider
+    
+    U->>API: POST /rag/chat
+    API->>CONV: process_query()
+    CONV->>PIPE: query(stream=True)
+    
+    rect rgb(240, 248, 255)
+        Note over ORCH: Retrieval Phase
+        PIPE->>ORCH: execute_workflow()
+        ORCH->>ORCH: 1. Query Detection
+        ORCH->>ORCH: 2. Hybrid Search (FAISS+BM25)
+        ORCH->>ORCH: 3. Expansion Engine (8 strategies)
+        ORCH->>ORCH: 4. Stages Research (5 personas)
+        ORCH->>ORCH: 5. Consensus Building
+        ORCH->>ORCH: 6. Reranking
+        ORCH-->>PIPE: ranked_documents
+    end
+    
+    rect rgb(255, 248, 240)
+        Note over LLM: Generation Phase
+        PIPE->>LLM: Check provider type
+        alt OpenRouter Active
+            LLM->>LLM: Stream via OpenRouter API
+        else Local Active
+            LLM->>LLM: Stream via GPU LLM
+        end
+        LLM-->>PIPE: token stream
+    end
+    
+    PIPE-->>CONV: yield chunks
+    CONV-->>API: SSE events
+    API-->>U: Streaming response
+```
+
+### Document Parser Module
+
+```mermaid
+flowchart TB
+    subgraph "Document Parser"
+        MAIN[UnifiedDocumentParser]
+        STOR[InMemoryDocumentStorage<br/>Session-based]
+        CTX[ContextBuilder<br/>Prompt Injection]
+        
+        subgraph "Extractors"
+            PDF[PDFExtractor<br/>pypdf2/pdfplumber]
+            DOCX[DOCXExtractor<br/>python-docx]
+            HTML[HTMLExtractor<br/>BeautifulSoup]
+            IMG[ImageExtractor<br/>Tesseract/EasyOCR]
+            URL[URLExtractor<br/>Fetch & Parse]
+        end
+    end
+    
+    API["/documents"] --> MAIN
+    MAIN --> PDF & DOCX & HTML & IMG & URL
+    MAIN --> STOR
+    STOR --> CTX
+    CTX --> RAG[RAG Pipeline]
+```
+
+### Iterative Expansion Engine (8 Strategies)
+
+```mermaid
+flowchart LR
+    subgraph "Phase 1"
+        S1[1. Metadata Expansion<br/>Regulation context]
+    end
+    
+    subgraph "Phase 2"
+        S2[2. KG Expansion<br/>Entity relationships]
+        S3[3. Citation Expansion<br/>Multi-hop traversal]
+    end
+    
+    subgraph "Phase 3"
+        S4[4. Semantic Expansion<br/>Embedding neighbors]
+    end
+    
+    subgraph "Phase 4"
+        S5[5. Hybrid Adaptive<br/>Query-type weighting]
+    end
+    
+    subgraph "Phase 5-7"
+        S6[6. Temporal<br/>Amendments/versions]
+        S7[7. Hierarchical<br/>UU→PP→Perpres]
+        S8[8. Topical<br/>Domain clustering]
+    end
+    
+    INIT[Initial Results] --> S1 --> S2 & S3 --> S4 --> S5 --> S6 & S7 & S8 --> FINAL[Expanded Results]
+```
+
+### Research Team Simulation (5 Personas)
+
+```mermaid
+flowchart TB
+    subgraph "Research Team"
+        P1[👔 Senior Researcher<br/>15 years, +15% accuracy]
+        P2[📚 Junior Researcher<br/>3 years, baseline]
+        P3[🔗 KG Specialist<br/>8 years, +10% accuracy]
+        P4[⚖️ Procedural Expert<br/>12 years, +8% accuracy]
+        P5[😈 Devil's Advocate<br/>10 years, +12% accuracy]
+    end
+    
+    DOCS[Candidate Documents] --> P1 & P2 & P3 & P4 & P5
+    P1 & P2 & P3 & P4 & P5 --> VOTE[Voting & Cross-Validation]
+    VOTE --> CONSENSUS[Consensus Score]
+    CONSENSUS --> FINAL[Final Selection]
+```
+
+### Security Architecture
+
+```mermaid
+flowchart TB
+    subgraph "Input Protection"
+        XSS[XSS Detection]
+        SQL[SQL Injection Filter]
+        PROMPT[Prompt Injection Block]
+        LEN[Length Limits]
+    end
+    
+    subgraph "API Security"
+        AUTH[API Key Auth<br/>Timing-safe]
+        RATE[Rate Limiter<br/>60/min, 1000/hour]
+        CORS[CORS Whitelist]
+        HEAD[Security Headers]
+    end
+    
+    subgraph "File Protection"
+        EXT[Extension Whitelist]
+        MIME[MIME Validation]
+        MAGIC[Magic Byte Check]
+        SIZE[Size Limit 50MB]
+    end
+    
+    REQ[Request] --> XSS & SQL & PROMPT & LEN
+    REQ --> AUTH --> RATE
+    UPLOAD[File Upload] --> EXT --> MIME --> MAGIC --> SIZE
+```
+
+### Data Flow (Detailed)
 
 ```
 User Query
     │
     ▼
 ┌─────────────────┐
-│ Query Detection │ ← Analyze query type, extract entities
+│ Query Detection │ ← Analyze query type, extract entities, detect intent
 └────────┬────────┘
          │
          ▼
 ┌─────────────────┐
-│  Hybrid Search  │ ← Semantic (FAISS) + Keyword (BM25/TF-IDF)
+│  Hybrid Search  │ ← Semantic (FAISS/Qwen3) + Keyword (BM25/TF-IDF)
 └────────┬────────┘
          │
          ▼
 ┌─────────────────┐
-│   Expansion     │ ← 8 strategies for detective-style discovery
-│    Engine       │
+│   Expansion     │ ← 8 strategies: metadata, KG, citation, semantic,
+│    Engine       │   hybrid, temporal, hierarchical, topical
 └────────┬────────┘
          │
          ▼
 ┌─────────────────┐
-│ Stages Research │ ← Multi-stage filtering with 5 personas
+│ Stages Research │ ← Multi-stage filtering with 5 researcher personas
 └────────┬────────┘
          │
          ▼
@@ -165,12 +385,20 @@ User Query
          │
          ▼
 ┌─────────────────┐
-│   Generation    │ ← DeepSeek LLM with streaming
+│   LLM Provider  │ ← Check: OpenRouter → External API
+│    Selection    │         Local → GPU LLM
+│                 │         None → Skip (RAG-only)
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│   Generation    │ ← Streaming response with thinking process
 └────────┬────────┘
          │
          ▼
     Response
 ```
+
 
 ### Iterative Expansion Engine (8 Strategies)
 
@@ -213,6 +441,17 @@ The expansion engine implements detective-style document discovery beyond initia
 │   ├── form_generator.py               # ✅ Legal form generation
 │   ├── legal_vocab.py                  # ✅ Legal vocabulary
 │   │
+│   ├── llm_providers/                  # 🆕 LLM Provider System (10 files)
+│   │   ├── factory.py                  # ✅ Provider factory (hot-swap)
+│   │   ├── base.py                     # ✅ Base provider interface
+│   │   ├── local.py                    # ✅ Local GPU provider
+│   │   ├── openrouter.py               # ✅ OpenRouter cloud provider
+│   │   ├── none.py                     # ✅ RAG-only provider
+│   │   ├── keystore.py                 # ✅ Encrypted API key storage
+│   │   ├── cache.py                    # ✅ Response caching (LRU+TTL)
+│   │   ├── usage_tracker.py            # ✅ Token & cost tracking
+│   │   └── context_transfer.py         # ✅ Provider migration
+│   │
 │   ├── search/                         # Search Components (13 files)
 │   │   ├── query_detection.py          # ✅ Query analysis
 │   │   ├── hybrid_search.py            # ✅ FAISS + BM25 (919 lines)
@@ -220,13 +459,13 @@ The expansion engine implements detective-style document discovery beyond initia
 │   │   ├── consensus.py                # ✅ Consensus building
 │   │   ├── reranking.py                # ✅ Final reranking
 │   │   ├── langgraph_orchestrator.py   # ✅ LangGraph workflow
-│   │   ├── expansion_engine.py         # ✅ Iterative Expansion (8 strategies, 1771 lines)
+│   │   ├── expansion_engine.py         # ✅ Iterative Expansion (8 strategies)
 │   │   ├── faiss_index_manager.py      # ✅ FAISS index management
 │   │   └── query_cache.py              # ✅ Query result caching
 │   │
 │   ├── generation/                     # Generation Components (7 files)
 │   │   ├── llm_engine.py               # ✅ LLM model management
-│   │   ├── generation_engine.py        # ✅ Generation orchestration (651 lines)
+│   │   ├── generation_engine.py        # ✅ Generation orchestration
 │   │   ├── prompt_builder.py           # ✅ Prompt construction
 │   │   ├── citation_formatter.py       # ✅ Citation formatting
 │   │   └── response_validator.py       # ✅ Response validation
@@ -260,7 +499,7 @@ The expansion engine implements detective-style document discovery beyond initia
 │       └── html_exporter.py            # ✅ HTML export
 │
 ├── api/                                # REST API Layer
-│   ├── server.py                       # ✅ FastAPI server (151 lines)
+│   ├── server.py                       # ✅ FastAPI server with lifespan
 │   ├── validators.py                   # ✅ Input validation
 │   ├── middleware/
 │   │   ├── auth.py                     # ✅ API Key authentication
@@ -270,7 +509,20 @@ The expansion engine implements detective-style document discovery beyond initia
 │       ├── search.py                   # ✅ Search endpoints
 │       ├── generate.py                 # ✅ Generation endpoints
 │       ├── session.py                  # ✅ Session endpoints
-│       └── rag_enhanced.py             # ✅ Enhanced RAG (499 lines)
+│       ├── rag_enhanced.py             # ✅ Enhanced RAG + streaming
+│       ├── llm.py                      # 🆕 LLM provider config
+│       └── documents.py                # 🆕 Document upload/management
+│
+├── document_parser/                    # 🆕 Document Parser Module
+│   ├── parser.py                       # ✅ Unified document parser
+│   ├── storage.py                      # ✅ Session-based document storage
+│   ├── context_builder.py              # ✅ Build context from documents
+│   └── extractors/
+│       ├── pdf.py                      # ✅ PDF extraction
+│       ├── docx.py                     # ✅ Word document extraction
+│       ├── html.py                     # ✅ HTML/web page extraction
+│       ├── image.py                    # ✅ OCR (Tesseract/EasyOCR)
+│       └── url.py                      # ✅ URL fetching & extraction
 │
 ├── security/                           # Security Module (5 files)
 │   ├── authentication.py               # ✅ API key validation
@@ -279,9 +531,11 @@ The expansion engine implements detective-style document discovery beyond initia
 │   └── file_protection.py              # ✅ Upload validation
 │
 ├── ui/                                 # User Interface
-│   ├── gradio_app.py                   # ✅ Gradio interface (1108 lines)
+│   ├── gradio_app.py                   # ✅ Gradio interface
 │   ├── search_app.py                   # ✅ Search-only interface
+│   ├── unified_app_api.py              # 🆕 API-based unified UI
 │   └── services/
+│       ├── api_client.py               # 🆕 API client for UI
 │       └── system_service.py           # ✅ System initialization
 │
 ├── pipeline/                           # High-Level Pipelines
@@ -453,9 +707,17 @@ DEFAULT_CONFIG = {
 | `/api/v1/ready` | GET | No | Readiness check |
 | `/api/v1/rag/retrieve` | POST | Yes | Pure retrieval (no LLM) |
 | `/api/v1/rag/research` | POST | Yes | Deep research mode |
-| `/api/v1/rag/chat` | POST | Yes | Conversational RAG |
+| `/api/v1/rag/chat` | POST | Yes | Conversational RAG (streaming) |
 | `/api/v1/session/{id}/history` | GET | Yes | Get session history |
 | `/api/v1/session/{id}/export` | GET | Yes | Export session |
+| `/api/v1/llm/providers` | GET | No | List available LLM providers |
+| `/api/v1/llm/config` | POST | Yes | 🆕 Switch LLM provider at runtime |
+| `/api/v1/llm/status` | GET | No | Get current LLM status |
+| `/api/v1/llm/models` | GET | No | List available models |
+| `/api/v1/documents` | GET | Yes | List session documents |
+| `/api/v1/documents/upload` | POST | Yes | 🆕 Upload document to session |
+| `/api/v1/documents/extract-url` | POST | Yes | 🆕 Extract content from URL |
+| `/api/v1/documents/{id}` | DELETE | Yes | Delete document |
 
 ### Authentication
 
