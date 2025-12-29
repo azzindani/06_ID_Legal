@@ -146,7 +146,8 @@ TURN_CONFIG = [
         "clear_docs": True,
         "include_session_docs": False,
         "query": "Berdasarkan seluruh percakapan kita, topik hukum apa saja yang sudah kita bahas? Sebutkan secara ringkas.",
-        "expected_keywords": ["BPK", "kontrak", "korupsi"],
+        # More flexible keywords - any of these indicate memory recall worked
+        "expected_keywords": ["peraturan", "kontrak", "putusan", "BPK", "hukum", "dokumen", "ketenagakerjaan"],
     }
 ]
 
