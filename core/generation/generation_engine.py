@@ -294,8 +294,8 @@ class GenerationEngine:
 
         full_response = ""
         tokens_generated = 0
-        in_thinking_block = False
-        think_start_detected = False  # Track if we've seen <think>
+        # Start as thinking=True since SYSTEM_PROMPT instructs model to begin with <think>
+        in_thinking_block = True
         think_end_detected = False    # Track if we've seen </think>
 
         try:
@@ -306,22 +306,13 @@ class GenerationEngine:
                         full_response += token
                         tokens_generated = chunk['tokens_generated']
                         
-                        # Real-time thinking detection using accumulated response
-                        full_lower = full_response.lower()
-                        
-                        # Detect thinking start (only once) - handle both <think> and <thinking> tags
-                        if not think_start_detected:
-                            if '<think>' in full_lower or '<thinking>' in full_lower:
-                                think_start_detected = True
-                                in_thinking_block = True
-                                self.logger.debug("Detected thinking tag start in stream")
-                        
-                        # Detect thinking end (only once, after start detected)
-                        if think_start_detected and not think_end_detected:
+                        # Detect thinking end - switch to answer stream
+                        if not think_end_detected:
+                            full_lower = full_response.lower()
                             if '</think>' in full_lower or '</thinking>' in full_lower:
                                 think_end_detected = True
                                 in_thinking_block = False
-                                self.logger.debug("Detected thinking tag end in stream")
+                                self.logger.debug("Detected thinking tag end in stream - switching to answer")
 
                         yield {
                             'type': 'thinking' if in_thinking_block else 'token',
@@ -333,7 +324,6 @@ class GenerationEngine:
                         # Final chunk
                         # Extract thinking BEFORE post-processing
                         thinking, answer_only = self._extract_thinking(full_response)
-
 
                         # Post-process and validate
                         processed = self._post_process_response(answer_only if answer_only else full_response)
