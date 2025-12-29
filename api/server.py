@@ -72,12 +72,13 @@ async def lifespan(app: FastAPI):
     try:
         from core.llm_providers.factory import LLMProviderFactory
         
-        # Auto-load for local provider to ensure model is ready
-        # Note: May load twice (here + GenerationEngine), but ensures stability
+        # Don't auto-load LLM here - let GenerationEngine load it once
+        # This prevents OOM from loading the model twice
         provider = LLMProviderFactory.get_provider(
             provider_type=llm_provider,
-            auto_load=(llm_provider == "local")  # Auto-load for local provider
+            auto_load=False  # GenerationEngine will load the model
         )
+
         app.state.llm_provider = provider
         app.state.llm_provider_type = llm_provider
         logger.info(f"LLM provider initialized: {llm_provider}")
