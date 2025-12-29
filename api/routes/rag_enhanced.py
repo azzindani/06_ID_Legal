@@ -381,13 +381,17 @@ async def conversational_rag(req: ChatRequest, request: Request):
         pipeline = get_pipeline(request)
         manager = get_conversation_manager(request)
         
+        # Get actual provider type from app.state
+        current_provider = getattr(request.app.state, 'llm_provider_type', 'local')
+        
         # Create service
         service = create_conversational_service(
             pipeline=pipeline,
             conversation_manager=manager,
-            current_provider='local'
+            current_provider=current_provider
         )
         
+
         # Get conversation context
         context = None
         if req.session_id:
@@ -494,8 +498,11 @@ async def conversational_rag(req: ChatRequest, request: Request):
                         yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
                     
                     elif event_type == 'thinking_chunk':
+                        # Send thinking tokens as 'chunk' type so all clients can display them
+                        # The content itself contains <think> tags for distinction
                         chunk = data.get('chunk', '')
-                        yield f"data: {json.dumps({'type': 'thinking', 'content': chunk})}\n\n"
+                        full_answer += chunk
+                        yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
                     
                     elif event_type == 'final_result':
                         final_result = data

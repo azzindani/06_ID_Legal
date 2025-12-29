@@ -27,14 +27,13 @@ class GenerationEngine:
         self.logger = get_logger("GenerationEngine")
         self.config = config
         
-        # LLM provider - can be injected or created internally
+        # LLM provider - external providers (like OpenRouter) can be injected
         self._external_provider = llm_provider
         
         # Initialize LLM engine only if no external provider
         if llm_provider is None:
             self.llm_engine = LLMEngine(config)
         else:
-            # Wrap external provider to match LLMEngine interface
             self.llm_engine = None
             self.logger.info("Using external LLM provider", {
                 "provider": getattr(llm_provider, 'provider_name', 'unknown')
@@ -56,6 +55,7 @@ class GenerationEngine:
             "using_external_provider": llm_provider is not None
         })
     
+
     def initialize(self) -> bool:
         """
         Initialize generation engine (load models)
@@ -294,8 +294,8 @@ class GenerationEngine:
 
         full_response = ""
         tokens_generated = 0
-        in_thinking_block = False
-        think_start_detected = False  # Track if we've seen <think>
+        # Start as thinking=True since SYSTEM_PROMPT instructs model to begin with <think>
+        in_thinking_block = True
         think_end_detected = False    # Track if we've seen </think>
 
         try:
@@ -306,20 +306,14 @@ class GenerationEngine:
                         full_response += token
                         tokens_generated = chunk['tokens_generated']
                         
-                        # Real-time thinking detection using accumulated response
-                        full_lower = full_response.lower()
-                        
-                        # Detect <think> start (only once)
-                        if not think_start_detected and '<think>' in full_lower:
-                            think_start_detected = True
-                            in_thinking_block = True
-                            self.logger.debug("Detected <think> tag start in stream")
-                        
-                        # Detect </think> end (only once, after start detected)
-                        if think_start_detected and not think_end_detected and '</think>' in full_lower:
-                            think_end_detected = True
-                            in_thinking_block = False
-                            self.logger.debug("Detected </think> tag end in stream")
+                        # Detect thinking end - switch to answer stream
+                        # Support all variations: </think>, </thinking>, </reasoning>
+                        if not think_end_detected:
+                            full_lower = full_response.lower()
+                            if '</think>' in full_lower or '</thinking>' in full_lower or '</reasoning>' in full_lower:
+                                think_end_detected = True
+                                in_thinking_block = False
+                                self.logger.debug("Detected thinking tag end in stream - switching to answer")
 
                         yield {
                             'type': 'thinking' if in_thinking_block else 'token',
@@ -461,7 +455,8 @@ class GenerationEngine:
 
         # FIXED: More robust XML-like tag extraction with proper handling
         # Match opening tag, capture content, match closing tag (non-greedy, case-insensitive)
-        think_pattern = r'<think\s*>(.*?)</think\s*>'
+        # Support all variations: <think>, <thinking>, <reasoning>
+        think_pattern = r'<(?:think|thinking|reasoning)\s*>(.*?)</(?:think|thinking|reasoning)\s*>'
 
         thinking = ''
         answer = response
@@ -482,17 +477,28 @@ class GenerationEngine:
                 "error": str(e)
             })
             # Try simple string-based extraction as fallback
-            if '<think>' in response.lower() and '</think>' in response.lower():
-                try:
-                    start_idx = response.lower().index('<think>')
-                    end_idx = response.lower().index('</think>') + len('</think>')
-                    thinking = response[start_idx+7:end_idx-8].strip()  # Extract between tags
-                    answer = response[:start_idx] + response[end_idx:]
-                    answer = answer.strip()
-                except Exception:
-                    # Complete fallback: treat entire response as answer
-                    thinking = ''
-                    answer = response
+            # Check for all tag variations: <think>, <thinking>, <reasoning>
+            response_lower = response.lower()
+            tag_pairs = [
+                ('<think>', '</think>', 7, 8),
+                ('<thinking>', '</thinking>', 10, 11),
+                ('<reasoning>', '</reasoning>', 11, 12)
+            ]
+            for start_tag, end_tag, start_offset, end_offset in tag_pairs:
+                if start_tag in response_lower and end_tag in response_lower:
+                    try:
+                        start_idx = response_lower.index(start_tag)
+                        end_idx = response_lower.index(end_tag) + len(end_tag)
+                        thinking = response[start_idx+start_offset:end_idx-end_offset].strip()
+                        answer = response[:start_idx] + response[end_idx:]
+                        answer = answer.strip()
+                        break  # Found a match, stop searching
+                    except Exception:
+                        continue  # Try next tag pair
+            else:
+                # Complete fallback: treat entire response as answer
+                thinking = ''
+                answer = response
 
         # Also detect untagged thinking patterns (numbered steps at the start)
         # Pattern: Langkah/Step followed by number and colon at the beginning of lines
