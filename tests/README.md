@@ -332,7 +332,7 @@ Tests multi-turn conversation with document context, provider fallback, and smar
 python tests/integration/test_llm_provider_multi_turn.py
 
 # With OpenRouter live API
-python tests/integration/test_llm_provider_multi_turn.py --with-openrouter --openrouter-key sk-or-v1-...
+python tests/integration/test_llm_provider_multi_turn.py --openrouter-key sk-or-v1-...
 ```
 
 **What It Tests:**

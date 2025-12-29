@@ -950,9 +950,16 @@ Jawab dengan lengkap dan sitasi sumber regulasi yang relevan."""
             "thinking_mode": thinking_mode
         })
         
-        # Check if we have a generation engine, otherwise try external LLM provider
-        if self.generation_engine is None:
-            # Try to use external LLM provider (e.g., OpenRouter configured at runtime)
+        # MICROSERVICE PATTERN: Check LLM provider type FIRST
+        # This allows hot-swapping between providers without server restart
+        from core.llm_providers.factory import LLMProviderFactory
+        
+        provider = LLMProviderFactory.get_current_provider()
+        provider_name = provider.provider_name if provider else "none"
+        
+        # Use external LLM provider if configured (e.g., OpenRouter)
+        if provider and provider_name == "openrouter":
+            self.logger.info("Using external LLM provider", {"provider": provider_name})
             yield from self._generate_with_external_llm(
                 question=question,
                 retrieved_results=retrieved_results,
@@ -963,6 +970,16 @@ Jawab dengan lengkap dan sitasi sumber regulasi yang relevan."""
                 rag_result=rag_result,
                 thinking_mode=thinking_mode
             )
+            return
+        
+        # Fall back to local generation engine if available
+        if self.generation_engine is None:
+            self.logger.warning("No LLM provider available for generation")
+            yield {
+                'type': 'error',
+                'error': 'No LLM configured. Start with --llm-provider local or configure OpenRouter via /llm/config.',
+                'done': True
+            }
             return
 
         # Pre-build phase_metadata from rag_result for inclusion in complete chunk

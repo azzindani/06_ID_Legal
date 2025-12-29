@@ -293,6 +293,16 @@ async def update_config(request: Request, config: LLMConfigUpdate):
         # Store in app state
         request.app.state.llm_provider = provider
         
+        # OPTIONAL: If switching to OpenRouter, can shutdown local LLM to free GPU memory
+        # Not required for routing (pipeline now checks provider type first)
+        # but useful if you want to reclaim ~10GB GPU memory
+        if config.provider == "openrouter" and hasattr(request.app.state, 'pipeline'):
+            pipeline = request.app.state.pipeline
+            if pipeline and hasattr(pipeline, 'generation_engine') and pipeline.generation_engine is not None:
+                logger.info("Shutting down local LLM to free GPU memory (OpenRouter active)")
+                pipeline.generation_engine.shutdown()
+                pipeline.generation_engine = None
+        
         # Save key if requested
         if config.save_key and config.api_key:
             try:
