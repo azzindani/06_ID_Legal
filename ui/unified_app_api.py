@@ -208,15 +208,42 @@ def format_health_report():
 def on_llm_provider_change(provider: str):
     """
     Handle LLM provider dropdown change.
-    Shows/hides OpenRouter-specific controls based on selection.
+    Shows/hides OpenRouter-specific controls and AUTO-APPLIES the provider setting.
     """
+    global api_client
+    
     is_openrouter = (provider == "openrouter")
+    
+    # Auto-apply provider setting to API (so it takes effect immediately)
+    status_msg = ""
+    if api_client is not None:
+        try:
+            resp = api_client._request(
+                "POST", 
+                "/llm/config",
+                data={
+                    "provider": provider,
+                    "model": None,
+                    "api_key": None,
+                    "save_key": False
+                }
+            )
+            response = resp.json()
+            if response.get("success") or response.get("provider"):
+                status_msg = f"✅ Switched to **{provider}**"
+            else:
+                status_msg = f"⚠️ Switch pending: {response.get('error', 'Configure settings below')}"
+        except Exception as e:
+            status_msg = f"⚠️ Provider selected (configure settings): {provider}"
+    else:
+        status_msg = f"ℹ️ Provider selected: **{provider}** (API not connected)"
+    
     return (
         gr.update(visible=is_openrouter),  # model preset
         gr.update(visible=is_openrouter),  # api key
         gr.update(visible=is_openrouter),  # save key checkbox
-        gr.update(visible=is_openrouter),  # status
-        gr.update(visible=is_openrouter),  # apply button
+        gr.update(visible=True, value=status_msg),  # status (always visible)
+        gr.update(visible=is_openrouter),  # apply button (only for openrouter)
     )
 
 
@@ -2021,7 +2048,7 @@ def create_gradio_interface():
                                     value=False,
                                     visible=False
                                 )
-                                llm_status = gr.Markdown("", visible=False)
+                                llm_status = gr.Markdown("ℹ️ Current: **local** (change above to switch)", visible=True)
                                 apply_llm_settings = gr.Button("💾 Apply LLM Settings", variant="secondary", visible=False)
                             
                             # Research Team Settings
