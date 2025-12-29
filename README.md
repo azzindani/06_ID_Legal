@@ -87,12 +87,12 @@ flowchart TB
         API[FastAPI Server<br/>api/server.py]
         
         subgraph "Routes"
-            R1[/rag/chat]
-            R2[/rag/research]
-            R3[/search]
-            R4[/llm/config]
-            R5[/documents]
-            R6[/sessions]
+            R1["rag/chat"]
+            R2["rag/research"]
+            R3["search"]
+            R4["llm/config"]
+            R5["documents"]
+            R6["sessions"]
         end
     end
 
