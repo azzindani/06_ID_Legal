@@ -296,32 +296,10 @@ async def update_config(request: Request, config: LLMConfigUpdate):
         request.app.state.llm_provider_type = config.provider
         logger.info(f"Updated app.state.llm_provider_type to: {config.provider}")
         
-        # OPTIONAL: If switching to OpenRouter, can shutdown local LLM to free GPU memory
-        # Not required for routing (pipeline now checks provider type first)
-        # but useful if you want to reclaim ~10GB GPU memory
-        if config.provider == "openrouter" and hasattr(request.app.state, 'pipeline'):
-            pipeline = request.app.state.pipeline
-            if pipeline and hasattr(pipeline, 'generation_engine') and pipeline.generation_engine is not None:
-                logger.info("Shutting down local LLM to free GPU memory (OpenRouter active)")
-                pipeline.generation_engine.shutdown()
-                pipeline.generation_engine = None
-        
-        # If switching back to LOCAL, need to reinitialize the generation engine
-        # because it was shut down when switching to OpenRouter
-        if config.provider == "local" and hasattr(request.app.state, 'pipeline'):
-            pipeline = request.app.state.pipeline
-            if pipeline and pipeline.generation_engine is None:
-                logger.info("Reinitializing local LLM generation engine")
-                try:
-                    from core.generation.generation_engine import GenerationEngine
-                    pipeline.generation_engine = GenerationEngine(pipeline.config)
-                    logger.success("Local LLM reinitialized successfully")
-                except Exception as e:
-                    logger.error(f"Failed to reinitialize local LLM: {e}")
-                    raise HTTPException(
-                        status_code=500,
-                        detail=f"Failed to reinitialize local LLM: {e}. Try restarting the server."
-                    )
+        # VALVE ARCHITECTURE: Just switch the routing - don't shutdown or reinitialize anything
+        # The local LLM stays loaded in memory, OpenRouter is stateless
+        # Routing is controlled by LLMProviderFactory.get_current_provider()
+        logger.info(f"Provider valve switched to: {config.provider}")
         
         # Save key if requested
         if config.save_key and config.api_key:

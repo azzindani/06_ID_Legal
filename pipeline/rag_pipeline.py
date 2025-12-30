@@ -418,14 +418,16 @@ class RAGPipeline:
                     thinking_mode=thinking_mode
                 )
             else:
-                # Non-streaming: Check provider and ensure generation_engine is available
+                # VALVE ARCHITECTURE: Route to correct provider
                 from core.llm_providers.factory import LLMProviderFactory
                 provider = LLMProviderFactory.get_current_provider()
                 provider_name = provider.provider_name if provider else "none"
                 
-                # If using OpenRouter, use external provider
+                self.logger.info("Non-streaming valve routing", {"provider": provider_name})
+                
+                # Route to OpenRouter if that's the current provider
                 if provider and provider_name == "openrouter":
-                    self.logger.info("Using external LLM provider for non-streaming", {"provider": provider_name})
+                    self.logger.info("Routing to OpenRouter for non-streaming", {"provider": provider_name})
                     # Collect all chunks for non-streaming response
                     full_answer = ""
                     for chunk in self._generate_with_external_llm(
@@ -451,28 +453,11 @@ class RAGPipeline:
                         }
                     }
                 
-                # For local provider: ensure generation_engine is available
-                if provider_name == "local" and self.generation_engine is None:
-                    self.logger.info("Local provider selected but generation_engine is None, reinitializing...")
-                    try:
-                        from core.generation.generation_engine import GenerationEngine
-                        self.generation_engine = GenerationEngine(self.config)
-                        self.logger.success("Local LLM reinitialized successfully")
-                    except Exception as e:
-                        self.logger.error(f"Failed to reinitialize local LLM: {e}")
-                        return {
-                            'success': False,
-                            'error': f'Failed to reinitialize local LLM: {e}',
-                            'answer': '',
-                            'sources': [],
-                            'metadata': {'total_time': time.time() - start_time}
-                        }
-                
-                # Check if generation_engine is available
+                # Route to local generation engine (should be loaded at startup)
                 if self.generation_engine is None:
                     return {
                         'success': False,
-                        'error': 'No LLM configured. Start with --llm-provider local or configure OpenRouter via /llm/config.',
+                        'error': 'No LLM configured. Start server with --llm-provider local or configure OpenRouter.',
                         'answer': '',
                         'sources': [],
                         'metadata': {'total_time': time.time() - start_time}
@@ -1222,13 +1207,15 @@ Jawab dengan lengkap dan sitasi sumber regulasi yang relevan."""
         # MICROSERVICE PATTERN: Check LLM provider type FIRST
         # This allows hot-swapping between providers without server restart
         from core.llm_providers.factory import LLMProviderFactory
-        
+        # VALVE ARCHITECTURE: Route to correct provider based on factory state
         provider = LLMProviderFactory.get_current_provider()
         provider_name = provider.provider_name if provider else "none"
         
-        # Use external LLM provider if configured (e.g., OpenRouter)
+        self.logger.info("Valve routing check", {"provider": provider_name})
+        
+        # Route to external LLM provider if configured (e.g., OpenRouter)
         if provider and provider_name == "openrouter":
-            self.logger.info("Using external LLM provider", {"provider": provider_name})
+            self.logger.info("Routing to external LLM provider", {"provider": provider_name})
             yield from self._generate_with_external_llm(
                 question=question,
                 retrieved_results=retrieved_results,
@@ -1241,29 +1228,12 @@ Jawab dengan lengkap dan sitasi sumber regulasi yang relevan."""
             )
             return
         
-        # For local provider: ensure generation_engine is available
-        # This handles the case where user switched back from OpenRouter
-        if provider_name == "local" and self.generation_engine is None:
-            self.logger.info("Local provider selected but generation_engine is None, reinitializing...")
-            try:
-                from core.generation.generation_engine import GenerationEngine
-                self.generation_engine = GenerationEngine(self.config)
-                self.logger.success("Local LLM reinitialized successfully")
-            except Exception as e:
-                self.logger.error(f"Failed to reinitialize local LLM: {e}")
-                yield {
-                    'type': 'error',
-                    'error': f'Failed to reinitialize local LLM: {e}. Try restarting the server.',
-                    'done': True
-                }
-                return
-        
-        # Fall back to local generation engine if available
+        # Route to local generation engine (should already be loaded at startup)
         if self.generation_engine is None:
             self.logger.warning("No LLM provider available for generation")
             yield {
                 'type': 'error',
-                'error': 'No LLM configured. Start with --llm-provider local or configure OpenRouter via /llm/config.',
+                'error': 'No LLM configured. Start server with --llm-provider local or configure OpenRouter via /llm/config.',
                 'done': True
             }
             return
