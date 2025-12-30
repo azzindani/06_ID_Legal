@@ -418,6 +418,66 @@ class RAGPipeline:
                     thinking_mode=thinking_mode
                 )
             else:
+                # Non-streaming: Check provider and ensure generation_engine is available
+                from core.llm_providers.factory import LLMProviderFactory
+                provider = LLMProviderFactory.get_current_provider()
+                provider_name = provider.provider_name if provider else "none"
+                
+                # If using OpenRouter, use external provider
+                if provider and provider_name == "openrouter":
+                    self.logger.info("Using external LLM provider for non-streaming", {"provider": provider_name})
+                    # Collect all chunks for non-streaming response
+                    full_answer = ""
+                    for chunk in self._generate_with_external_llm(
+                        question=question,
+                        retrieved_results=final_results,
+                        query_analysis=query_analysis,
+                        conversation_history=conversation_history,
+                        retrieval_time=retrieval_time,
+                        start_time=time.time(),
+                        rag_result=rag_result,
+                        thinking_mode=thinking_mode
+                    ):
+                        if chunk.get('type') == 'token':
+                            full_answer += chunk.get('token', '')
+                    
+                    return {
+                        'success': True,
+                        'answer': full_answer,
+                        'sources': final_results,
+                        'metadata': {
+                            'total_time': time.time() - start_time,
+                            'retrieval_time': retrieval_time
+                        }
+                    }
+                
+                # For local provider: ensure generation_engine is available
+                if provider_name == "local" and self.generation_engine is None:
+                    self.logger.info("Local provider selected but generation_engine is None, reinitializing...")
+                    try:
+                        from core.generation.generation_engine import GenerationEngine
+                        self.generation_engine = GenerationEngine(self.config)
+                        self.logger.success("Local LLM reinitialized successfully")
+                    except Exception as e:
+                        self.logger.error(f"Failed to reinitialize local LLM: {e}")
+                        return {
+                            'success': False,
+                            'error': f'Failed to reinitialize local LLM: {e}',
+                            'answer': '',
+                            'sources': [],
+                            'metadata': {'total_time': time.time() - start_time}
+                        }
+                
+                # Check if generation_engine is available
+                if self.generation_engine is None:
+                    return {
+                        'success': False,
+                        'error': 'No LLM configured. Start with --llm-provider local or configure OpenRouter via /llm/config.',
+                        'answer': '',
+                        'sources': [],
+                        'metadata': {'total_time': time.time() - start_time}
+                    }
+                
                 generation_result = self.generation_engine.generate_answer(
                     query=question,
                     retrieved_results=final_results,
