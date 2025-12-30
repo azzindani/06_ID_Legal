@@ -292,6 +292,9 @@ async def update_config(request: Request, config: LLMConfigUpdate):
 
         # Store in app state
         request.app.state.llm_provider = provider
+        # CRITICAL: Also store the provider TYPE string for chat endpoint routing
+        request.app.state.llm_provider_type = config.provider
+        logger.info(f"Updated app.state.llm_provider_type to: {config.provider}")
         
         # OPTIONAL: If switching to OpenRouter, can shutdown local LLM to free GPU memory
         # Not required for routing (pipeline now checks provider type first)
