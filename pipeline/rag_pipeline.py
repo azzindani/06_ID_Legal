@@ -1181,6 +1181,23 @@ Jawab dengan lengkap dan sitasi sumber regulasi yang relevan."""
             )
             return
         
+        # For local provider: ensure generation_engine is available
+        # This handles the case where user switched back from OpenRouter
+        if provider_name == "local" and self.generation_engine is None:
+            self.logger.info("Local provider selected but generation_engine is None, reinitializing...")
+            try:
+                from core.generation.generation_engine import GenerationEngine
+                self.generation_engine = GenerationEngine(self.config)
+                self.logger.success("Local LLM reinitialized successfully")
+            except Exception as e:
+                self.logger.error(f"Failed to reinitialize local LLM: {e}")
+                yield {
+                    'type': 'error',
+                    'error': f'Failed to reinitialize local LLM: {e}. Try restarting the server.',
+                    'done': True
+                }
+                return
+        
         # Fall back to local generation engine if available
         if self.generation_engine is None:
             self.logger.warning("No LLM provider available for generation")
