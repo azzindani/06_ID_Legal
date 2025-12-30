@@ -21,6 +21,7 @@ from config import (
     ENABLE_CONTEXT_CACHE
 )
 from conversation.context_cache import get_context_cache
+from core.search.query_detection import QueryDetector
 
 
 class RAGPipeline:
@@ -63,6 +64,9 @@ class RAGPipeline:
         # State
         self._initialized = False
         self._initialization_time = 0
+        
+        # Query detector for skip retrieval check
+        self._query_detector = QueryDetector()
 
         # Context cache
         self._context_cache = None
@@ -323,6 +327,27 @@ class RAGPipeline:
                     cached['metadata']['from_cache'] = True
                     return cached
 
+            # Step 0: Check if query should skip retrieval (conversational queries)
+            query_analysis = self._query_detector.analyze_query(
+                query=question,
+                conversation_history=conversation_history
+            )
+            
+            if query_analysis.get('skip_retrieval'):
+                self.logger.info("Skipping retrieval for conversational query", {
+                    "reason": query_analysis.get('skip_reason')
+                })
+                
+                # Route directly to LLM without retrieval
+                return self._generate_direct_response(
+                    question=question,
+                    conversation_history=conversation_history,
+                    start_time=start_time,
+                    stream=stream,
+                    skip_reason=query_analysis.get('skip_reason'),
+                    thinking_mode=thinking_mode
+                )
+            
             # Step 1: Run RAG orchestrator (retrieval)
             self.logger.info("Running retrieval...")
             retrieval_start = time.time()
@@ -393,6 +418,51 @@ class RAGPipeline:
                     thinking_mode=thinking_mode
                 )
             else:
+                # VALVE ARCHITECTURE: Route to correct provider
+                from core.llm_providers.factory import LLMProviderFactory
+                provider = LLMProviderFactory.get_current_provider()
+                provider_name = provider.provider_name if provider else "none"
+                
+                self.logger.info("Non-streaming valve routing", {"provider": provider_name})
+                
+                # Route to OpenRouter if that's the current provider
+                if provider and provider_name == "openrouter":
+                    self.logger.info("Routing to OpenRouter for non-streaming", {"provider": provider_name})
+                    # Collect all chunks for non-streaming response
+                    full_answer = ""
+                    for chunk in self._generate_with_external_llm(
+                        question=question,
+                        retrieved_results=final_results,
+                        query_analysis=query_analysis,
+                        conversation_history=conversation_history,
+                        retrieval_time=retrieval_time,
+                        start_time=time.time(),
+                        rag_result=rag_result,
+                        thinking_mode=thinking_mode
+                    ):
+                        if chunk.get('type') == 'token':
+                            full_answer += chunk.get('token', '')
+                    
+                    return {
+                        'success': True,
+                        'answer': full_answer,
+                        'sources': final_results,
+                        'metadata': {
+                            'total_time': time.time() - start_time,
+                            'retrieval_time': retrieval_time
+                        }
+                    }
+                
+                # Route to local generation engine (should be loaded at startup)
+                if self.generation_engine is None:
+                    return {
+                        'success': False,
+                        'error': 'No LLM configured. Start server with --llm-provider local or configure OpenRouter.',
+                        'answer': '',
+                        'sources': [],
+                        'metadata': {'total_time': time.time() - start_time}
+                    }
+                
                 generation_result = self.generation_engine.generate_answer(
                     query=question,
                     retrieved_results=final_results,
@@ -533,6 +603,190 @@ class RAGPipeline:
                     'total_time': time.time() - start_time
                 }
             }
+
+    def _generate_direct_response(
+        self,
+        question: str,
+        conversation_history: Optional[List[Dict[str, str]]],
+        start_time: float,
+        stream: bool,
+        skip_reason: str,
+        thinking_mode: str = 'low'
+    ):
+        """
+        Generate response directly without document retrieval.
+        Used for conversational queries (greetings, thanks, meta questions).
+        
+        Args:
+            question: User question
+            conversation_history: Conversation context
+            start_time: Query start time
+            stream: Whether to stream response
+            skip_reason: Reason for skipping retrieval
+            thinking_mode: Thinking mode
+            
+        Returns:
+            Generator for streaming or dict for non-streaming
+        """
+        self.logger.info("Generating direct response", {"skip_reason": skip_reason})
+        
+        # Build a simple prompt for conversational queries
+        from core.llm_providers.factory import LLMProviderFactory
+        
+        provider = LLMProviderFactory.get_current_provider()
+        provider_name = provider.provider_name if provider else "none"
+        
+        # Create simple context for conversational response
+        system_prompt = """Anda adalah asisten AI hukum Indonesia yang ramah dan profesional.
+Jawab pertanyaan percakapan ini dengan singkat dan ramah dalam Bahasa Indonesia.
+Jangan memberikan analisis hukum mendalam untuk pertanyaan percakapan sederhana."""
+        
+        # Build conversation context
+        messages = []
+        if conversation_history:
+            for msg in conversation_history[-5:]:  # Last 5 messages
+                messages.append({
+                    "role": msg.get("role", "user"),
+                    "content": msg.get("content", "")
+                })
+        messages.append({"role": "user", "content": question})
+        
+        if stream:
+            return self._stream_direct_response(
+                messages=messages,
+                system_prompt=system_prompt,
+                start_time=start_time,
+                skip_reason=skip_reason,
+                provider=provider,
+                provider_name=provider_name,
+                thinking_mode=thinking_mode
+            )
+        else:
+            # Non-streaming: generate complete response
+            if provider and provider_name != "none":
+                try:
+                    response = provider.generate(
+                        prompt=question,
+                        system_prompt=system_prompt,
+                        max_tokens=256,  # Short response for conversational
+                        temperature=0.7
+                    )
+                    answer = response.get('text', response.get('content', ''))
+                except Exception as e:
+                    self.logger.error("Direct response generation failed", {"error": str(e)})
+                    answer = "Maaf, terjadi kesalahan. Silakan coba lagi."
+            elif self.generation_engine:
+                # Use local generation engine
+                try:
+                    result = self.generation_engine.generate_answer(
+                        query=question,
+                        retrieved_results=[],  # No documents
+                        query_analysis={'query_type': 'conversational'},
+                        conversation_history=conversation_history,
+                        thinking_mode=thinking_mode
+                    )
+                    answer = result.get('answer', '')
+                except Exception as e:
+                    self.logger.error("Local generation failed", {"error": str(e)})
+                    answer = "Maaf, terjadi kesalahan. Silakan coba lagi."
+            else:
+                answer = "Halo! Saya adalah asisten hukum Indonesia. Ada yang bisa saya bantu?"
+            
+            return {
+                'success': True,
+                'answer': answer,
+                'sources': [],
+                'metadata': {
+                    'total_time': time.time() - start_time,
+                    'skip_retrieval': True,
+                    'skip_reason': skip_reason
+                }
+            }
+    
+    def _stream_direct_response(
+        self,
+        messages: List[Dict],
+        system_prompt: str,
+        start_time: float,
+        skip_reason: str,
+        provider,
+        provider_name: str,
+        thinking_mode: str
+    ):
+        """Stream a direct response without document retrieval."""
+        
+        if provider and provider_name != "none":
+            # Use external provider streaming
+            try:
+                for chunk in provider.stream(
+                    prompt=messages[-1]['content'],
+                    system_prompt=system_prompt,
+                    max_tokens=256,
+                    temperature=0.7
+                ):
+                    yield {
+                        'type': 'token',
+                        'token': chunk.get('text', chunk.get('content', '')),
+                        'done': False
+                    }
+                
+                yield {
+                    'type': 'complete',
+                    'done': True,
+                    'success': True,
+                    'sources': [],
+                    'metadata': {
+                        'total_time': time.time() - start_time,
+                        'skip_retrieval': True,
+                        'skip_reason': skip_reason
+                    }
+                }
+            except Exception as e:
+                self.logger.error("Streaming direct response failed", {"error": str(e)})
+                yield {
+                    'type': 'error',
+                    'error': str(e),
+                    'done': True
+                }
+        elif self.generation_engine:
+            # Use local generation engine streaming
+            try:
+                for chunk in self.generation_engine.generate_streaming(
+                    query=messages[-1]['content'],
+                    retrieved_results=[],
+                    query_analysis={'query_type': 'conversational'},
+                    thinking_mode=thinking_mode
+                ):
+                    yield chunk
+            except Exception as e:
+                self.logger.error("Local streaming failed", {"error": str(e)})
+                yield {
+                    'type': 'error',
+                    'error': str(e),
+                    'done': True
+                }
+        else:
+            # No provider available, yield simple message
+            message = "Halo! Saya adalah asisten hukum Indonesia. Ada yang bisa saya bantu?"
+            for char in message:
+                yield {
+                    'type': 'token',
+                    'token': char,
+                    'done': False
+                }
+            yield {
+                'type': 'complete',
+                'done': True,
+                'success': True,
+                'answer': message,
+                'sources': [],
+                'metadata': {
+                    'total_time': time.time() - start_time,
+                    'skip_retrieval': True,
+                    'skip_reason': skip_reason
+                }
+            }
+
 
     def retrieve_documents(
         self,
@@ -953,13 +1207,15 @@ Jawab dengan lengkap dan sitasi sumber regulasi yang relevan."""
         # MICROSERVICE PATTERN: Check LLM provider type FIRST
         # This allows hot-swapping between providers without server restart
         from core.llm_providers.factory import LLMProviderFactory
-        
+        # VALVE ARCHITECTURE: Route to correct provider based on factory state
         provider = LLMProviderFactory.get_current_provider()
         provider_name = provider.provider_name if provider else "none"
         
-        # Use external LLM provider if configured (e.g., OpenRouter)
+        self.logger.info("Valve routing check", {"provider": provider_name})
+        
+        # Route to external LLM provider if configured (e.g., OpenRouter)
         if provider and provider_name == "openrouter":
-            self.logger.info("Using external LLM provider", {"provider": provider_name})
+            self.logger.info("Routing to external LLM provider", {"provider": provider_name})
             yield from self._generate_with_external_llm(
                 question=question,
                 retrieved_results=retrieved_results,
@@ -972,12 +1228,12 @@ Jawab dengan lengkap dan sitasi sumber regulasi yang relevan."""
             )
             return
         
-        # Fall back to local generation engine if available
+        # Route to local generation engine (should already be loaded at startup)
         if self.generation_engine is None:
             self.logger.warning("No LLM provider available for generation")
             yield {
                 'type': 'error',
-                'error': 'No LLM configured. Start with --llm-provider local or configure OpenRouter via /llm/config.',
+                'error': 'No LLM configured. Start server with --llm-provider local or configure OpenRouter via /llm/config.',
                 'done': True
             }
             return

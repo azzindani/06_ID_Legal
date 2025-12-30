@@ -139,22 +139,31 @@ class LangGraphRAGOrchestrator:
                 conversation_history=conversation_history
             )
             
-            # Enhance query
+            # Rewrite query if it's short or ambiguous
+            rewritten_query, was_rewritten = self.query_detector.rewrite_query(
+                query=query,
+                analysis=query_analysis
+            )
+            
+            # Enhance query with entities
             enhanced_query = self.query_detector.enhance_query(
-                original_query=query,
+                original_query=rewritten_query if was_rewritten else query,
                 analysis=query_analysis
             )
             
             self.logger.success("Query detection completed", {
                 "type": query_analysis['query_type'],
-                "complexity": f"{query_analysis['complexity_score']:.2f}"
+                "complexity": f"{query_analysis['complexity_score']:.2f}",
+                "rewritten": was_rewritten
             })
             
             new_metadata = {
                 "query_detection": {
                     "type": query_analysis['query_type'],
                     "complexity": query_analysis['complexity_score'],
-                    "team_size": len(query_analysis['team_composition'])
+                    "team_size": len(query_analysis['team_composition']),
+                    "was_rewritten": was_rewritten,
+                    "original_query": query if was_rewritten else None
                 }
             }
             

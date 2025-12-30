@@ -736,58 +736,22 @@ KG_WEIGHTS = {
 }
 
 # =============================================================================
-# INDONESIAN STOPWORDS
+# VOCABULARY IMPORTS (Moved to core/legal_vocab.py for better organization)
 # =============================================================================
 
-INDONESIAN_STOPWORDS = {
-    'yang', 'dan', 'di', 'ke', 'dari', 'dalam', 'untuk', 'pada', 'dengan', 'adalah',
-    'ini', 'itu', 'atau', 'jika', 'maka', 'akan', 'telah', 'dapat', 'harus', 'tidak',
-    'ada', 'oleh', 'sebagai', 'karena', 'sehingga', 'bahwa', 'tentang', 'antara',
-    'seperti', 'setelah', 'sebelum', 'sampai', 'hingga', 'namun', 'tetapi', 'juga'
-}
-
-# =============================================================================
-# REGULATION PATTERNS
-# =============================================================================
-
-REGULATION_TYPE_PATTERNS = {
-    'undang-undang': ['undang-undang', 'uu', 'undang undang'],
-    'peraturan_pemerintah': ['peraturan pemerintah', 'pp', 'perpem'],
-    'peraturan_presiden': ['peraturan presiden', 'perpres', 'pres'],
-    'peraturan_menteri': ['peraturan menteri', 'permen', 'permenkeu', 'permendikbud'],
-    'peraturan_daerah': ['peraturan daerah', 'perda', 'peraturan daerah provinsi', 'peraturan daerah kabupaten'],
-    'keputusan_presiden': ['keputusan presiden', 'keppres', 'kepres'],
-    'peraturan_gubernur': ['peraturan gubernur', 'pergub'],
-    'peraturan_bupati': ['peraturan bupati', 'perbup'],
-    'peraturan_walikota': ['peraturan walikota', 'perwali']
-}
-
-YEAR_SEPARATORS = ['tahun', 'th', 'th.', '/', '-']
-
-REGULATION_PRONOUNS = [
-    'peraturan tersebut', 'peraturan ini', 'pp tersebut', 'pp ini',
-    'uu tersebut', 'uu ini', 'regulasi tersebut', 'regulasi ini',
-    'ketentuan tersebut', 'ketentuan ini', 'undang-undang tersebut',
-    'undang-undang ini', 'perda tersebut', 'perda ini'
-]
-
-FOLLOWUP_INDICATORS = [
-    'apa yang diatur', 'mengatur apa', 'isi dari', 'membahas apa',
-    'tentang apa', 'mengenai apa', 'berisi apa', 'materi apa',
-    'ketentuan apa', 'pasal apa', 'bagaimana dengan', 'lalu bagaimana',
-    'terus', 'kemudian', 'selanjutnya', 'dan', 'serta'
-]
-
-CLARIFICATION_INDICATORS = [
-    'tidak melihat', 'tidak ada', 'tidak menemukan', 'bukan tentang',
-    'seharusnya', 'maksud saya', 'yang saya maksud', 'saya kira',
-    'tetapi', 'namun', 'tapi', 'kok', 'kenapa', 'mengapa'
-]
-
-CONTENT_QUERY_KEYWORDS = [
-    'mengatur', 'diatur', 'pengaturan', 'ketentuan', 'isi', 'materi',
-    'membahas', 'berisi', 'tentang', 'mengenai', 'menyangkut', 'terkait'
-]
+# Import vocabulary constants from the legal vocabulary module
+# These are re-exported here for backward compatibility
+from core.legal_vocab import (
+    INDONESIAN_STOPWORDS,
+    REGULATION_TYPE_PATTERNS,
+    YEAR_SEPARATORS,
+    REGULATION_PRONOUNS,
+    FOLLOWUP_INDICATORS,
+    CLARIFICATION_INDICATORS,
+    SKIP_RETRIEVAL_PATTERNS,
+    CONTENT_QUERY_KEYWORDS,
+    QUERY_TERM_REWRITES,
+)
 
 # =============================================================================
 # SYSTEM PROMPT
