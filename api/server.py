@@ -206,6 +206,8 @@ def create_app() -> FastAPI:
             '/api/v1/ready',
             '/api/v1/live',
             '/api/v1/memory',
+            # Auth endpoints (for login/register)
+            '/api/v1/auth',
             # LLM endpoints (for provider management)
             '/api/v1/llm',
             # Document endpoints (for testing - remove in production if needed)
@@ -231,6 +233,7 @@ def create_app() -> FastAPI:
     )
     from .routes.documents import router as documents_router
     from .routes.llm import router as llm_router
+    from .routes.auth import router as auth_router
 
     app.include_router(health_router, prefix="/api/v1", tags=["Health"])
     app.include_router(search_router, prefix="/api/v1", tags=["Search"])
@@ -239,6 +242,7 @@ def create_app() -> FastAPI:
     app.include_router(rag_enhanced_router, prefix="/api/v1", tags=["Enhanced RAG"])
     app.include_router(documents_router, prefix="/api/v1", tags=["Documents"])
     app.include_router(llm_router, prefix="/api/v1", tags=["LLM"])
+    app.include_router(auth_router, prefix="/api/v1", tags=["Authentication"])
 
     return app
 

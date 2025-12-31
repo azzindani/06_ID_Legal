@@ -215,9 +215,9 @@ def test_rate_limiting():
     try:
         # This would test Redis-based rate limiting when implemented
         # For now, test the in-memory rate limiter
-        from security.authentication import RateLimiter
+        from security.rate_limiting import RateLimiter
         
-        limiter = RateLimiter(requests_per_minute=5)
+        limiter = RateLimiter(requests_per_minute=5, requests_per_hour=100)
         
         # Simulate 10 requests from same user
         user_ip = "192.168.1.100"
@@ -225,7 +225,8 @@ def test_rate_limiting():
         denied = 0
         
         for i in range(10):
-            if limiter.is_allowed(user_ip):
+            is_allowed, retry_after = limiter.check_rate_limit(user_ip)
+            if is_allowed:
                 allowed += 1
             else:
                 denied += 1
