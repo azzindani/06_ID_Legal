@@ -166,6 +166,16 @@ class RAGPipeline:
                         auto_load=True  # Auto-load model for llamacpp
                     )
                     self.logger.info(f"Using {llm_provider_type} provider from factory")
+                    
+                    # Ensure model is loaded (may be cached without model)
+                    if llm_provider_type == 'llamacpp' and not llm_provider.is_available():
+                        self.logger.info("LlamaCpp model not loaded, loading now...")
+                        if hasattr(llm_provider, 'load_model'):
+                            if llm_provider.load_model():
+                                self.logger.info("LlamaCpp model loaded successfully")
+                            else:
+                                self.logger.error("Failed to load LlamaCpp model")
+                                
                 except Exception as e:
                     self.logger.warning(f"Failed to get {llm_provider_type} provider: {e}, falling back to local")
                     llm_provider = None
