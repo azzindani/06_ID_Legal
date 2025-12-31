@@ -140,8 +140,8 @@ def test_session_isolation():
             s1_data = manager.get_session(session1)
             s2_data = manager.get_session(session2)
             
-            alice_isolated = s1_data['user_id'] == "user_alice" and len(s1_data['turns']) == 1
-            bob_isolated = s2_data['user_id'] == "user_bob" and len(s2_data['turns']) == 1
+            alice_isolated = s1_data['id'] == "user_alice" and len(s1_data['turns']) == 1
+            bob_isolated = s2_data['id'] == "user_bob" and len(s2_data['turns']) == 1
             
             print(f"Alice isolated: {alice_isolated}")
             print(f"Bob isolated: {bob_isolated}")
@@ -195,7 +195,7 @@ def test_concurrent_user_sessions():
             all_verified = True
             for user_id, session_id in results.items():
                 session = manager.get_session(session_id)
-                if not session or session['user_id'] != user_id:
+                if not session or session['id'] != user_id:
                     all_verified = False
                     print(f"  ❌ {user_id} session verification failed")
             
