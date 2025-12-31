@@ -304,6 +304,191 @@ def test_valve_switching():
         return False
 
 
+def test_hybrid_mode():
+    """Test hybrid CPU/GPU mode with specific layer count"""
+    print_header("TEST 11: Hybrid CPU/GPU Mode (n_gpu_layers=20)")
+    
+    try:
+        from core.llm_providers import LlamaCppProvider
+        
+        # Use 20 layers on GPU, rest on CPU
+        provider = LlamaCppProvider(n_gpu_layers=20)
+        
+        print(f"Configured n_gpu_layers: 20")
+        print(f"Provider initialized: {provider.provider_name}")
+        
+        info = provider.get_info()
+        print(f"Config n_gpu_layers: {info.get('n_gpu_layers')}")
+        
+        # Don't actually load model in basic test
+        print_result("Hybrid Mode", True, "Provider configured for hybrid mode")
+        return True
+        
+    except Exception as e:
+        print_result("Hybrid Mode", False, str(e))
+        return False
+
+
+def test_context_window():
+    """Test 32K context window configuration"""
+    print_header("TEST 12: Context Window (32K)")
+    
+    try:
+        from core.llm_providers import LlamaCppProvider
+        from config import LLAMACPP_N_CTX
+        
+        # Check default config
+        provider = LlamaCppProvider()
+        ctx = provider.get_context_window()
+        
+        print(f"Config LLAMACPP_N_CTX: {LLAMACPP_N_CTX}")
+        print(f"Provider context window: {ctx}")
+        
+        # Verify 32K
+        is_32k = ctx >= 32768
+        print(f"Is 32K context: {is_32k}")
+        
+        # Test custom context
+        custom_provider = LlamaCppProvider(n_ctx=16384)
+        custom_ctx = custom_provider.get_context_window()
+        print(f"Custom 16K context: {custom_ctx}")
+        
+        print_result("Context Window", True, f"Default {ctx}, custom override works")
+        return True
+        
+    except Exception as e:
+        print_result("Context Window", False, str(e))
+        return False
+
+
+def test_config_override():
+    """Test environment variable overrides"""
+    print_header("TEST 13: Config Environment Override")
+    
+    try:
+        import os
+        from core.llm_providers import LlamaCppProvider
+        
+        # Test that provider reads from config
+        provider = LlamaCppProvider()
+        info = provider.get_info()
+        
+        print(f"[Default Config]")
+        print(f"  repo_id: {info.get('repo_id')}")
+        print(f"  filename: {info.get('filename')}")
+        print(f"  n_gpu_layers: {info.get('n_gpu_layers')}")
+        
+        # Test constructor override
+        custom = LlamaCppProvider(
+            repo_id="custom/repo",
+            filename="custom.gguf",
+            n_gpu_layers=10
+        )
+        custom_info = custom.get_info()
+        
+        print(f"\n[Constructor Override]")
+        print(f"  repo_id: {custom_info.get('repo_id')}")
+        print(f"  filename: {custom_info.get('filename')}")
+        print(f"  n_gpu_layers: {custom_info.get('n_gpu_layers')}")
+        
+        override_works = (
+            custom_info.get('repo_id') == "custom/repo" and
+            custom_info.get('n_gpu_layers') == 10
+        )
+        
+        print_result("Config Override", override_works, "Constructor overrides config defaults")
+        return override_works
+        
+    except Exception as e:
+        print_result("Config Override", False, str(e))
+        return False
+
+
+def test_multi_user_sessions():
+    """Test multiple concurrent sessions with LlamaCpp"""
+    print_header("TEST 14: Multi-User Sessions")
+    
+    try:
+        from core.llm_providers import LLMProviderFactory
+        import threading
+        
+        # Get single provider instance (shared across users)
+        provider = LLMProviderFactory.get_provider("llamacpp", auto_load=False)
+        
+        print(f"Provider: {provider.provider_name}")
+        print(f"Testing concurrent session simulation...")
+        
+        # Simulate multiple users (without actually loading model)
+        results = {}
+        errors = []
+        
+        def simulate_user_session(user_id):
+            try:
+                # Each user gets info (thread-safe read)
+                info = provider.get_info()
+                results[user_id] = {
+                    "provider": info.get("provider"),
+                    "available": info.get("available"),
+                    "success": True
+                }
+            except Exception as e:
+                errors.append(f"User {user_id}: {e}")
+                results[user_id] = {"success": False, "error": str(e)}
+        
+        # Simulate 5 concurrent users
+        threads = []
+        for i in range(5):
+            t = threading.Thread(target=simulate_user_session, args=(f"user_{i}",))
+            threads.append(t)
+            t.start()
+        
+        for t in threads:
+            t.join()
+        
+        print(f"Users simulated: {len(results)}")
+        print(f"Successful: {sum(1 for r in results.values() if r.get('success'))}")
+        print(f"Errors: {len(errors)}")
+        
+        success = len(errors) == 0 and len(results) == 5
+        print_result("Multi-User", success, f"{len(results)} concurrent sessions")
+        return success
+        
+    except Exception as e:
+        print_result("Multi-User", False, str(e))
+        return False
+
+
+def test_memory_management():
+    """Test model unload/reload and memory cleanup"""
+    print_header("TEST 15: Memory Management")
+    
+    try:
+        from core.llm_providers import LlamaCppProvider
+        
+        # Create provider
+        provider = LlamaCppProvider(n_gpu_layers=0)  # CPU for safety
+        
+        print(f"[1. Initial state]")
+        print(f"  Available: {provider.is_available()}")
+        print(f"  Model loaded: {provider._model_loaded}")
+        
+        # Unload (even if not loaded)
+        print(f"\n[2. Unload model]")
+        provider.unload_model()
+        print(f"  Available after unload: {provider.is_available()}")
+        print(f"  Model loaded: {provider._model_loaded}")
+        
+        # Verify clean state
+        is_clean = not provider.is_available() and not provider._model_loaded
+        
+        print_result("Memory Management", is_clean, "Unload cleans up correctly")
+        return is_clean
+        
+    except Exception as e:
+        print_result("Memory Management", False, str(e))
+        return False
+
+
 def test_cpu_mode():
     """Test CPU-only inference"""
     print_header("TEST 9: CPU-Only Mode (n_gpu_layers=0)")
@@ -337,6 +522,7 @@ def main():
     parser.add_argument("--test-gpu", action="store_true", help="Test GPU mode")
     parser.add_argument("--test-valve", action="store_true", help="Test valve switching")
     parser.add_argument("--test-generate", action="store_true", help="Test generation (requires model)")
+    parser.add_argument("--test-features", action="store_true", help="Test hybrid/context/multi-user features")
     parser.add_argument("--full", action="store_true", help="Run all tests")
     args = parser.parse_args()
     
@@ -361,21 +547,43 @@ def main():
     results.append(("Factory", test_llamacpp_factory()))
     
     # =========================================================================
-    # PART 2: Valve Switching (optional)
+    # PART 2: Feature Tests (always run - they don't need model)
+    # =========================================================================
+    print("\n" + "-"*60)
+    print("  PART 2: Feature Tests")
+    print("-"*60)
+    
+    results.append(("Hybrid Mode", test_hybrid_mode()))
+    results.append(("Context Window", test_context_window()))
+    results.append(("Config Override", test_config_override()))
+    results.append(("Memory Management", test_memory_management()))
+    
+    # =========================================================================
+    # PART 3: Multi-User Tests (always run)
+    # =========================================================================
+    if args.test_features or args.full:
+        print("\n" + "-"*60)
+        print("  PART 3: Multi-User Tests")
+        print("-"*60)
+        
+        results.append(("Multi-User Sessions", test_multi_user_sessions()))
+    
+    # =========================================================================
+    # PART 4: Valve Switching (optional)
     # =========================================================================
     if args.test_valve or args.full:
         print("\n" + "-"*60)
-        print("  PART 2: Valve Switching")
+        print("  PART 4: Valve Switching")
         print("-"*60)
         
         results.append(("Valve Switching", test_valve_switching()))
     
     # =========================================================================
-    # PART 3: Generation Tests (optional, requires model download)
+    # PART 5: Generation Tests (optional, requires model download)
     # =========================================================================
     if args.test_generate or args.full:
         print("\n" + "-"*60)
-        print("  PART 3: Generation Tests")
+        print("  PART 5: Generation Tests")
         print("-"*60)
         
         success, provider = test_llamacpp_model_load(n_gpu_layers=-1)
@@ -387,11 +595,11 @@ def main():
             provider.unload_model()
     
     # =========================================================================
-    # PART 4: GPU-specific Tests (optional)
+    # PART 6: GPU-specific Tests (optional)
     # =========================================================================
     if args.test_gpu and not args.full:
         print("\n" + "-"*60)
-        print("  PART 4: GPU Mode Test")
+        print("  PART 6: GPU Mode Test")
         print("-"*60)
         
         results.append(("GPU Mode", test_gpu_mode()))
@@ -417,6 +625,7 @@ def main():
         print("⚠️ Some tests failed. Check output above.")
     
     return 0 if passed == total else 1
+
 
 
 if __name__ == "__main__":

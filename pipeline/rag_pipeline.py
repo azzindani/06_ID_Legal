@@ -152,11 +152,29 @@ class RAGPipeline:
 
             self.logger.info("Step 4/5: Initializing generation engine...")
             from core.generation.generation_engine import GenerationEngine
+            
+            # Get LLM provider from factory based on config
+            llm_provider = None
+            llm_provider_type = self.config.get('llm_provider', 'local')
+            
+            if llm_provider_type in ('openrouter', 'llamacpp', 'none'):
+                # Use provider factory for non-local providers
+                try:
+                    from core.llm_providers import LLMProviderFactory
+                    llm_provider = LLMProviderFactory.get_provider(
+                        provider_type=llm_provider_type,
+                        auto_load=True  # Auto-load model for llamacpp
+                    )
+                    self.logger.info(f"Using {llm_provider_type} provider from factory")
+                except Exception as e:
+                    self.logger.warning(f"Failed to get {llm_provider_type} provider: {e}, falling back to local")
+                    llm_provider = None
 
-            self.generation_engine = GenerationEngine(self.config)
+            self.generation_engine = GenerationEngine(self.config, llm_provider=llm_provider)
             if not self.generation_engine.initialize():
                 self.logger.error("Failed to initialize generation engine")
                 return False
+
 
             # Step 5: Finalize
             if progress_callback:
