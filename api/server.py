@@ -24,10 +24,14 @@ logger = get_logger(__name__)
 # CLI arguments (parsed at module load or when __main__)
 _cli_args = None
 
-def parse_args():
-    """Parse command line arguments"""
+def parse_args(force_reparse: bool = False):
+    """Parse command line arguments
+    
+    Args:
+        force_reparse: If True, reparse args even if cached (useful for Kaggle notebooks)
+    """
     global _cli_args
-    if _cli_args is not None:
+    if _cli_args is not None and not force_reparse:
         return _cli_args
     
     parser = argparse.ArgumentParser(description="Indonesian Legal RAG API Server")
@@ -51,7 +55,18 @@ def parse_args():
     
     # Parse known args only (allows uvicorn to add its own)
     _cli_args, _ = parser.parse_known_args()
+    
+    # Debug: Log what we parsed
+    logger.info(f"Parsed args: llm_provider={_cli_args.llm_provider}, sys.argv={sys.argv[:3]}")
+    
     return _cli_args
+
+# Force parse on first import to catch sys.argv changes
+def reset_args():
+    """Reset cached args - call this before starting server in Kaggle notebooks"""
+    global _cli_args
+    _cli_args = None
+
 
 # FIXED: Use application state instead of global variables for multi-worker support
 # Application state is stored per-worker and properly isolated
@@ -63,10 +78,10 @@ async def lifespan(app: FastAPI):
 
     logger.info("Starting Indonesian Legal RAG API...")
     
-    # Get CLI args
-    args = parse_args()
+    # Get CLI args - force reparse to pick up sys.argv changes (important for Kaggle notebooks)
+    args = parse_args(force_reparse=True)
     llm_provider = args.llm_provider
-    logger.info(f"LLM Provider: {llm_provider}")
+    logger.info(f"LLM Provider selected: {llm_provider}")
     
     # Initialize LLM provider based on CLI argument
     try:
