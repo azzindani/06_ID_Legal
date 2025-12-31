@@ -123,7 +123,7 @@ def test_session_isolation():
         
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = os.path.join(tmpdir, "test_sessions.db")
-            manager = ConversationManager(db_path=db_path)
+            manager = ConversationManager(config={'db_path': db_path})
             
             # Create sessions for 2 users
             session1 = manager.start_session("user_alice")
@@ -165,7 +165,7 @@ def test_concurrent_user_sessions():
         
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = os.path.join(tmpdir, "concurrent_sessions.db")
-            manager = ConversationManager(db_path=db_path)
+            manager = ConversationManager(config={'db_path': db_path})
             
             results = {}
             errors = []
