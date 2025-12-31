@@ -54,7 +54,6 @@ This system provides intelligent legal consultation by combining:
 
 | Item | Priority | Impact |
 |------|----------|--------|
-| Session Persistence | Medium | Data lost on restart |
 | Multi-user JWT Auth | Medium | Blocks multi-user scaling |
 
 ### ✅ Testing Status

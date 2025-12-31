@@ -194,6 +194,21 @@ CONTEXT_COMPRESSION = os.getenv("CONTEXT_COMPRESSION", "true").lower() == "true"
 CONTEXT_SUMMARY_THRESHOLD = int(os.getenv("CONTEXT_SUMMARY_THRESHOLD", "4096"))
 
 # =============================================================================
+# SECURITY CONFIGURATION
+# =============================================================================
+
+# Enable ClamAV virus scanning for file uploads (requires ClamAV installed)
+# If ClamAV is not available, will log warning and continue without scanning
+ENABLE_VIRUS_SCAN = os.getenv("ENABLE_VIRUS_SCAN", "true").lower() == "true"
+
+# Maximum file upload size in MB
+MAX_UPLOAD_SIZE_MB = int(os.getenv("MAX_UPLOAD_SIZE_MB", "50"))
+
+# Rate limiting
+RATE_LIMIT_PER_MINUTE = int(os.getenv("RATE_LIMIT_PER_MINUTE", "60"))
+RATE_LIMIT_PER_HOUR = int(os.getenv("RATE_LIMIT_PER_HOUR", "1000"))
+
+# =============================================================================
 # ENHANCED MEMORY MANAGER CONFIGURATION
 # =============================================================================
 

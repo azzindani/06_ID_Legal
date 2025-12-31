@@ -301,7 +301,7 @@ Sanksi pelanggaran meliputi...
 ## Future Enhancements
 
 - [ ] PDF export
-- [ ] Session persistence (SQLite/Redis)
+- [x] Session persistence (SQLite) ✅ Implemented in `session_storage.py`
 - [ ] Session sharing/import
 - [ ] Compression for large sessions
 - [ ] Async export for large files
