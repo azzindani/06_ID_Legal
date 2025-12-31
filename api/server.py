@@ -33,9 +33,9 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Indonesian Legal RAG API Server")
     parser.add_argument(
         "--llm-provider",
-        choices=["local", "openrouter", "none"],
+        choices=["local", "llamacpp", "openrouter", "none"],
         default=os.getenv("LLM_PROVIDER", "local"),
-        help="LLM provider: local (GPU), openrouter (cloud), none (retrieval only)"
+        help="LLM provider: local (GPU), llamacpp (GGUF), openrouter (cloud), none (retrieval only)"
     )
     parser.add_argument(
         "--host",

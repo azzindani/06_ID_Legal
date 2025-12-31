@@ -12,6 +12,7 @@ from .base import LLMProviderBase
 from .none import NoneProvider
 from .openrouter import OpenRouterProvider
 from .local import LocalProvider
+from .llamacpp import LlamaCppProvider
 
 # Import logger
 try:
@@ -41,6 +42,7 @@ except ImportError:
 PROVIDER_REGISTRY: Dict[str, Type[LLMProviderBase]] = {
     "local": LocalProvider,
     "openrouter": OpenRouterProvider,
+    "llamacpp": LlamaCppProvider,
     "none": NoneProvider,
 }
 
@@ -152,6 +154,14 @@ class LLMProviderFactory:
                 if not cls._instance.load_model():
                     logger.warning("Failed to load local model")
         
+        elif provider_type == "llamacpp":
+            cls._instance = LlamaCppProvider(**kwargs)
+            
+            # Auto-load model unless explicitly disabled
+            if kwargs.get('auto_load', True):
+                if not cls._instance.load_model():
+                    logger.warning("Failed to load llamacpp model")
+        
         else:
             # Use registry for any future providers
             provider_class = PROVIDER_REGISTRY[provider_type]
@@ -209,6 +219,12 @@ class LLMProviderFactory:
                 "description": "HuggingFace transformers model (GPU required)",
                 "requires_api_key": False,
                 "cost": "Free (uses local GPU)",
+            },
+            "llamacpp": {
+                "name": "LlamaCpp",
+                "description": "GGUF model inference (CPU/GPU hybrid)",
+                "requires_api_key": False,
+                "cost": "Free (local inference)",
             },
             "openrouter": {
                 "name": "OpenRouter",

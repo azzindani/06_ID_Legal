@@ -2018,10 +2018,10 @@ def create_gradio_interface():
                             with gr.Group():
                                 gr.Markdown("#### 🤖 LLM Provider")
                                 llm_provider = gr.Dropdown(
-                                    choices=["local", "openrouter", "none"],
+                                    choices=["local", "llamacpp", "openrouter", "none"],
                                     value="local",
                                     label="Provider",
-                                    info="local=GPU, openrouter=Cloud API, none=RAG only"
+                                    info="local=HF GPU, llamacpp=GGUF CPU/GPU, openrouter=Cloud, none=RAG only"
                                 )
                                 llm_model_preset = gr.Dropdown(
                                     choices=[

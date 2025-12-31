@@ -4,6 +4,7 @@ LLM Providers Module - Flexible LLM Backend Abstraction
 Supports multiple LLM providers:
 - OpenRouter: Cloud API gateway (200+ models)
 - Local: HuggingFace transformers (Qwen VL)
+- LlamaCpp: GGUF model inference (CPU/GPU hybrid)
 - None: RAG-only mode (no LLM generation)
 
 File: core/llm_providers/__init__.py
@@ -14,6 +15,7 @@ from .factory import LLMProviderFactory, get_provider
 from .none import NoneProvider
 from .openrouter import OpenRouterProvider
 from .local import LocalProvider
+from .llamacpp import LlamaCppProvider
 
 __all__ = [
     'LLMProviderBase',
@@ -22,4 +24,5 @@ __all__ = [
     'NoneProvider',
     'OpenRouterProvider',
     'LocalProvider',
+    'LlamaCppProvider',
 ]
