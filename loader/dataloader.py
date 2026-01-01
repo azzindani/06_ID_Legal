@@ -369,11 +369,14 @@ class EnhancedKGDatasetLoader:
         
         # Convert embeddings
         import torch
+        import os
         
         if progress_callback:
             progress_callback("🔄 Converting embeddings to tensors...")
         
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # Respect EMBEDDING_DEVICE env var (default: cpu to save GPU memory for LLM)
+        embedding_device = os.environ.get("EMBEDDING_DEVICE", "cpu")
+        device = torch.device(embedding_device)
         
         self.embeddings = torch.tensor(
             np.stack(embeddings_temp),
