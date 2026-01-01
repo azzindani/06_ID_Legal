@@ -62,6 +62,9 @@ class EnhancedKGDatasetLoader:
     def load(self, progress_callback: Optional[Callable[[str], None]] = None) -> dict:
         """
         Load dataset and return data in expected format.
+        
+        Supports both HuggingFace repos (e.g., "Azzindani/ID_REG_DB_2510")
+        and local paths (e.g., "D:/Data/ID_REG_DB_2510" or "/home/user/data").
 
         Args:
             progress_callback: Optional callback function for progress updates
@@ -69,10 +72,334 @@ class EnhancedKGDatasetLoader:
         Returns:
             dict: Dictionary with 'documents' key containing all records
         """
-        success = self.load_from_huggingface(progress_callback)
+        import os
+        
+        # Detect if dataset_name is a local path
+        # Check for Windows drive letter pattern (D:/ or D:\)
+        has_drive_letter = len(self.dataset_name) >= 2 and self.dataset_name[1] == ':'
+        
+        is_local_path = (
+            has_drive_letter or  # Windows drive letter (D:/ or D:\)
+            os.path.isabs(self.dataset_name) or  # Absolute path
+            self.dataset_name.startswith('./') or  # Relative path
+            self.dataset_name.startswith('../') or
+            self.dataset_name.startswith('/') or  # Unix absolute path
+            os.path.exists(self.dataset_name)  # Path exists
+        )
+        
+        if is_local_path:
+            self.logger.info("Detected local path, loading from filesystem", {
+                "path": self.dataset_name
+            })
+            success = self.load_from_local(progress_callback)
+        else:
+            self.logger.info("Loading from HuggingFace", {
+                "repo": self.dataset_name
+            })
+            success = self.load_from_huggingface(progress_callback)
+        
         if success:
             return {'documents': self.all_records}
         return {'documents': []}
+    
+    def load_from_local(self, progress_callback: Optional[Callable[[str], None]] = None):
+        """
+        Load SQLite database from local filesystem path.
+        
+        Args:
+            progress_callback: Optional callback function for progress updates
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        import os
+        
+        try:
+            self.logger.info("Starting local database load")
+            
+            if progress_callback:
+                progress_callback("📂 Loading SQLite database from local path...")
+            
+            # Find database file
+            db_file = None
+            
+            # Check if path is direct to file
+            if self.dataset_name.endswith('.db'):
+                if os.path.exists(self.dataset_name):
+                    db_file = self.dataset_name
+            else:
+                # Check for database file in directory
+                possible_names = ['id_regulations.db', 'regulations.db', 'data.db']
+                for name in possible_names:
+                    path = os.path.join(self.dataset_name, name)
+                    if os.path.exists(path):
+                        db_file = path
+                        break
+                
+                # Also check directory for any .db file
+                if db_file is None and os.path.isdir(self.dataset_name):
+                    for f in os.listdir(self.dataset_name):
+                        if f.endswith('.db'):
+                            db_file = os.path.join(self.dataset_name, f)
+                            break
+            
+            if db_file is None:
+                error_msg = f"No database file found in {self.dataset_name}"
+                self.logger.error(error_msg)
+                if progress_callback:
+                    progress_callback(f"❌ {error_msg}")
+                raise FileNotFoundError(error_msg)
+            
+            self.db_path = db_file
+            self.logger.success("Database file found", {"path": self.db_path})
+            
+            if progress_callback:
+                progress_callback(f"✅ Database found: {self.db_path}")
+            
+            # Connect to database
+            self.conn = sqlite3.connect(self.db_path)
+            self.conn.execute("PRAGMA query_only = ON")
+            self.conn.execute("PRAGMA cache_size=-64000")
+            self.conn.execute("PRAGMA mmap_size=268435456")
+            
+            self.logger.info("Database connection established")
+            
+            # Verify database structure
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            tables = [row[0] for row in cursor.fetchall()]
+            
+            self.logger.info("Database tables discovered", {
+                "tables": ", ".join(tables),
+                "count": len(tables)
+            })
+            
+            if progress_callback:
+                progress_callback(f"📊 Found tables: {', '.join(tables)}")
+            
+            if 'regulations' not in tables:
+                self.logger.error("Required table 'regulations' not found")
+                raise Exception(f"Table 'regulations' not found in database! Found: {tables}")
+            
+            # Process records using same logic as HuggingFace loader
+            return self._process_database_records(cursor, tables, progress_callback)
+            
+        except Exception as e:
+            self.logger.error("Local loading failed", {
+                "error": str(e),
+                "error_type": type(e).__name__
+            })
+            if progress_callback:
+                progress_callback(f"❌ Error: {str(e)}")
+            
+            import traceback
+            traceback.print_exc()
+            
+            # Clean up on error
+            if self.conn:
+                try:
+                    self.conn.close()
+                except:
+                    pass
+                self.conn = None
+            
+            return False
+
+    def _process_database_records(self, cursor, tables: list, progress_callback: Optional[Callable[[str], None]] = None) -> bool:
+        """
+        Shared method to process database records after connection is established.
+        Used by both load_from_huggingface and load_from_local.
+        
+        Args:
+            cursor: SQLite cursor object
+            tables: List of table names in the database
+            progress_callback: Optional callback for progress updates
+            
+        Returns:
+            bool: True if successful
+        """
+        # Get total count
+        cursor.execute("SELECT COUNT(*) FROM regulations")
+        total_rows = cursor.fetchone()[0]
+        
+        if total_rows == 0:
+            self.logger.error("regulations table is empty")
+            raise Exception("regulations table is empty!")
+        
+        self.logger.info("Starting record processing", {
+            "total_records": f"{total_rows:,}"
+        })
+        
+        if progress_callback:
+            progress_callback(f"📊 Processing {total_rows:,} records...")
+        
+        # Load records in chunks
+        chunk_size = 5000
+        all_records_temp = []
+        embeddings_temp = []
+        
+        for offset in range(0, total_rows, chunk_size):
+            chunk_num = (offset // chunk_size) + 1
+            total_chunks = (total_rows + chunk_size - 1) // chunk_size
+            
+            self.logger.debug(f"Processing chunk {chunk_num}/{total_chunks}", {
+                "offset": offset,
+                "chunk_size": chunk_size
+            })
+            
+            # Fetch main records
+            cursor.execute(f"""
+                SELECT 
+                    global_id, local_id, regulation_type, enacting_body,
+                    regulation_number, year, about, effective_date,
+                    chapter, article, content, chunk_id,
+                    kg_entity_count, kg_cross_ref_count, kg_primary_domain,
+                    kg_domain_confidence, kg_cluster_count, kg_cluster_diversity,
+                    kg_authority_score, kg_hierarchy_level, kg_temporal_score,
+                    kg_years_old, kg_legal_richness, kg_legal_complexity,
+                    kg_has_obligations, kg_has_prohibitions, kg_has_permissions,
+                    kg_completeness_score, kg_connectivity_score,
+                    kg_pagerank, kg_degree_centrality
+                FROM regulations
+                LIMIT {chunk_size} OFFSET {offset}
+            """)
+            
+            rows = cursor.fetchall()
+            
+            for row in rows:
+                record = self._row_to_record(row)
+                all_records_temp.append(record)
+            
+            # Fetch embeddings for this chunk
+            global_ids = [row[0] for row in rows]
+            placeholders = ','.join(['?' for _ in global_ids])
+            
+            # Check if embeddings table exists and detect column names
+            if 'embeddings' in tables:
+                # Detect available columns in embeddings table
+                if not hasattr(self, '_embedding_columns'):
+                    cursor.execute("PRAGMA table_info(embeddings)")
+                    cols = [col[1] for col in cursor.fetchall()]
+                    self._embedding_columns = cols
+                    self.logger.debug("Embeddings table columns", {"columns": cols})
+                
+                # Find the embedding data column (different schemas use different names)
+                embedding_col = None
+                for col_name in ['embedding_blob', 'embedding', 'vector', 'data', 'embeddings']:
+                    if col_name in self._embedding_columns:
+                        embedding_col = col_name
+                        break
+                
+                # Find the ID column
+                id_col = 'global_id' if 'global_id' in self._embedding_columns else 'id'
+                
+                if embedding_col:
+                    cursor.execute(f"""
+                        SELECT {id_col}, {embedding_col} 
+                        FROM embeddings 
+                        WHERE {id_col} IN ({placeholders})
+                    """, global_ids)
+                    
+                    embedding_rows = {row[0]: row[1] for row in cursor.fetchall()}
+                    
+                    for gid in global_ids:
+                        if gid in embedding_rows and embedding_rows[gid]:
+                            try:
+                                blob = embedding_rows[gid]
+                                # Try decompression first (zlib compressed)
+                                try:
+                                    embedding = np.frombuffer(
+                                        zlib.decompress(blob),
+                                        dtype=np.float32
+                                    )
+                                except:
+                                    # Raw numpy bytes
+                                    embedding = np.frombuffer(blob, dtype=np.float32)
+                                embeddings_temp.append(embedding)
+                            except Exception as e:
+                                self.logger.debug(f"Failed to parse embedding: {e}")
+                                embeddings_temp.append(np.zeros(self.embedding_dim, dtype=np.float32))
+                        else:
+                            embeddings_temp.append(np.zeros(self.embedding_dim, dtype=np.float32))
+                else:
+                    self.logger.warning("No embedding column found in embeddings table", {
+                        "available_columns": self._embedding_columns
+                    })
+                    for _ in global_ids:
+                        embeddings_temp.append(np.zeros(self.embedding_dim, dtype=np.float32))
+            else:
+                # No embeddings table, create empty vectors
+                for _ in global_ids:
+                    embeddings_temp.append(np.zeros(self.embedding_dim, dtype=np.float32))
+            
+            # Progress update
+            progress = min(100, int((offset + len(rows)) / total_rows * 100))
+            if progress_callback and progress % 20 == 0:
+                progress_callback(f"📊 Loading: {progress}% ({offset + len(rows):,}/{total_rows:,})")
+        
+        # Store all records
+        self.all_records = all_records_temp
+        
+        self.logger.info("All records loaded", {
+            "count": f"{len(self.all_records):,}"
+        })
+        
+        if progress_callback:
+            progress_callback(f"📊 Loaded {len(self.all_records):,} records")
+        
+        # Convert embeddings
+        import torch
+        
+        if progress_callback:
+            progress_callback("🔄 Converting embeddings to tensors...")
+        
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        
+        self.embeddings = torch.tensor(
+            np.stack(embeddings_temp),
+            dtype=torch.float32,
+            device=device
+        )
+        
+        self.logger.success("Embeddings converted", {
+            "shape": str(self.embeddings.shape),
+            "device": str(device)
+        })
+        
+        del embeddings_temp
+        gc.collect()
+        
+        if progress_callback:
+            progress_callback("📄 Loading TF-IDF vectors...")
+        
+        # Load TF-IDF (sparse format)
+        self._load_tfidf_sparse()
+        
+        if progress_callback:
+            progress_callback("🗃️ Building KG indexes...")
+        
+        # Build KG indexes
+        self._build_enhanced_kg_indexes()
+        
+        # Close connection (will reopen for queries)
+        if self.conn:
+            self.conn.close()
+            self.conn = None
+        
+        gc.collect()
+        
+        kg_count = len(self.kg_entities_lookup)
+        
+        self.logger.success("Dataset loading completed", {
+            "total_records": f"{len(self.all_records):,}",
+            "kg_enhanced": f"{kg_count:,}",
+            "enhancement_rate": f"{kg_count/len(self.all_records)*100:.1f}%" if self.all_records else "0%"
+        })
+        
+        if progress_callback:
+            progress_callback(f"✅ Ready: {len(self.all_records):,} records with {kg_count:,} KG-enhanced")
+        
+        return True
 
     def load_from_huggingface(self, progress_callback: Optional[Callable[[str], None]] = None):
         """
@@ -162,154 +489,8 @@ class EnhancedKGDatasetLoader:
                 self.logger.error("Required table 'regulations' not found")
                 raise Exception("Table 'regulations' not found in database!")
             
-            # Get total count
-            cursor.execute("SELECT COUNT(*) FROM regulations")
-            total_rows = cursor.fetchone()[0]
-            
-            if total_rows == 0:
-                self.logger.error("regulations table is empty")
-                raise Exception("regulations table is empty!")
-            
-            self.logger.info("Starting record processing", {
-                "total_records": f"{total_rows:,}"
-            })
-            
-            if progress_callback:
-                progress_callback(f"📊 Processing {total_rows:,} records...")
-            
-            # Load records in chunks
-            chunk_size = 5000
-            all_records_temp = []
-            embeddings_temp = []
-            
-            for offset in range(0, total_rows, chunk_size):
-                chunk_num = (offset // chunk_size) + 1
-                total_chunks = (total_rows + chunk_size - 1) // chunk_size
-                
-                self.logger.debug(f"Processing chunk {chunk_num}/{total_chunks}", {
-                    "offset": offset,
-                    "chunk_size": chunk_size
-                })
-                
-                # Fetch main records
-                cursor.execute(f"""
-                    SELECT 
-                        global_id, local_id, regulation_type, enacting_body,
-                        regulation_number, year, about, effective_date,
-                        chapter, article, content, chunk_id,
-                        kg_entity_count, kg_cross_ref_count, kg_primary_domain,
-                        kg_domain_confidence, kg_cluster_count, kg_cluster_diversity,
-                        kg_authority_score, kg_hierarchy_level, kg_temporal_score,
-                        kg_years_old, kg_legal_richness, kg_legal_complexity,
-                        kg_has_obligations, kg_has_prohibitions, kg_has_permissions,
-                        kg_completeness_score, kg_connectivity_score,
-                        kg_pagerank, kg_degree_centrality
-                    FROM regulations
-                    LIMIT {chunk_size} OFFSET {offset}
-                """)
-                
-                rows = cursor.fetchall()
-                
-                for row in rows:
-                    record = self._row_to_record(row)
-                    all_records_temp.append(record)
-                
-                # Fetch embeddings for this chunk
-                global_ids = [row[0] for row in rows]
-                placeholders = ','.join(['?' for _ in global_ids])
-                
-                # Check if embeddings table exists
-                if 'embeddings' in tables:
-                    cursor.execute(f"""
-                        SELECT global_id, embedding, dimension
-                        FROM embeddings
-                        WHERE global_id IN ({placeholders})
-                    """, global_ids)
-                    
-                    embedding_rows = cursor.fetchall()
-                    embedding_dict = {row[0]: (row[1], row[2]) for row in embedding_rows}
-                else:
-                    if offset == 0:
-                        self.logger.warning("Embeddings table not found, using zero vectors")
-                        if progress_callback:
-                            progress_callback("   ⚠️ Embeddings table not found, using zero vectors")
-                    embedding_dict = {}
-                
-                # Add embeddings in correct order
-                for global_id in global_ids:
-                    if global_id in embedding_dict:
-                        emb_blob, dim = embedding_dict[global_id]
-                        embedding = self._decompress_embedding(emb_blob, dim)
-                        embeddings_temp.append(embedding)
-                    else:
-                        embeddings_temp.append(np.zeros(self.embedding_dim, dtype=np.float32))
-                
-                # Memory cleanup
-                del rows, embedding_rows, embedding_dict
-                gc.collect()
-            
-            self.all_records = all_records_temp
-            
-            self.logger.success("Records loaded successfully", {
-                "total_records": f"{len(self.all_records):,}"
-            })
-            
-            if progress_callback:
-                progress_callback("📊 Converting embeddings to tensor...")
-            
-            # Convert embeddings to tensor
-            import torch
-            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-            
-            self.logger.info("Converting embeddings to tensor", {
-                "device": str(device),
-                "shape": f"({len(embeddings_temp)}, {self.embedding_dim})"
-            })
-            
-            self.embeddings = torch.tensor(
-                np.array(embeddings_temp, dtype=np.float32),
-                device=device
-            )
-            
-            self.logger.success("Embeddings converted", {
-                "shape": str(self.embeddings.shape),
-                "device": str(device)
-            })
-            
-            del embeddings_temp
-            gc.collect()
-            
-            if progress_callback:
-                progress_callback("📄 Loading TF-IDF vectors...")
-            
-            # Load TF-IDF (sparse format)
-            self._load_tfidf_sparse()
-            
-            if progress_callback:
-                progress_callback("🗃️ Building KG indexes...")
-            
-            # Build KG indexes
-            self._build_enhanced_kg_indexes()
-            
-            # Close connection (will reopen for queries)
-            if self.conn:
-                self.conn.close()
-                self.conn = None
-            
-            gc.collect()
-            
-            kg_count = len(self.kg_entities_lookup)
-            
-            self.logger.success("Dataset loading completed", {
-                "total_records": f"{len(self.all_records):,}",
-                "kg_enhanced": f"{kg_count:,}",
-                "enhancement_rate": f"{kg_count/len(self.all_records)*100:.1f}%"
-            })
-            
-            if progress_callback:
-                progress_callback(f"✅ Ready: {len(self.all_records):,} records with {kg_count:,} KG-enhanced")
-            
-            return True
+            # Use shared method for processing records
+            return self._process_database_records(cursor, tables, progress_callback)
             
         except Exception as e:
             self.logger.error("Loading failed", {
