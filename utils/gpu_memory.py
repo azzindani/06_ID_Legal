@@ -27,34 +27,6 @@ def get_available_gpu_memory() -> float:
         return 0.0
 
 
-def get_recommended_max_new_tokens_for_memory(
-    thinking_mode: str = 'low',
-    default_max_tokens: int = 2048
-) -> int:
-    """
-    DEPRECATED: This function no longer limits max_new_tokens.
-
-    Modern GPUs can handle long contexts. If you experience OOM,
-    manually adjust MAX_NEW_TOKENS environment variable.
-
-    Args:
-        thinking_mode: Thinking mode ('low', 'medium', 'high')
-        default_max_tokens: Default max_new_tokens from config
-
-    Returns:
-        The default_max_tokens unchanged
-    """
-    logger = get_logger("GPUMemory")
-
-    if not torch.cuda.is_available():
-        logger.debug("No GPU available, using default max_new_tokens")
-        return default_max_tokens
-
-    # Just return the default - don't limit it
-    # User can manually set MAX_NEW_TOKENS if needed
-    return default_max_tokens
-
-
 def check_memory_for_generation(
     prompt_length: int,
     max_new_tokens: int,

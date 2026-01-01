@@ -194,8 +194,53 @@ CONTEXT_COMPRESSION = os.getenv("CONTEXT_COMPRESSION", "true").lower() == "true"
 CONTEXT_SUMMARY_THRESHOLD = int(os.getenv("CONTEXT_SUMMARY_THRESHOLD", "4096"))
 
 # =============================================================================
+# SECURITY CONFIGURATION
+# =============================================================================
+
+# Enable ClamAV virus scanning for file uploads (requires ClamAV installed)
+# If ClamAV is not available, will log warning and continue without scanning
+ENABLE_VIRUS_SCAN = os.getenv("ENABLE_VIRUS_SCAN", "true").lower() == "true"
+
+# Maximum file upload size in MB
+MAX_UPLOAD_SIZE_MB = int(os.getenv("MAX_UPLOAD_SIZE_MB", "50"))
+
+# Rate limiting
+RATE_LIMIT_PER_MINUTE = int(os.getenv("RATE_LIMIT_PER_MINUTE", "60"))
+RATE_LIMIT_PER_HOUR = int(os.getenv("RATE_LIMIT_PER_HOUR", "1000"))
+
+# =============================================================================
+# LLAMACPP CONFIGURATION
+# =============================================================================
+
+# Model source (downloads from HuggingFace automatically)
+LLAMACPP_REPO_ID = os.getenv("LLAMACPP_REPO_ID", "Azzindani/Deepseek_ID_Legal_Preview_GGUF")
+LLAMACPP_FILENAME = os.getenv("LLAMACPP_FILENAME", "ID_Legal_Assistant_Q4_K_M.gguf")
+
+# Context and generation
+LLAMACPP_N_CTX = int(os.getenv("LLAMACPP_N_CTX", "32768"))  # 32K context window
+LLAMACPP_MAX_TOKENS = int(os.getenv("LLAMACPP_MAX_TOKENS", "2048"))
+
+# Hybrid CPU/GPU offloading
+LLAMACPP_N_GPU_LAYERS = int(os.getenv("LLAMACPP_N_GPU_LAYERS", "-1"))  # -1=all GPU, 0=CPU only
+LLAMACPP_MAIN_GPU = int(os.getenv("LLAMACPP_MAIN_GPU", "0"))  # Primary GPU index
+LLAMACPP_SPLIT_MODE = os.getenv("LLAMACPP_SPLIT_MODE", "layer")  # layer, row, none
+
+# CPU threading
+LLAMACPP_N_THREADS = int(os.getenv("LLAMACPP_N_THREADS", "0"))  # 0=auto-detect
+LLAMACPP_N_THREADS_BATCH = int(os.getenv("LLAMACPP_N_THREADS_BATCH", "0"))
+
+# Memory optimization
+LLAMACPP_USE_MMAP = os.getenv("LLAMACPP_USE_MMAP", "true").lower() == "true"
+LLAMACPP_USE_MLOCK = os.getenv("LLAMACPP_USE_MLOCK", "false").lower() == "true"
+LLAMACPP_OFFLOAD_KQV = os.getenv("LLAMACPP_OFFLOAD_KQV", "true").lower() == "true"
+
+# Flash attention (faster on supported GPUs)
+LLAMACPP_FLASH_ATTN = os.getenv("LLAMACPP_FLASH_ATTN", "false").lower() == "true"
+
+# =============================================================================
 # ENHANCED MEMORY MANAGER CONFIGURATION
 # =============================================================================
+
 
 # Legal-optimized memory settings for conversational RAG
 # These defaults are 3x more context-aware than standard chatbots

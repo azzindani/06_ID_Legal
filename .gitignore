@@ -57,3 +57,7 @@ Thumbs.db
 # Cache
 .cache/
 *.cache
+
+# Personal (not committed)
+local.ipynb
+.data/sessions.db

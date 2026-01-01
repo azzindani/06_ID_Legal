@@ -12,6 +12,7 @@ from .base import LLMProviderBase
 from .none import NoneProvider
 from .openrouter import OpenRouterProvider
 from .local import LocalProvider
+from .llamacpp import LlamaCppProvider
 
 # Import logger
 try:
@@ -41,6 +42,7 @@ except ImportError:
 PROVIDER_REGISTRY: Dict[str, Type[LLMProviderBase]] = {
     "local": LocalProvider,
     "openrouter": OpenRouterProvider,
+    "llamacpp": LlamaCppProvider,
     "none": NoneProvider,
 }
 
@@ -152,6 +154,28 @@ class LLMProviderFactory:
                 if not cls._instance.load_model():
                     logger.warning("Failed to load local model")
         
+        elif provider_type == "llamacpp":
+            logger.info("Creating LlamaCpp provider...")
+            try:
+                cls._instance = LlamaCppProvider(**kwargs)
+                logger.info(f"LlamaCpp provider created: {cls._instance.model_name}")
+                
+                # Auto-load model unless explicitly disabled
+                if kwargs.get('auto_load', True):
+                    logger.info("Auto-loading LlamaCpp model (this may download ~4GB on first run)...")
+                    if not cls._instance.load_model():
+                        logger.error("Failed to load LlamaCpp model - check llama-cpp-python installation")
+                    else:
+                        logger.info(f"LlamaCpp model loaded successfully: {cls._instance.model_name}")
+            except ImportError as e:
+                logger.error(f"LlamaCpp import failed - install llama-cpp-python: {e}")
+                raise
+            except Exception as e:
+                logger.error(f"LlamaCpp initialization failed: {e}")
+                import traceback
+                traceback.print_exc()
+                raise
+        
         else:
             # Use registry for any future providers
             provider_class = PROVIDER_REGISTRY[provider_type]
@@ -209,6 +233,12 @@ class LLMProviderFactory:
                 "description": "HuggingFace transformers model (GPU required)",
                 "requires_api_key": False,
                 "cost": "Free (uses local GPU)",
+            },
+            "llamacpp": {
+                "name": "LlamaCpp",
+                "description": "GGUF model inference (CPU/GPU hybrid)",
+                "requires_api_key": False,
+                "cost": "Free (local inference)",
             },
             "openrouter": {
                 "name": "OpenRouter",

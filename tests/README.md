@@ -1,2202 +1,373 @@
-# Testing Guide - Verifying Bug Fixes
+# 🧪 Testing Guide
 
-This guide shows you how to test all the critical bug fixes using the existing test infrastructure.
+Complete test suite for the Indonesian Legal RAG system.
 
-## 🚀 Quick Start
+## 📋 Quick Reference
 
-### 1. Install Dependencies
+### All Tests at a Glance
+
+| # | Test File | Purpose | API? | Time |
+|---|-----------|---------|------|------|
+| **Unit Tests** |
+| 1 | `unit/test_llm_providers.py` | LLM provider unit tests | ❌ | 5s |
+| 2 | `unit/test_generation.py` | Generation engine | ❌ | 10s |
+| 3 | `unit/test_hybrid_search.py` | Hybrid search scoring | ❌ | 5s |
+| 4 | `unit/test_consensus.py` | Consensus algorithms | ❌ | 5s |
+| 5 | `unit/test_context_cache.py` | Context caching | ❌ | 5s |
+| 6 | `unit/test_dataloader.py` | Data loading | ❌ | 10s |
+| 7 | `unit/test_knowledge_graph.py` | Knowledge graph | ❌ | 10s |
+| 8 | `unit/test_query_detection.py` | Query classification | ❌ | 5s |
+| 9 | `unit/test_validators.py` | Input validation | ❌ | 5s |
+| 10 | `unit/test_virus_scanning.py` | ClamAV integration | ❌ | 5s |
+| 11 | `unit/test_path_setup.py` | Path utilities | ❌ | 2s |
+| 12 | `unit/conversation/test_session_storage.py` | SQLite sessions | ❌ | 10s |
+| 13 | `unit/conversation/test_manager.py` | Conversation manager | ❌ | 5s |
+| 14 | `unit/conversation/test_exporters.py` | Export formats | ❌ | 5s |
+| **Integration Tests** |
+| 15 | `integration/test_production_ready.py` | Full system validation | ✅ | 5min |
+| 16 | `integration/test_api_endpoints.py` | All API endpoints | ✅ | 2min |
+| 17 | `integration/test_api_http.py` | HTTP-level API tests | ✅ | 1min |
+| 18 | `integration/test_api_integration.py` | Pipeline + API | ✅ | 3min |
+| 19 | `integration/test_streaming.py` | SSE streaming | ✅ | 2min |
+| 20 | `integration/test_conversational.py` | Multi-turn dialogue | ✅ | 5min |
+| 21 | `integration/test_session_export.py` | Session export | ✅ | 2min |
+| 22 | `integration/test_complete_rag.py` | Complete RAG pipeline | ✅ | 5min |
+| 23 | `integration/test_complete_output.py` | Full metadata output | ✅ | 5min |
+| 24 | `integration/test_audit_metadata.py` | Audit & scoring details | ✅ | 3min |
+| 25 | `integration/test_performance.py` | Benchmarks & load | ✅ | 10min |
+| 26 | `integration/test_concurrent_users.py` | Thread safety | ✅ | 2min |
+| 27 | `integration/test_multi_user_sessions.py` | Multi-user sessions | ✅ | 2min |
+| 28 | `integration/test_edge_cases.py` | Error handling | ✅ | 2min |
+| 29 | `integration/test_security_integration.py` | Security tests | ✅ | 2min |
+| 30 | `integration/test_end_to_end.py` | E2E with pytest | ✅ | 5min |
+| 31 | `integration/test_integrated_system.py` | System integration | ✅ | 5min |
+| **LLM Provider Tests** |
+| 32 | `integration/test_llm_providers_simulation.py` | Provider simulation | ❌ | 1min |
+| 33 | `integration/test_llm_provider_multi_turn.py` | Provider + multi-turn | ✅ | 5min |
+| 34 | `integration/test_llamacpp_simulation.py` | LlamaCpp provider | ❌ | 1min |
+| 35 | `integration/test_api_llamacpp.py` | LlamaCpp via API | ✅ | 3min |
+| 36 | `integration/test_multiuser_jwt.py` | JWT authentication | ✅ | 2min |
+| **Document Parser Tests** |
+| 37 | `test_document_parser.py` | Extractors & storage | ❌ | 30s |
+| 38 | `test_document_parser_integration.py` | Pipeline injection | ❌ | 30s |
+| 39 | `test_document_e2e.py` | Document upload E2E | ✅ | 2min |
+| 40 | `test_multi_turn_comprehensive.py` | 8-turn with docs | ✅ | 15min |
+| **Stress Tests** |
+| 41 | `integration/test_stress_single.py` | Max load single query | ✅ | 10min |
+| 42 | `integration/test_stress_conversational.py` | Max load 7-turn | ✅ | 20min |
+| **Other** |
+| 43 | `test_hardware_allocation.py` | GPU/CPU detection | ❌ | 10s |
+| 44 | `test_security_module.py` | Security helpers | ❌ | 10s |
+| 45 | `api/test_enhanced_api.py` | Enhanced API tests | ✅ | 2min |
+| 46 | `test_integration.py` | Basic integration | ✅ | 5min |
+
+---
+
+## 🚀 Common Setup
+
+### Install Dependencies
 
 ```bash
-# Install all required dependencies
 pip install -r requirements.txt
 
-# Or if using conda:
-conda create -n legal-rag python=3.10
-conda activate legal-rag
-pip install -r requirements.txt
+# Document parser extras
+pip install pypdf2 pdfplumber python-docx beautifulsoup4 pytesseract pillow
 ```
 
-### 2. Set Up Environment
+### Start API Server
 
 ```bash
-# Create .env file with your API keys (if using external LLM providers)
-cat > .env << 'EOF'
-# Optional: Only needed if you want to test with external providers
-OPENAI_API_KEY=your_key_here
-ANTHROPIC_API_KEY=your_key_here
-GOOGLE_API_KEY=your_key_here
-EOF
+# Option 1: With local LLM (requires GPU)
+python -m api.server --llm-provider local
+
+# Option 2: With LlamaCpp (GGUF models)
+python -m api.server --llm-provider llamacpp
+
+# Option 3: With OpenRouter (cloud API)
+python -m api.server --llm-provider openrouter
+
+# Option 4: RAG only (no LLM generation)
+python -m api.server --llm-provider none
 ```
 
----
-
-## 📄 Document Parser Tests (NEW)
-
-The document parser module allows users to upload documents (PDF, DOCX, HTML, images) and use them as context in chat. These tests verify all functionality.
-
-### Required Dependencies
-
-```bash
-# Install document parser dependencies
-pip install pypdf2 pdfplumber python-docx beautifulsoup4 pytesseract pillow requests
-```
-
-> **Note:** For OCR (image extraction), you also need Tesseract:
-> - Ubuntu/Kaggle: `apt-get install tesseract-ocr`
-> - macOS: `brew install tesseract`
-> - Windows: Download from [GitHub](https://github.com/UB-Mannheim/tesseract/wiki)
-
----
-
-### Test 1: Unit Tests (No API Required) ⭐
-
-**File:** `test_document_parser.py`
-
-Tests individual extractors, storage, and context building without needing the API server.
-
-```bash
-# Run from project root
-python tests/test_document_parser.py
-```
-
-**What It Tests:**
-| Component | Tests |
-|-----------|-------|
-| PDF Extractor | Extract text from PDFs |
-| DOCX Extractor | Extract from Word docs (needs python-docx) |
-| HTML Extractor | Extract from HTML files |
-| Image/OCR | Extract text from images (needs Tesseract or EasyOCR) |
-| URL Extractor | Fetch and extract from URLs |
-| Document Storage | CRUD, deduplication, session limits |
-| Context Builder | Build prompt context from documents |
-
-**Expected Output:**
-```
-============================================================
-  DOCUMENT PARSER TEST SUITE
-============================================================
-Test documents directory: tests/test_documents
-Documents found: 9
-
-...
-
-TEST SUMMARY
-============================================================
-  Total:  39
-  Passed: 34  (or higher if all deps installed)
-  Failed: 5   (usually DOCX if python-docx not installed)
-```
-
----
-
-### Test 2: Integration Tests (No API Required)
-
-**File:** `test_document_parser_integration.py`
-
-Tests module initialization, pipeline context injection simulation, and URL detection.
-
-```bash
-python tests/test_document_parser_integration.py
-```
-
-**What It Tests:**
-- Module initialization and shutdown
-- Context builder with simulated documents
-- URL detection in prompts
-- Chat flow simulation with uploaded files
-
----
-
-### Test 3: End-to-End API Tests (Requires Running API)
-
-**File:** `test_document_e2e.py`
-
-Tests the complete flow through the API including document upload, chat with context, and cleanup.
-
-**Step 1: Start API Server**
-```bash
-# In separate terminal or background
-python -m uvicorn api.server:app --host 0.0.0.0 --port 8000
-```
-
-**Step 2: Run E2E Tests**
-```bash
-python tests/test_document_e2e.py
-```
-
-**What It Tests:**
-| Test | Description |
-|------|-------------|
-| Upload PDF | Upload document via `/documents/upload` endpoint |
-| List documents | Retrieve session documents via `/documents` |
-| Chat WITH docs | Chat using `include_session_documents=true` |
-| Chat WITHOUT docs | Verify normal chat still works (backwards compatibility) |
-| URL extraction | Extract content from external URL |
-| Cleanup | Delete documents via API |
-
----
-
-### Running in Kaggle
+### Kaggle/Notebook Setup
 
 ```python
-# Cell 1: Install dependencies
-!pip install python-docx pypdf2 pdfplumber beautifulsoup4 pytesseract pillow -q
-
-# Cell 2: Run unit tests (no API needed)
-%cd /kaggle/working/06_ID_Legal
-!python tests/test_document_parser.py
-
-# Cell 3: Run integration tests (no API needed)  
-!python tests/test_document_parser_integration.py
-
-# Cell 4: Run E2E tests (needs API running)
-import subprocess
-import time
-import sys
-
-# Start API in background
-api_proc = subprocess.Popen(
-    [sys.executable, "-m", "uvicorn", "api.server:app", "--port", "8000"],
-    stdout=subprocess.PIPE,
-    stderr=subprocess.PIPE
-)
-
-print("⏳ Starting API (wait 60-90 seconds for model loading)...")
-time.sleep(90)  # Wait longer in Kaggle
-
-# Run tests
-result = subprocess.run(
-    [sys.executable, "tests/test_document_e2e.py"],
-    capture_output=True,
-    text=True
-)
-print(result.stdout)
-
-# Cleanup
-api_proc.terminate()
-```
-
----
-
-### Test 4: Multi-Turn Comprehensive (8-Turn Full Validation) 🏆
-
-**File:** `test_multi_turn_comprehensive.py`
-
-The **most comprehensive test** - validates the entire document integration through 8 conversation turns with document switching, memory retention, and keyword validation.
-
-```bash
-# Start API first
-python -m uvicorn api.server:app --host 0.0.0.0 --port 8000
-
-# Run test (takes 15-30 minutes on Kaggle GPU)
-python tests/test_multi_turn_comprehensive.py
-```
-
-**What It Tests:**
-
-| Turn | Document Context | Validation |
-|------|-----------------|------------|
-| 1 | Upload PDF #1 | Doc + RAG integration |
-| 2 | Same doc | Memory + doc retention |
-| 3 | **No document** | Backwards compatibility |
-| 4 | Upload PDF #2 | Document switching |
-| 5 | Same doc | Memory + switched doc |
-| 6 | Both docs | Multi-document context |
-| 7 | URL extract | URL integration |
-| 8 | **No document** | Memory only |
-
-**Features:**
-- ✅ Keyword validation (checks answer quality)
-- ✅ Timing metrics (per-turn and total)
-- ✅ JSON report generation
-- ✅ Session cleanup
-
-**Report Output:** `tests/test_reports/multi_turn_test_*.json`
-
-**Kaggle Instructions:**
-```python
-# Cell 1: Start API
-import threading
-import time
-import os
-import sys
+import threading, time, os, sys
 
 os.chdir('/kaggle/working/06_ID_Legal')
 sys.path.insert(0, '/kaggle/working/06_ID_Legal')
+sys.argv = ['api.server', '--llm-provider', 'llamacpp']  # or 'none'
 
 def start_api():
     import uvicorn
     from api.server import app
-    uvicorn.run(app, host="127.0.0.1", port=8000, log_level="warning")
+    uvicorn.run(app, host="127.0.0.1", port=8000)
 
 api_thread = threading.Thread(target=start_api, daemon=True)
 api_thread.start()
-
-print("⏳ Waiting 90 seconds for API startup...")
-time.sleep(90)
-print("✅ API ready")
-```
-
-```python
-# Cell 2: Run comprehensive test
-!python tests/test_multi_turn_comprehensive.py
+time.sleep(60)  # Wait for initialization
 ```
 
 ---
 
-## 🤖 LLM Provider Test Suite (NEW)
+## 🧪 Running Tests
 
-Tests for the flexible LLM Provider system that supports multiple backends (OpenRouter, Local, None).
-
-### Test 1: Unit Tests (Mocked, Fast)
-
-**File:** `tests/unit/test_llm_providers.py`
-
-Quick pytest-based tests for all provider components.
+### Unit Tests (No API Required)
 
 ```bash
+# All unit tests
+python -m pytest tests/unit/ -v
+
+# With coverage
+python -m pytest tests/unit/ -v --cov=. --cov-report=html
+
+# Specific test
 python -m pytest tests/unit/test_llm_providers.py -v
 ```
 
-**What It Tests:**
-- NoneProvider (RAG-only mode)
-- OpenRouterProvider (initialization, model presets)
-- LocalProvider (GPU wrapper)
-- LLMProviderFactory (creation, singleton, shutdown)
-- SecureKeyStore (save, load, delete encrypted keys)
-- ResponseCache (LRU caching, TTL, stats)
-- UsageTracker (token/cost tracking)
-
----
-
-### Test 2: Real Simulation Test (No Mocking)
-
-**File:** `tests/integration/test_llm_providers_simulation.py`
-
-Comprehensive end-to-end simulation with real execution (no mocks).
+### Integration Tests (Requires API)
 
 ```bash
-# Basic test (9 tests, no server needed)
-python tests/integration/test_llm_providers_simulation.py
-
-# With API server testing
-python tests/integration/test_llm_providers_simulation.py --with-api
-
-# With OpenRouter live API
-python tests/integration/test_llm_providers_simulation.py --with-openrouter --openrouter-key sk-or-v1-...
-
-# Full test (all features)
-python tests/integration/test_llm_providers_simulation.py --full --openrouter-key sk-or-v1-...
-```
-
-**What It Tests:**
-
-| Test | Description |
-|------|-------------|
-| NoneProvider | Creates provider, generate, stream, info |
-| LLMProviderFactory | Singleton, provider creation, shutdown |
-| SecureKeyStore | Encrypted storage (save/load/delete) |
-| ResponseCache | LRU eviction, TTL, cache stats |
-| UsageTracker | Token recording, session stats |
-| ContextTransfer | Context compatibility checks |
-| Model Presets | Free priority, config access |
-| API Key Validation | Invalid format rejection |
-| LocalProvider | GPU wrapper initialization |
-| OpenRouterProvider | Live API + SSE streaming (optional) |
-| API Endpoints | All /llm/* endpoints (optional) |
-| Runtime Switching | Provider switch via API (optional) |
-
-**Feature Coverage Displayed at End:**
-```
-📋 Feature Coverage:
-  ✅ 3 Providers (OpenRouter, Local, None): Tested
-  ✅ Encrypted API key storage: Tested
-  ✅ Token tracking: Tested
-  ✅ Response caching: Tested
-  ✅ Free model presets (priority): Tested
-  ✅ API key validation: Tested
-  ✅ Smart provider switching: Tested
-  ⏭️ SSE Streaming: Skipped (use --with-openrouter)
-```
-
----
-
-### Test 3: Multi-Turn Conversation Test (Fallback + Switching)
-
-**File:** `tests/integration/test_llm_provider_multi_turn.py`
-
-Tests multi-turn conversation with document context, provider fallback, and smart switching.
-
-```bash
-# Basic test (no API key needed)
-python tests/integration/test_llm_provider_multi_turn.py
-
-# With OpenRouter live API
-python tests/integration/test_llm_provider_multi_turn.py --openrouter-key sk-or-v1-...
-```
-
-**What It Tests:**
-
-| Test | Description |
-|------|-------------|
-| Fallback Chain | Auto-retry with different providers on failure |
-| Context Preservation | Preserve conversation when switching providers |
-| Multi-Turn + Documents | 3-turn conversation with document context |
-| Provider Switching | Switch providers mid-conversation |
-| Streaming + Fallback | Stream tokens with automatic fallback |
-| OpenRouter Live | Full multi-turn with real API (optional) |
-
-**Key Classes:**
-```python
-# Fallback chain for reliability
-from tests.integration.test_llm_provider_multi_turn import ProviderFallbackChain
-
-chain = ProviderFallbackChain(
-    providers=["openrouter", "local", "none"],
-    openrouter_key="sk-or-v1-..."
-)
-result = chain.generate_with_fallback("Your prompt here")
-
-# Conversation with provider switching
-from tests.integration.test_llm_provider_multi_turn import ConversationWithProviderSwitching
-
-conv = ConversationWithProviderSwitching(chain)
-conv.add_document("doc-1", "contract.pdf", content, 5000)
-conv.chat("Question about document", include_docs=True, stream=True)
-conv.switch_provider("openrouter")  # Preserves context
-```
-
-**Sample Output:**
-```
-============================================================
-  TEST 3: Multi-Turn Conversation with Documents
-============================================================
-
-  📄 Document added: PP_35_2021_PKWT.pdf (523 chars)
-
-[Turn 1: Query about document]
-Provider: none
-Response: ⚠️ **Mode RAG-Only Aktif**...
-
-[Turn 2: Follow-up question]
-Provider: none
-Response: ...
-
-✅ Multi-Turn with Documents: 3 turns completed
-```
-
----
-
-### LLM Provider Test Summary
-
-| Test File | Purpose | API Required | OpenRouter Key |
-|-----------|---------|--------------|----------------|
-| `test_llm_providers.py` | Unit tests (fast, mocked) | ❌ | ❌ |
-| `test_llm_providers_simulation.py` | Real simulation (comprehensive) | Optional | Optional |
-| `test_llm_provider_multi_turn.py` | 8-turn conversation with OpenRouter | ✅ | ✅ |
-
----
-
-### Running LLM Provider Tests in Kaggle
-
-**Step 1: Start API Server (Skip Local LLM)**
-
-```python
-# Cell 1: Start API with --llm-provider none (no local LLM loading)
-import threading
-import time
-import os
-import sys
-
-os.chdir('/kaggle/working/06_ID_Legal')
-sys.path.insert(0, '/kaggle/working/06_ID_Legal')
-
-# IMPORTANT: Set CLI args BEFORE importing the app
-sys.argv = ['api.server', '--llm-provider', 'none']
-
-def start_api():
-    import uvicorn
-    from api.server import app
-    uvicorn.run(app, host="127.0.0.1", port=8000, log_level="info")
-
-api_thread = threading.Thread(target=start_api, daemon=True)
-api_thread.start()
-
-print("⏳ Starting API with --llm-provider none...")
-print("   (Skips local LLM, will configure OpenRouter at runtime)")
-print("   Wait ~30-60 seconds for RAG pipeline...")
-time.sleep(60)
-print("✅ API should be ready!")
-```
-
-**Step 2: Verify API is Running**
-
-```python
-# Cell 2: Check API health and LLM status
-import requests
-try:
-    r = requests.get("http://127.0.0.1:8000/api/v1/health", timeout=5)
-    if r.status_code == 200:
-        print("✅ API is running!")
-        # Check LLM provider status
-        s = requests.get("http://127.0.0.1:8000/api/v1/llm/status", timeout=5)
-        print(f"LLM Provider: {s.json()}")
-    else:
-        print(f"❌ Status: {r.status_code}")
-except Exception as e:
-    print(f"❌ Cannot connect: {e}")
-```
-
-**Step 3: Run Tests**
-
-```python
-# Cell 3A: Simulation test (no OpenRouter key needed, no server needed)
-!python tests/integration/test_llm_providers_simulation.py
-```
-
-```python
-# Cell 3B: Multi-turn test with OpenRouter (requires API running)
-import os
-os.environ["OPENROUTER_API_KEY"] = "sk-or-v1-YOUR-KEY-HERE"
-
-!python tests/integration/test_llm_provider_multi_turn.py
-```
-
-> **Note:** The multi-turn test will configure OpenRouter at runtime via the `/llm/config` API endpoint.
-
----
-
-## 🔍 Multi-Turn API Blocking Diagnostic Tests (NEW)
-
-These diagnostic tests help identify blocking issues in multi-turn conversations. Use them when the system works for the first request but blocks on subsequent requests.
-
-### Test 1: Pipeline Test (Standalone - No API Server Needed) ⭐
-
-**File:** `minimal_pipeline_test.py`
-
-Tests the core pipeline directly without HTTP/API. Use this **first** to verify the LLM and retrieval system work correctly for multiple sequential queries.
-
-**How to Run:**
-```bash
-# From project root
-python tests/minimal_pipeline_test.py
-
-# In Kaggle notebook
-%cd /kaggle/working/06_ID_Legal
-%run tests/minimal_pipeline_test.py
-```
-
-**What It Tests:**
-- LLM engine direct generation (3 sequential queries)
-- Full RAG pipeline with streaming (4 sequential queries simulating UI usage)
-- RAM/VRAM memory management and cache clearing
-- Generation lock serialization
-
-**Expected Output:**
-```
-======================================================================
-DIAGNOSTIC SUMMARY
-======================================================================
-Total Tests: 7
-Passed: 7
-Failed: 0
-Total Time: XXXs
-
---- TEST RESULTS ---
-[1] LLM_Gen_1: ✅ PASS (Xs)
-    Memory: RAM=XXXmb, VRAM=XXXmb (XX%)
-...
-
---- ALL TESTS PASSED ---
-The pipeline works correctly for multiple sequential queries.
-If blocking occurs with Gradio/API, the issue is in HTTP/UI layer.
-======================================================================
-```
-
-**Results saved to:** `tests/test_results.json`
-
----
-
-### Test 2: API Test (Requires Running API Server)
-
-**File:** `debug_api_blocking.py`
-
-Tests the HTTP API layer by simulating Gradio UI requests. **Run this ONLY if Test 1 passes and you still have blocking issues.**
-
-**Step 1: Start API Server First** (in a separate terminal or Kaggle cell)
-```bash
-python -m uvicorn api.server:app --host 0.0.0.0 --port 8000
-```
-Wait for "API ready to serve requests" message.
-
-**Step 2: Run the Test**
-```bash
-# From project root
-python tests/debug_api_blocking.py
-
-# With custom API URL
-python tests/debug_api_blocking.py http://127.0.0.1:8000/api/v1
-
-# In Kaggle notebook (after API is running)
-%run tests/debug_api_blocking.py http://127.0.0.1:8000/api/v1
-```
-
-**What It Tests:**
-- API health check
-- Retrieve endpoint (non-streaming) - 3 sequential queries
-- Chat endpoint (streaming SSE) - 4 sequential queries
-- Mixed retrieve/chat sequence
-
-**Results saved to:** `tests/api_test_results.json`
-
----
-
-### Interpreting Diagnostic Results
-
-Both tests generate a **DIAGNOSTIC SUMMARY** with pattern analysis:
-
-| Pattern | Likely Cause | Solution |
-|---------|--------------|----------|
-| All pipeline tests pass, API fails | HTTP/Gradio layer issue | Check server config, connection handling |
-| First test passes, 2nd fails | Resource exhaustion or lock deadlock | Check generation lock, memory cleanup |
-| Only CHAT tests fail | Streaming/SSE connection issue | Check response streaming, connection close |
-| VRAM > 90% at failure | GPU memory exhaustion | Increase cache clearing, reduce batch size |
-
-### Memory Guidelines
-
-- **VRAM < 80%**: Safe zone
-- **VRAM 80-90%**: Warning, may cause OOM on next request
-- **VRAM > 90%**: High risk of OOM errors
-
----
-
-## 📋 Testing the Bug Fixes
-
-### Test 1: Division by Zero Fix (hybrid_search.py)
-
-**What was fixed:** Weight normalization crash when all weights are zero
-
-```bash
-# Run the hybrid search unit test
-python -m pytest tests/unit/test_dataloader.py -v -k "search"
-
-# Or test directly with comprehensive test:
-python tests/integration/comprehensive_test.py
-```
-
-**Manual verification:**
-```python
-# Create a test script: test_weight_fix.py
-import sys
-sys.path.insert(0, '.')
-
-from core.search.hybrid_search import HybridSearchEngine
-from config import RESEARCH_TEAM_PERSONAS
-
-# Simulate zero weights scenario
-persona = RESEARCH_TEAM_PERSONAS['senior_legal_researcher']
-weights = {'semantic_match': 0.0, 'keyword_precision': 0.0}
-
-# This should NOT crash anymore
-engine = HybridSearchEngine(None, None, None)
-result = engine._apply_persona_weights(weights, persona)
-print(f"✅ Zero weights handled: {result}")
-```
-
-### Test 2: XML Parsing Fix (generation_engine.py)
-
-**What was fixed:** Robust parsing of thinking tags with fallback mechanisms
-
-```bash
-# Run generation tests
-python -m pytest tests/unit/test_generation.py -v
-
-# Test with malformed XML
-python -c "
-import sys
-sys.path.insert(0, '.')
-from core.generation.generation_engine import GenerationEngine
-from config import get_default_config
-
-config = get_default_config()
-engine = GenerationEngine(config)
-
-# Test various formats
-test_cases = [
-    '<think>Normal thinking</think>Answer here',
-    '<think>Nested <think>tags</think></think>Answer',
-    'No tags at all',
-    '<think>Unclosed tag... Answer here',
-    'Multiple <think>first</think> and <think>second</think> blocks'
-]
-
-for i, text in enumerate(test_cases):
-    thinking, answer = engine._extract_thinking(text)
-    print(f'✅ Test {i+1}: Extracted thinking={len(thinking)} chars, answer={len(answer)} chars')
-"
-```
-
-### Test 3: Global State Fix (api/server.py)
-
-**What was fixed:** Multi-worker support with app.state instead of globals
-
-```bash
-# Test API with multiple workers
-uvicorn api.server:app --workers 4 --host 0.0.0.0 --port 8000
-
-# In another terminal, test concurrent requests:
-for i in {1..10}; do
-  curl -X POST "http://localhost:8000/api/v1/search" \
-    -H "Content-Type: application/json" \
-    -d '{"query": "Test query '$i'", "max_results": 5}' &
-done
-wait
-
-echo "✅ All concurrent requests completed without crashes"
-```
-
-**Automated test:**
-```bash
-# Run API health check
-python -c "
-import requests
-import concurrent.futures
-
-def test_endpoint(i):
-    response = requests.post(
-        'http://localhost:8000/api/v1/search',
-        json={'query': f'Test {i}', 'max_results': 5}
-    )
-    return response.status_code == 200
-
-# Start server first, then:
-with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-    results = list(executor.map(test_endpoint, range(20)))
-    print(f'✅ Passed: {sum(results)}/20 concurrent requests')
-"
-```
-
-### Test 4: Memory Leak Fix (stages_research.py)
-
-**What was fixed:** Bounded memory for persona performance tracking
-
-```bash
-# Test memory growth
-python -c "
-import sys
-sys.path.insert(0, '.')
-from core.search.stages_research import StagesResearchEngine
-import tracemalloc
-
-tracemalloc.start()
-
-engine = StagesResearchEngine(None, {})
-
-# Simulate 1000 queries (should not grow unboundedly)
-for i in range(1000):
-    engine.update_persona_performance(
-        'senior_legal_researcher',
-        'procedural',
-        0.8,
-        10
-    )
-
-current, peak = tracemalloc.get_traced_memory()
-print(f'✅ Memory after 1000 updates: {current / 1024:.2f} KB')
-print(f'✅ Peak memory: {peak / 1024:.2f} KB')
-
-# Check history is bounded
-perf = engine._persona_performance['senior_legal_researcher']['procedural']
-print(f'✅ History size bounded to: {len(perf[\"result_counts\"])} entries (max 100)')
-assert len(perf['result_counts']) <= 100, 'Memory leak detected!'
-print('✅ Memory leak fix verified!')
-"
-```
-
-### Test 5: Input Validation (API routes)
-
-**What was fixed:** Enhanced input validation and XSS prevention
-
-```bash
-# Test validation with various inputs
-python -c "
-import sys
-sys.path.insert(0, '.')
-from api.routes.search import SearchRequest
-from pydantic import ValidationError
-
-# Valid input
-try:
-    req = SearchRequest(query='Valid query', max_results=10)
-    print('✅ Valid input accepted')
-except ValidationError as e:
-    print(f'❌ Valid input rejected: {e}')
-
-# Test XSS prevention
-malicious_inputs = [
-    '<script>alert(1)</script>',
-    'javascript:alert(1)',
-    '<img onerror=alert(1)>',
-]
-
-for mal_input in malicious_inputs:
-    try:
-        req = SearchRequest(query=mal_input)
-        print(f'❌ Malicious input NOT blocked: {mal_input}')
-    except ValidationError:
-        print(f'✅ Malicious input blocked: {mal_input[:30]}...')
-
-# Test length limits
-try:
-    req = SearchRequest(query='x' * 3000)
-    print('❌ Long input NOT rejected')
-except ValidationError:
-    print('✅ Long input rejected (max 2000 chars)')
-
-# Test session ID validation
-from api.routes.session import SessionCreateRequest
-try:
-    req = SessionCreateRequest(session_id='valid-session_123')
-    print('✅ Valid session ID accepted')
-except ValidationError as e:
-    print(f'❌ Valid session ID rejected: {e}')
-
-try:
-    req = SessionCreateRequest(session_id='../../../etc/passwd')
-    print('❌ Path traversal NOT blocked')
-except ValidationError:
-    print('✅ Path traversal blocked in session ID')
-"
-```
-
-### Test 6: Rate Limiting
-
-**What was fixed:** Added rate limiting middleware
-
-```bash
-# Test rate limiting (requires running server)
-python -c "
-import requests
-import time
-
-url = 'http://localhost:8000/api/v1/health'
-
-print('Testing rate limiting...')
-success_count = 0
-rate_limited_count = 0
-
-# Send 70 requests rapidly (limit is 60/minute)
-for i in range(70):
-    response = requests.get(url)
-    if response.status_code == 200:
-        success_count += 1
-    elif response.status_code == 429:
-        rate_limited_count += 1
-        print(f'✅ Rate limited at request {i+1}')
-        break
-    time.sleep(0.1)
-
-print(f'✅ Successful: {success_count}')
-print(f'✅ Rate limited: {rate_limited_count}')
-assert rate_limited_count > 0, 'Rate limiting not working!'
-print('✅ Rate limiting working correctly!')
-"
-```
-
-## 🧪 Running All Tests
-
-### Run All Unit Tests
-
-```bash
-# Run all unit tests
-python -m pytest tests/unit/ -v
-
-# With coverage report
-python -m pytest tests/unit/ -v --cov=. --cov-report=html
-
-# Run specific test file
-python -m pytest tests/unit/test_generation.py -v
-```
-
-### Run Comprehensive Integration Tests (NEW - Production-Ready)
-
-These tests show REAL output and initialize the full system like production:
-
-```bash
-# 1. Production Readiness Test (Complete System)
-# Tests: Simple queries, complex queries, multi-turn, bug fixes, performance
+# Start API first, then:
 python tests/integration/test_production_ready.py
+python tests/integration/test_streaming.py
+python tests/integration/test_conversational.py
+```
 
-# 2. API Endpoints Test (Full API Testing)
-# Tests: Health, search, generate, sessions, validation, rate limiting
-python tests/integration/test_api_endpoints.py
+### Document Parser Tests
 
-# 3. Session & Export Test (Conversation Management)
-# Tests: Sessions, history, Markdown/JSON/HTML export
-python tests/integration/test_session_export.py
+```bash
+# Unit tests (no API)
+python tests/test_document_parser.py
 
-# 4. Streaming LLM Output Test (REAL-TIME STREAMING) ⭐
-# Tests: Direct pipeline streaming, API SSE streaming, session-based streaming
-# Watch the LLM response appear in REAL-TIME as it generates!
+# Integration (no API)
+python tests/test_document_parser_integration.py
+
+# E2E (requires API)
+python tests/test_document_e2e.py
+```
+
+### LLM Provider Tests
+
+```bash
+# Simulation (no API)
+python tests/integration/test_llm_providers_simulation.py
+python tests/integration/test_llamacpp_simulation.py
+
+# With API
+python tests/integration/test_api_llamacpp.py
+python tests/integration/test_multiuser_jwt.py
+```
+
+### Stress Tests
+
+```bash
+# Single query max load
+python tests/integration/test_stress_single.py
+
+# 7-turn conversation max load
+python tests/integration/test_stress_conversational.py
+
+# Quick mode
+python tests/integration/test_stress_single.py --quick
+```
+
+---
+
+## 📊 Test Categories Explained
+
+### Unit Tests
+Fast, isolated tests for individual components. No external dependencies.
+
+### Integration Tests
+Test component interactions. Most require the API server running.
+
+### LLM Provider Tests
+Test different LLM backends (local, LlamaCpp, OpenRouter, none).
+
+| Provider | Description | GPU Required |
+|----------|-------------|--------------|
+| `local` | HuggingFace transformers | ✅ Yes |
+| `llamacpp` | GGUF models (hybrid CPU/GPU) | Optional |
+| `openrouter` | Cloud API (200+ models) | ❌ No |
+| `none` | RAG only, no generation | ❌ No |
+
+### Document Parser Tests
+Test document upload, parsing, and context injection.
+
+| Format | Extractor | Dependencies |
+|--------|-----------|--------------|
+| PDF | pypdf2, pdfplumber | `pip install pypdf2 pdfplumber` |
+| DOCX | python-docx | `pip install python-docx` |
+| HTML | beautifulsoup4 | `pip install beautifulsoup4` |
+| Images | pytesseract/EasyOCR | Tesseract installed |
+| URLs | requests | Built-in |
+
+### Stress Tests
+Maximum load testing with all settings maxed:
+- 5 search phases
+- 600-800 candidates per phase
+- 5 research personas
+- 20 final documents
+- 8192 max tokens
+
+---
+
+## 🔍 Specific Test Details
+
+### Production Readiness (`test_production_ready.py`)
+
+Validates complete system including:
+- Simple queries
+- Complex legal queries
+- Multi-turn conversations
+- Bug fix regressions
+- Performance baselines
+
+### Streaming (`test_streaming.py`)
+
+Tests real-time token streaming:
+- Direct pipeline streaming
+- SSE API streaming
+- Session-based streaming
+
+```bash
+# Direct pipeline only
 python tests/integration/test_streaming.py
 
-# Optional: Test API streaming endpoints too (requires starting server)
+# With API SSE
 python tests/integration/test_streaming.py --api
+```
 
-# 5. Comprehensive Audit & Metadata Test (FULL TRANSPARENCY) 🔍
-# Shows ALL internal details: scores, calculations, metadata, references
-# Perfect for: auditing, debugging, UI development, understanding ranking
-# Output includes:
-#   - All scoring details (semantic, keyword, KG, authority, temporal, completeness)
-#   - Weight calculations and final scores
-#   - Complete document metadata with entities & relationships
-#   - Phase-by-phase research results
-#   - Persona contributions
-#   - Timing breakdowns
-#   - Full JSON metadata dump
-python tests/integration/test_audit_metadata.py
+### Audit & Metadata (`test_audit_metadata.py`)
 
-# Custom query
+Full transparency into scoring:
+- Semantic, keyword, KG scores
+- Authority, temporal, completeness
+- Weight calculations
+- Phase-by-phase results
+- Persona contributions
+
+```bash
 python tests/integration/test_audit_metadata.py --query "Apa sanksi UU ITE?"
+```
 
-# Compare multiple queries
-python tests/integration/test_audit_metadata.py --multi
+### Performance (`test_performance.py`)
 
-# 6. Performance & Load Testing (BENCHMARKS) 📊
-# Tests: Response times, concurrent handling, memory usage, throughput
-# Output includes:
-#   - Query response times by type (simple, sanction, procedural, complex)
-#   - P50/P90/P99 latency percentiles
-#   - Throughput (queries per second)
-#   - Memory profiling
-#   - Concurrent load testing
-python tests/integration/test_performance.py
+Benchmarking and load testing:
+- Response times by query type
+- P50/P90/P99 latencies
+- Throughput (QPS)
+- Memory profiling
+- Concurrent load
 
-# Full benchmark suite (all query types)
+```bash
 python tests/integration/test_performance.py --full
-
-# Concurrent load test
-python tests/integration/test_performance.py --concurrent --threads 3 --queries 2
-
-# Memory profiling
+python tests/integration/test_performance.py --concurrent --threads 3
 python tests/integration/test_performance.py --memory
+```
 
-# 7. Complete RAG Output Test (5 QUERIES WITH FULL METADATA) 📋
-# Tests: Multiple queries with streaming, ALL retrieved documents, full scoring
-# Output includes:
-#   - Question, Query Type, Thinking Process
-#   - Streamed answer (real-time token output)
-#   - ALL legal references with complete scoring metadata
-#   - Research process details (team members, phases, document counts)
-#   - Export to JSON for further analysis
-python tests/integration/test_complete_output.py
+---
 
-# With JSON export for parsing
-python tests/integration/test_complete_output.py --export
+## 🛠️ Bug Fix Verification
 
-# 8. Conversational Test (MULTI-TURN DIALOGUE WITH MEMORY) 💬
-# Tests: Conversation memory, context management, topic shifts, regulation recognition
-# Demonstrates intelligent legal assistant behavior across 5 turns:
-#   Turn 1: General labor rights question (establishes context)
-#   Turn 2: Specific UU No. 13/2003 on severance (tests regulation recognition)
-#   Turn 3: Follow-up question on legal remedies (tests conversation memory)
-#   Turn 4: Topic shift to environmental permits (tests context switching)
-#   Turn 5: Tax law question (tests multi-domain knowledge)
-# Output includes:
-#   - Turn-by-turn analysis with topic tracking
-#   - Conversation coherence scoring
-#   - Memory and context metrics
-#   - Specific regulation recognition stats
-python tests/integration/test_conversational.py
+### Division by Zero (hybrid_search.py)
+```bash
+python -m pytest tests/unit/test_hybrid_search.py -v -k "weight"
+```
 
-# With verbose metadata (shows thinking process)
-python tests/integration/test_conversational.py --verbose
+### XML Parsing (generation_engine.py)
+```bash
+python -m pytest tests/unit/test_generation.py -v
+```
 
-# Export conversation results to JSON
-python tests/integration/test_conversational.py --export --output conversation_results.json
-
-# 9. Output Parser & Validator (AUDIT REPORTS) 📊
-# Parses JSON exports and generates audit reports
-# Output includes:
-#   - Structured extraction of all legal references
-#   - Validation of output completeness
-#   - Per-query audit breakdown
-#   - CSV export for spreadsheet analysis
-python tests/integration/test_output_parser.py --file <export.json>
-
-# Generate test data and parse in one command
-python tests/integration/test_output_parser.py --generate
-
-# Export references to CSV
-python tests/integration/test_output_parser.py --file <export.json> --csv references.csv
-
-# 10. Complete RAG Pipeline Test
-python tests/integration/test_complete_rag.py
-
-# 11. Integrated System Test
-python tests/integration/test_integrated_system.py
-
-# 12. End-to-End Test (with pytest)
-python -m pytest tests/integration/test_end_to_end.py -v -s
-
-# 13. Stress Test - Single Query (MAXIMUM LOAD)
-# Tests single query with all settings maxed out
-python tests/integration/test_stress_single.py
-
-# 14. Stress Test - Conversational (MAXIMUM LOAD)
-# Tests 7-turn conversation with maximum settings
-python tests/integration/test_stress_conversational.py
-
-# 15. LangGraph Visualization (NEW) ⭐
-# Generates ASCII and Mermaid diagrams of the search orchestrator workflow
-python tests/visualize_langgraph.py
-
-# 16. Security Integration Test (NEW) 🛡️
-# Real integration test with authentication, XSS/SQL/prompt injection, rate limiting
+### Rate Limiting
+```bash
 python tests/integration/test_security_integration.py
-
-# 17. API Integration Test (NEW) 🌐
-# Tests all three API endpoints with actual pipeline execution
-python tests/integration/test_api_integration.py --quick
-
-# 18. HTTP-Level API Test (NEW) 🌍
-# Real HTTP requests to a running FastAPI server
-python tests/integration/test_api_http.py
-
-# 19. Concurrent User Simulation (NEW) 👥
-# Multiple users making simultaneous requests (thread safety)
-python tests/integration/test_concurrent_users.py --users 10 --requests 5
-
-# 20. Edge Cases & Error Handling (NEW) ⚠️
-# Unusual inputs, boundary conditions, error recovery
-python tests/integration/test_edge_cases.py
-
-# 21. Session Storage Unit Tests (NEW) 💾
-# SQLite persistence: CRUD, turns, persistence across restarts, isolation
-python -m pytest tests/unit/conversation/test_session_storage.py -v
-
-# 22. Multi-User Session Tests (NEW) 👥💬
-# Concurrent sessions, API simulation, multi-worker, session isolation
-python -m pytest tests/integration/test_multi_user_sessions.py -v
-
-# 23. Virus Scanning Tests (NEW) 🦠
-# ClamAV integration: clean/infected detection, fallback behavior
-python -m pytest tests/unit/test_virus_scanning.py -v
-
-# 24. Path Setup Tests (NEW) 📁
-# Centralized path utility: PROJECT_ROOT, import verification
-python -m pytest tests/unit/test_path_setup.py -v
 ```
 
-## 💾 Session Persistence Tests
-
-The system now includes **SQLite-based session persistence** for conversations. Sessions survive server restarts and work across API workers.
-
-### Session Storage Unit Tests
-
+### Input Validation
 ```bash
-python -m pytest tests/unit/conversation/test_session_storage.py -v
+python -m pytest tests/unit/test_validators.py -v
 ```
-
-**What's tested:**
-- ✅ Session creation (auto ID, custom ID, duplicates)
-- ✅ Turn management (add, retrieve, limit)
-- ✅ Session data and summary statistics
-- ✅ Deletion and cleanup
-- ✅ Search history functionality
-- ✅ **Persistence across restarts** (critical!)
-- ✅ Session isolation (no data leakage)
-
-### Multi-User Session Tests (API Simulation)
-
-```bash
-python -m pytest tests/integration/test_multi_user_sessions.py -v
-```
-
-**What's tested:**
-- ✅ Concurrent session creation from multiple threads
-- ✅ Parallel turn additions
-- ✅ Interleaved read/write operations
-- ✅ Session data isolation between users
-- ✅ API-like session flow simulation
-- ✅ Multi-worker access to same database
-- ✅ Backward compatibility with in-memory mode
-
-**Example output:**
-```
-test_concurrent_session_creation PASSED
-test_concurrent_turn_additions PASSED
-test_session_isolation_no_data_leakage PASSED
-test_api_like_session_flow PASSED
-test_multi_worker_simulation PASSED
-```
-
-## 📊 LangGraph Visualization
-
-The system uses **LangGraph** to orchestrate the multi-stage research and consensus process. You can preview the workflow logic using the visualization tool:
-
-```bash
-python tests/visualize_langgraph.py
-```
-
-This will:
-1. Print an **ASCII diagram** directly to your console.
-2. Generate a **Mermaid.js code** block compatible with GitHub/VSCode.
-3. Save a preview file at `tests/langgraph_workflow.md`.
-
-You can view the resulting [langgraph_workflow.md](langgraph_workflow.md) file in any Markdown viewer (including GitHub or VSCode with Mermaid extension) to see the visual flow.
-
-## 🛡️ Security Integration Test
-
-Comprehensive integration test that validates all security features with **real system components** and **actual threat scenarios**.
-
-```bash
-python tests/integration/test_security_integration.py --verbose
-```
-
-**What's tested with real components:**
-
-### 1. Authentication Integration
-- ✅ API Key validation with environment variables
-- ✅ Constant-time comparison (timing attack prevention)
-- ✅ Key generation and validation
-- ✅ Token bucket rate limiting per key
-- ✅ Empty/invalid key rejection
-
-### 2. Input Safety with Real Legal Queries
-- ✅ Valid Indonesian legal queries (accepted)
-- ✅ XSS injection attempts: `<script>`, `javascript:`, `onerror=`
-- ✅ Prompt injection: "ignore previous instructions", "system prompt"
-- ✅ SQL injection: `' OR '1'='1`, `DROP TABLE`, `UNION SELECT`
-- ✅ Command injection detection
-
-### 3. Rate Limiting Stress Test
-- ✅ Per-user request throttling
-- ✅ 10 requests/minute limit enforcement
-- ✅ Separate limits per user
-- ✅ Retry-after time calculation
-- ✅ Stats tracking and reset functionality
-
-### 4. File Protection Real Scenarios
-- ✅ Safe file extensions (PDF, DOCX, JPG)
-- ✅ Dangerous extensions blocked (EXE, BAT, SH, DLL)
-- ✅ Path traversal attacks: `../../etc/passwd`
-- ✅ Null byte injection: `file.pdf\x00.exe`
-- ✅ Overly long filename detection
-
-**Expected Output:**
-```
-==================================================
-TEST 1: API Key Authentication Integration
-==================================================
-✓ Valid API key accepted
-✓ Invalid API key rejected
-✓ Empty API key rejected
-✓ Generated secure key: legal_abc123...
-✓ Token bucket: 5 requests allowed
-✓ Token bucket: 6th request blocked
-
-... (4 test suites)
-
-Results: 4/4 tests passed
-🎉 ALL SECURITY TESTS PASSED!
-```
-
-## 🌐 API Integration Test
-
-Comprehensive integration test that **initializes the full RAG pipeline** and tests all three Enhanced RAG API endpoints with **actual execution**.
-
-```bash
-# Quick mode (lighter config, faster)
-python tests/integration/test_api_integration.py --quick
-
-# Full mode (complete pipeline, slower)
-python tests/integration/test_api_integration.py
-
-# Verbose output
-python tests/integration/test_api_integration.py --quick --verbose
-```
-
-**What's tested with real pipeline:**
-
-### TEST 1: Retrieval Endpoint (`/api/v1/rag/retrieve`)
-- ✅ Initializes full RAG pipeline
-- ✅ Runs orchestrator for pure retrieval (no LLM)
-- ✅ Tests score filtering and top_k limiting
-- ✅ Validates document metadata extraction
-- ✅ Shows actual retrieved documents
-
-**Example output:**
-```
-Retrieved: 3 documents in 2.45s
-
-Top Results:
-  1. UU No. 40/2007
-     Score: 0.8523
-     About: Perseroan Terbatas...
-```
-
-### TEST 2: Research Endpoint (`/api/v1/rag/research`)
-- ✅ Tests deep research with LLM generation
-- ✅ Validates thinking_level parameter ('low', 'medium', 'high')
-- ✅ Tests team_size configuration
-- ✅ Verifies answer generation and citation extraction
-- ✅ Measures research time
-
-**Example output:**
-```
-✓ Research completed in 12.34s
-
-Answer length: 1523 characters
-Citations: 5 documents
-
-Answer preview:
-Untuk mendirikan PT, syarat minimal yang harus dipenuhi...
-```
-
-### TEST 3: Chat Endpoint (`/api/v1/rag/chat`)
-- ✅ Tests multi-turn conversational flow
-- ✅ Validates session management and context retention
-- ✅ Tests ConversationManager integration
-- ✅ Verifies history tracking across turns
-
-**Example output:**
-```
---- Turn 1 ---
-Query: Apa itu PT?
-Answer (3.21s): PT adalah badan hukum...
-
---- Turn 2 ---
-Query: Berapa modal minimal untuk mendirikannya?
-Context: 1 previous turns
-Answer (2.87s): Modal minimal PT adalah...
-
-✓ Conversation with 2 turns completed
-✓ Chat endpoint test PASSED
-```
-
-**Final Results:**
-```
-==================================================
-API INTEGRATION TEST RESULTS
-==================================================
-
-✓ PASS - /api/v1/rag/retrieval
-✓ PASS - /api/v1/rag/research
-✓ PASS - /api/v1/rag/chat
-
-Results: 3/3 tests passed
-
-🎉 ALL API TESTS PASSED (quick mode)!
-```
-
-## 🌍 HTTP-Level API Test
-
-Tests the API using **real HTTP requests** to a running FastAPI server. This validates the complete request/response cycle including network serialization, middleware execution, and error responses.
-
-```bash
-python tests/integration/test_api_http.py --verbose
-```
-
-**What's tested:**
-
-### TEST 1: HTTP Authentication
-- ✅ Requests without `X-API-Key` header return 401
-- ✅ Requests with invalid API key return 401
-- ✅ Requests with valid API key return 200
-- ✅ Response structure validation
-
-### TEST 2: HTTP Endpoint Testing
-- ✅ `/api/v1/rag/retrieve` - Real HTTP retrieval request
-- ✅ `/api/v1/rag/research` - LLM generation over HTTP
-- ✅ `/api/v1/rag/chat` - Session management via HTTP
-- ✅ Legal references in all responses
-
-### TEST 3: HTTP Error Handling
-- ✅ Invalid JSON returns 422
-- ✅ Missing required fields return 422
-- ✅ Invalid parameters return 422
-- ✅ XSS attempts blocked at HTTP layer
-
-**Note:** This test starts its own FastAPI server automatically.
-
-## 👥 Concurrent User Simulation
-
-Tests system behavior under load with **multiple concurrent users** making simultaneous requests. Validates thread safety and performance.
-
-```bash
-# 10 users, 5 requests each (50 total requests)
-python tests/integration/test_concurrent_users.py --users 10 --requests 5
-
-# Stress test: 50 users, 10 requests each (500 total)
-python tests/integration/test_concurrent_users.py --users 50 --requests 10 --verbose
-```
-
-**What's tested:**
-- ✅ Thread-safe pipeline access
-- ✅ No race conditions in shared resources
-- ✅ Consistent results across concurrent requests
-- ✅ Performance metrics (throughput, avg/min/max response times)
-- ✅ Success rate under load (target: >90%)
-
-**Example output:**
-```
-================================================================================
-CONCURRENT ACCESS RESULTS
-================================================================================
-Total Requests: 50
-Successful: 48 (96.0%)
-Failed: 2 (4.0%)
-
-Timing:
-  Total Time: 67.34s
-  Avg Time/Request: 2.45s
-  Min Time: 1.23s
-  Max Time: 5.67s
-  Throughput: 0.74 req/s
-
-✓ Concurrent access test PASSED (success rate: 96.0%)
-```
-
-## ⚠️ Edge Cases & Error Handling
-
-Tests **unusual inputs, boundary conditions, and error recovery** to ensure system robustness.
-
-```bash
-python tests/integration/test_edge_cases.py --verbose
-```
-
-**What's tested:**
-
-### TEST 1: Unusual Inputs
-- ✅ Very long queries (1900+ characters)
-- ✅ Unicode and Indonesian special characters
-- ✅ Emoji in queries (🏢 🏛️ ⚖️)
-- ✅ Mixed case queries
-- ✅ Excessive whitespace
-- ✅ Numbers-only queries
-
-### TEST 2: Boundary Conditions
-- ✅ Exactly max length (2000 chars) - accepted
-- ✅ Over max length (2001 chars) - rejected
-- ✅ Minimum query (1 char) - accepted
-- ✅ Empty string - rejected
-- ✅ Whitespace-only - rejected
-
-### TEST 3: Error Recovery
-- ✅ Invalid parameters use safe defaults
-- ✅ Very simple queries handled gracefully
-- ✅ Multiple sequential queries maintain state
-- ✅ No crashes on edge cases
 
 ---
 
-## 📊 Complete Test Coverage Summary
+## 📁 Test Directory Structure
 
-| Test Suite | What It Covers | Coverage |
-|------------|----------------|----------|
-| **Security Integration** | Auth, XSS/SQL/Prompt injection, Rate limiting | 85% |
-| **API Integration** | Pipeline execution, endpoints, sessions | 75% |
-| **HTTP-Level API** | Network layer, middleware, HTTP errors | 90% |
-| **Concurrent Users** | Thread safety, load performance | 95% |
-| **Edge Cases** | Unusual inputs, boundaries, error recovery | 80% |
+```
+tests/
+├── unit/                          # Fast, isolated tests
+│   ├── conversation/              # Conversation components
+│   │   ├── test_session_storage.py
+│   │   ├── test_manager.py
+│   │   └── test_exporters.py
+│   ├── test_llm_providers.py
+│   ├── test_generation.py
+│   ├── test_hybrid_search.py
+│   └── ...
+├── integration/                   # Component interaction tests
+│   ├── test_production_ready.py
+│   ├── test_streaming.py
+│   ├── test_llamacpp_simulation.py
+│   ├── test_multiuser_jwt.py
+│   └── ...
+├── api/                           # API-specific tests
+│   └── test_enhanced_api.py
+├── test_documents/                # Sample documents for testing
+├── test_document_parser.py        # Document parser unit tests
+├── test_document_e2e.py           # Document E2E tests
+└── README.md                      # This file
+```
 
-**Overall Real-World Coverage: ~85%** ✅
+---
 
-## 🧠 Thinking Modes for Legal Analysis
+## ✅ Recommended Test Sequence
 
-The system supports **3-level thinking modes** that control the depth of legal analysis. Higher thinking modes allow the LLM to perform more thorough analysis by using longer thinking processes, which helps prevent context loss when analyzing multiple complex legal documents.
-
-### Available Thinking Modes
-
-| Mode | Token Budget | Use Case | Description |
-|------|-------------|----------|-------------|
-| **Low** (default) | 2048-4096 | Simple queries | Basic analysis with straightforward document evaluation |
-| **Medium** | 4096-8192 | Moderate complexity | Deep thinking with comprehensive cross-referencing and validation |
-| **High** | 8192-16384 | Complex multi-document | Iterative & recursive thinking with multi-phase validation loops |
-
-### How Thinking Modes Work
-
-Thinking modes inject detailed instructions into the system prompt that guide the LLM through structured analysis phases:
-
-- **Low Mode**: Basic document analysis → synthesis → conclusion
-- **Medium Mode**: Deep analysis → cross-referencing → validation → synthesis
-- **High Mode**: Multi-phase analysis → recursive checking → meta-analysis → quality assessment
-
-The thinking happens **inside `<think>` tags** and is separated from the final answer, so users only see the polished response while benefiting from thorough internal analysis.
-
-### Using Thinking Modes in Tests
-
-All four main integration tests now support thinking mode CLI arguments:
-
+### For Development
 ```bash
-# test_complete_output.py - Test with different thinking modes
-python tests/integration/test_complete_output.py --low      # Default, basic analysis
-python tests/integration/test_complete_output.py --medium   # Deep thinking (recommended)
-python tests/integration/test_complete_output.py --high     # Maximum thoroughness
-
-# test_conversational.py - Multi-turn conversation with thinking modes
-python tests/integration/test_conversational.py --low
-python tests/integration/test_conversational.py --medium
-python tests/integration/test_conversational.py --high
-
-# test_stress_single.py - Stress test with thinking modes
-python tests/integration/test_stress_single.py --low
-python tests/integration/test_stress_single.py --medium    # Recommended for stress tests
-python tests/integration/test_stress_single.py --high      # Maximum load + deep thinking
-
-# test_stress_conversational.py - Conversational stress with thinking modes
-python tests/integration/test_stress_conversational.py --low
-python tests/integration/test_stress_conversational.py --medium
-python tests/integration/test_stress_conversational.py --high
-```
-
-### Combined with Other Arguments
-
-Thinking modes can be combined with other test arguments:
-
-```bash
-# Complete output test with medium thinking and JSON export
-python tests/integration/test_complete_output.py --medium --export
-
-# Conversational test with high thinking and verbose output
-python tests/integration/test_conversational.py --high --verbose --export
-
-# Stress test with medium thinking and memory profiling
-python tests/integration/test_stress_single.py --medium --memory --export
-
-# Quick stress test with high thinking
-python tests/integration/test_stress_conversational.py --quick --high
-```
-
-### When to Use Each Mode
-
-**Use Low Mode (--low) when:**
-- Testing simple, straightforward queries
-- Quick validation or debugging
-- Performance benchmarking (fastest)
-- Testing basic functionality
-
-**Use Medium Mode (--medium) when:**
-- Testing multi-document analysis
-- Queries requiring cross-referencing
-- Standard production testing
-- Moderate complexity legal questions
-
-**Use High Mode (--high) when:**
-- Testing complex legal scenarios
-- Maximum quality requirements
-- Multiple conflicting regulations
-- Edge cases and corner cases
-- Full system stress testing
-
-### Configuration
-
-Thinking modes can also be configured via environment variables:
-
-```bash
-# Set default thinking mode
-export DEFAULT_THINKING_MODE=medium
-
-# Disable thinking pipeline entirely (not recommended)
-export ENABLE_THINKING_PIPELINE=false
-
-# Run tests with configured default
-python tests/integration/test_complete_output.py
-```
-
-### Performance Considerations
-
-| Mode | Thinking Tokens | Impact on Latency | Memory Impact |
-|------|----------------|-------------------|---------------|
-| Low | 2-4K | Minimal (+0-2s) | ~100-200MB |
-| Medium | 4-8K | Moderate (+2-5s) | ~200-400MB |
-| High | 8-16K | Significant (+5-10s) | ~400-800MB |
-
-**Note**: These are approximate values. Actual impact depends on query complexity, document count, and hardware.
-
-### Viewing Thinking Process
-
-The complete LLM input prompt (including thinking instructions) is printed to console during test execution for full transparency:
-
-```
-====================================================================================================
-COMPLETE LLM INPUT PROMPT (FULL TRANSPARENCY)
-====================================================================================================
-Character Count: 12,453
-----------------------------------------------------------------------------------------------------
-Anda adalah asisten AI yang ahli di bidang hukum Indonesia...
-
-Dalam tag <think>, lakukan DEEP THINKING dengan struktur berikut:
-...
-----------------------------------------------------------------------------------------------------
-```
-
-This allows you to verify exactly what instructions are being sent to the LLM.
-
-### Run All Integration Tests at Once
-
-```bash
-# Run core comprehensive tests
-python tests/integration/test_production_ready.py && \
-python tests/integration/test_session_export.py && \
-python tests/integration/test_conversational.py
-
-# Or run all Python-based tests (shows real output)
-for test in tests/integration/test_*.py; do
-    echo "Running $test..."
-    python "$test" || echo "Failed: $test"
-done
-```
-
-## 🌐 Testing the API
-
-### Start the API Server
-
-```bash
-# Development mode (single worker)
-uvicorn api.server:app --reload --host 0.0.0.0 --port 8000
-
-# Production mode (multiple workers to test multi-worker fix)
-uvicorn api.server:app --workers 4 --host 0.0.0.0 --port 8000
-```
-
-### Test API Endpoints
-
-```bash
-# 1. Health check
-curl http://localhost:8000/api/v1/health
-
-# 2. Search endpoint
-curl -X POST "http://localhost:8000/api/v1/search" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "query": "Apa sanksi pelanggaran UU ITE?",
-    "max_results": 5
-  }'
-
-# 3. Generate answer endpoint
-curl -X POST "http://localhost:8000/api/v1/generate" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "query": "Jelaskan tentang perlindungan data pribadi"
-  }'
-
-# 4. Create session
-curl -X POST "http://localhost:8000/api/v1/sessions" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "session_id": "test-session-1"
-  }'
-
-# 5. List sessions
-curl http://localhost:8000/api/v1/sessions
-
-# 6. STREAMING endpoint (Server-Sent Events - watch real-time output!)
-curl -N -X POST "http://localhost:8000/api/v1/generate/stream" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "query": "Jelaskan tentang hak konsumen",
-    "stream": true
-  }'
-
-# 7. View API documentation
-# Open browser: http://localhost:8000/docs
-```
-
-## 🖥️ Testing with Gradio UI
-
-### Start the Gradio Interface
-
-```bash
-# Run the Gradio UI
-python ui/gradio_app.py
-
-# Or if gradio_app is in root:
-python gradio_app.py
-```
-
-Then open your browser to `http://localhost:7860` and test:
-
-1. **Basic Query**: "Apa sanksi dalam UU ITE?"
-2. **Complex Query**: "Bagaimana prosedur pelaporan pelanggaran data pribadi menurut UU PDP?"
-3. **Session Testing**: Create a session and ask follow-up questions
-4. **Export Testing**: Try exporting conversation to different formats
-
-## 🔍 Audit & Transparency Testing
-
-The audit test (`test_audit_metadata.py`) provides complete transparency into the RAG system's decision-making process.
-
-### Use Cases
-
-**1. Auditing Search Results**
-```bash
-# See exactly how documents are scored and ranked
-python tests/integration/test_audit_metadata.py --query "Apa sanksi UU ITE?"
-```
-
-Output shows:
-- Individual scores: semantic (0.8234), keyword (0.6521), KG (0.7123), etc.
-- Weight calculations: how final score is computed
-- Visual score bars for quick assessment
-- Complete document metadata
-
-**2. Debugging Unexpected Results**
-```bash
-# Compare scoring across multiple queries
-python tests/integration/test_audit_metadata.py --multi
-```
-
-Helps identify:
-- Why certain documents rank higher than others
-- Which scoring components contribute most
-- Query type classification accuracy
-- Performance variations
-
-**3. UI Development Reference**
-```bash
-# Get complete JSON metadata for UI implementation
-python tests/integration/test_audit_metadata.py --query "Your query" > audit_output.txt
-```
-
-Provides:
-- All metadata fields available
-- Score breakdowns for display
-- Citation formatting examples
-- Phase-by-phase research data
-
-**4. Verifying Multi-Researcher Consensus**
-
-The audit shows:
-- Which researchers (personas) contributed
-- Confidence scores per researcher
-- Top candidates from each phase
-- Consensus building process
-
-**5. Understanding Knowledge Graph Impact**
-
-Shows detailed KG metrics:
-- Authority scores (regulatory hierarchy)
-- Temporal scores (recency/relevance)
-- Completeness scores (coverage)
-- Extracted entities and relationships
-- Document references
-
-### Example Output Sections
-
-The audit test displays **11 comprehensive sections**:
-
-1. **Generated Answer** - Final response
-2. **Thinking Process** - Internal reasoning (if available)
-3. **Timing Breakdown** - Where time is spent (retrieval vs generation)
-4. **Query Analysis** - Query type, results count, cache status
-5. **Research Phases** - Multi-researcher analysis details
-6. **Source Documents** - Full scoring for each source
-7. **Citations** - Formatted legal references
-8. **Complete Metadata** - JSON dump for programmatic use
-9. **Scoring Breakdown** - Visual bars and percentages for all score types
-10. **Document Metadata** - Entities, relationships, references
-11. **Audit Summary** - High-level statistics
-
-### Scoring Details Explained
-
-Each document shows 6 individual scores that combine into final score:
-
-- **Semantic Match** (0-1): Embedding similarity to query
-- **Keyword Precision** (0-1): TF-IDF keyword matching
-- **Knowledge Graph** (0-1): Entity/relationship relevance
-- **Authority Hierarchy** (0-1): Regulatory importance level
-- **Temporal Relevance** (0-1): Recency and validity
-- **Legal Completeness** (0-1): Document comprehensiveness
-
-Final Score = weighted sum of above (default weights: 0.25, 0.15, 0.20, 0.20, 0.10, 0.10)
-
-## 📊 Performance & Load Testing
-
-The performance test (`test_performance.py`) provides benchmarks for system performance and scalability.
-
-### What It Measures
-
-**1. Response Time Benchmarks**
-- Tests 4 query categories: simple, sanction, procedural, complex
-- Calculates: average, min, max, P50, P90, P99 latencies
-- Tracks success rate per query type
-
-**2. Concurrent Load Testing**
-- Multi-threaded query execution
-- Configurable threads (default: 3) and queries per thread
-- Measures true throughput (QPS) under load
-
-**3. Memory Profiling**
-- Tracks memory delta per query
-- Monitors peak memory usage
-- Identifies potential memory leaks
-
-### Running Performance Tests
-
-```bash
-# Quick performance test (simple + sanction queries only)
-python tests/integration/test_performance.py
-
-# Full benchmark (all 4 query types)
-python tests/integration/test_performance.py --full
-
-# Concurrent load test (3 threads, 2 queries each)
-python tests/integration/test_performance.py --concurrent
-
-# Custom concurrent settings
-python tests/integration/test_performance.py --concurrent --threads 5 --queries 3
-
-# Memory profiling only
-python tests/integration/test_performance.py --memory
-
-# Minimal output (quiet mode)
-python tests/integration/test_performance.py --quiet
-```
-
-### Example Output
-
-```
-  OVERALL PERFORMANCE
-======================================================================
-
-  Queries:
-    Total:      12
-    Successful: 12 (100.0%)
-    Failed:     0
-
-  Response Times:
-    Average:    3.45s
-    Min:        2.12s
-    Max:        5.87s
-    P50:        3.21s
-    P90:        4.98s
-    P99:        5.87s
-
-  Throughput:
-    QPS:        0.289 queries/second
-    Total Time: 41.42s
-```
-
-### Performance Baselines
-
-Expected performance on typical hardware:
-
-| Metric | CPU-only | Single GPU |
-|--------|----------|------------|
-| Simple Query | 3-5s | 1-2s |
-| Complex Query | 8-15s | 3-5s |
-| Concurrent QPS | 0.2-0.3 | 0.5-1.0 |
-| Memory per Query | <100MB | <500MB |
-
-## 📋 Complete RAG Output Testing
-
-The complete output test (`test_complete_output.py`) provides full transparency into ALL retrieved documents with streaming output - essential for legal auditing.
-
-### Streaming Mode Metadata
-
-Streaming mode now includes **full metadata** for audit transparency. The `complete` chunk contains:
-
-```python
-{
-    'type': 'complete',
-    'answer': '...',                    # Final answer text
-    'thinking': '...',                  # LLM reasoning process (extracted from <think> tags)
-    'sources': [...],                   # Formatted source documents
-    'citations': [...],                 # Citation references
-    'phase_metadata': {                 # ALL documents from each research phase
-        '0_initial_search_analyst': {
-            'phase': 'initial_search',
-            'researcher': 'analyst',
-            'researcher_name': 'Legal Analyst',
-            'candidates': [             # Documents with full scores
-                {
-                    'record': {...},    # Full document record
-                    'scores': {
-                        'final': 0.85,
-                        'semantic': 0.82,
-                        'keyword': 0.78,
-                        'kg': 0.90,
-                        'authority': 0.95,
-                        'temporal': 0.80
-                    }
-                }
-            ],
-            'confidence': 1.0
-        }
-    },
-    'research_log': {                   # Summary of research process
-        'team_members': ['analyst', 'expert', 'generalist'],
-        'total_documents_retrieved': 15,
-        'phase_results': {...}
-    },
-    'consensus_data': {...},            # Team consensus information
-    'research_data': {...}              # Raw research data
-}
-```
-
-### What It Shows
-
-**1. Complete Document Retrieval**
-- Shows ALL documents retrieved by RAG (not just cited sources)
-- Full scoring breakdown for each document (semantic, keyword, KG, authority, temporal)
-- Perfect for verifying no relevant regulations were missed
-
-**2. Streaming Answer Output**
-- Real-time token-by-token streaming using TextIteratorStreamer
-- Watch the LLM generate answers live
-- Chunk count and timing statistics
-
-**3. Thinking Process Display**
-- Shows LLM reasoning extracted from `<think>` tags
-- Helps understand how the answer was formulated
-- Essential for debugging and quality assurance
-
-**4. Research Process Transparency**
-- Team members (researcher personas) involved
-- Phase-by-phase breakdown with document counts
-- Per-phase document lists with scores
-- Confidence levels per researcher
-
-### Running Complete Output Tests
-
-```bash
-# Run 5 queries with full metadata display
-python tests/integration/test_complete_output.py
-
-# Export results to JSON for parsing
-python tests/integration/test_complete_output.py --export
-
-# Specify custom output path
-python tests/integration/test_complete_output.py --export --output my_results.json
-```
-
-### Example Output Format
-
-```
-====================================================================================================
-COMPLETE RAG OUTPUT
-====================================================================================================
-
-## QUESTION
---------------------------------------------------------------------------------
-Apa saja hak-hak pekerja menurut UU Ketenagakerjaan?
-
-## QUERY TYPE: procedural
-
-## THINKING PROCESS
---------------------------------------------------------------------------------
-[Full reasoning process displayed here]
-
-## ANSWER
---------------------------------------------------------------------------------
-[Streamed answer appears in real-time]
-[Streamed: 145 chunks in 8.23s]
-
-## LEGAL REFERENCES (All Retrieved Documents - FULL DETAILS)
---------------------------------------------------------------------------------
-Total Documents Retrieved: 12
-
-### 1. Undang-Undang No. 13/2003
-   Global ID: uu-13-2003-ketenagakerjaan
-   About: Ketenagakerjaan
-   Enacting Body: Presiden Republik Indonesia
-   Location in Document:
-      Chapter/Bab: X
-      Section/Bagian: Kesatu
-      Article/Pasal: 77
-      Paragraph/Ayat: 1
-   Relevance Scores:
-      Final Score: 0.8934
-      Semantic: 0.8521
-      Keyword: 0.7823
-      KG Score: 0.9012
-      Authority: 0.9500
-      Temporal: 0.8200
-      Completeness: 0.8750
-   Knowledge Graph Metadata:
-      Domain: ketenagakerjaan
-      Hierarchy Level: 1
-      Cross References: 15
-   Research Team Analysis:
-      Team Consensus: Yes
-      Researcher Agreement: 3
-      Personas Agreed: analyst, expert, generalist
-   Full Content (2543 chars):
-   ------------------------------------------------------------
-      Pasal 77 ayat (1) Setiap pengusaha wajib melaksanakan
-      ketentuan waktu kerja...
-   ------------------------------------------------------------
-
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-[... more documents with full details ...]
-
-## RESEARCH PROCESS DETAILS (FULL)
---------------------------------------------------------------------------------
-
-### Research Team
-Team Size: 3
-   - 👨‍⚖️ Senior Legal Researcher
-   - 👩‍⚖️ Junior Legal Researcher
-   - 📚 Knowledge Graph Specialist
-
-### Summary Statistics
-Total Documents Retrieved: 12
-Total Phases: 3
-
-### Phase-by-Phase Breakdown (ALL Documents)
-================================================================================
-
-#### PHASE: initial_search
-   Researcher: 👨‍⚖️ Senior Legal Researcher
-   Documents Found: 8
-   Confidence: 85.00%
-
-   Documents Retrieved in This Phase:
-   ----------------------------------------------------------------------
-
-   [1] Undang-Undang No. 13/2003
-       ID: uu-13-2003-ketenagakerjaan
-       About: Ketenagakerjaan
-       Location: Bab X > Bagian Kesatu > Pasal 77 > Ayat 1
-       Scores: Final=0.8934 | Semantic=0.8521 | Keyword=0.7823 | KG=0.9012 | Authority=0.9500 | Temporal=0.8200
-       Content Preview: Pasal 77 ayat (1) Setiap pengusaha wajib melaksanakan...
-
-   [2] Peraturan Pemerintah No. 35/2021
-       ID: pp-35-2021-pkwt
-       About: Perjanjian Kerja Waktu Tertentu
-       Location: Bab II > Pasal 4
-       Scores: Final=0.8521 | Semantic=0.8234 | Keyword=0.7654 | KG=0.8890 | Authority=0.9200 | Temporal=0.9100
-       Content Preview: Pasal 4 PKWT dapat dibuat untuk pekerjaan yang...
-
-   [... all documents in this phase ...]
-
-   ----------------------------------------------------------------------
-
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-#### PHASE: refinement
-   Researcher: Regulatory Expert
-   Documents Found: 5
-   Confidence: 92.00%
-
-   [... all documents in this phase with full details ...]
-
-## TIMING
---------------------------------------------------------------------------------
-Total Time: 12.345s
-Retrieval Time: 4.123s
-Generation Time: 8.222s
-```
-
-### Parsing Exported Results
-
-Use `test_output_parser.py` to parse and analyze exported JSON:
-
-```bash
-# Parse existing export file
-python tests/integration/test_output_parser.py --file complete_output_results_1234567890.json
-
-# Generate and parse in one command
-python tests/integration/test_output_parser.py --generate
-
-# Export all references to CSV for spreadsheet analysis
-python tests/integration/test_output_parser.py --file export.json --csv all_references.csv
-
-# Save audit report to file
-python tests/integration/test_output_parser.py --file export.json --report audit_report.txt
-```
-
-### Output Parser Features
-
-The parser extracts structured data from RAG output:
-
-**LegalReference dataclass:**
-- `regulation_type`, `regulation_number`, `year`, `about`
-- All scores: `final_score`, `semantic_score`, `keyword_score`, `kg_score`, etc.
-- `domain`, `hierarchy_level`
-- `team_consensus`, `researcher_agreement`, `personas_agreed`
-- `content_snippet`
-
-**QueryResult dataclass:**
-- Query information and success status
-- Streaming statistics (chunks, duration)
-- List of all `LegalReference` objects
-- Research phases with researcher details
-- Timing breakdown
-
-### Use Cases
-
-**1. Legal Audit Compliance**
-- Verify all relevant regulations were considered
-- Check scoring justification for each document
-- Validate research process transparency
-
-**2. Quality Assurance**
-- Compare results across multiple queries
-- Identify scoring anomalies
-- Verify team consensus accuracy
-
-**3. Data Export**
-- CSV export for Excel/spreadsheet analysis
-- JSON for programmatic processing
-- Text reports for documentation
-
-## 💪 Stress Testing (MAXIMUM LOAD)
-
-Stress tests verify system stability under maximum configuration settings.
-
-### Stress Test 1: Single Query Maximum Load
-
-Tests a single complex query with ALL settings maxed out:
-- All 5 search phases enabled (including expert_review)
-- Maximum candidates per phase (600-800)
-- All 5 research personas active
-- Maximum final_top_k (20 documents)
-- Maximum max_new_tokens (8192)
-
-```bash
-# Full stress test (maximum settings)
-python tests/integration/test_stress_single.py
-
-# Quick mode (moderate settings)
-python tests/integration/test_stress_single.py --quick
-
-# With memory profiling
-python tests/integration/test_stress_single.py --memory
-
-# Export results to JSON
-python tests/integration/test_stress_single.py --export
-```
-
-### Stress Test 2: Conversational Maximum Load
-
-Tests 7-turn complex conversation with maximum settings:
-- Cross-domain topics (tax, labor, multi-domain)
-- Topic shifts and back-references
-- Context building across turns
-- Heavy conversation history (50 turns tracked)
-- Summary requests requiring full context
-
-```bash
-# Full stress test (7 turns, maximum settings)
-python tests/integration/test_stress_conversational.py
-
-# Quick mode (5 turns, moderate settings)
-python tests/integration/test_stress_conversational.py --quick
-
-# With memory profiling per turn
-python tests/integration/test_stress_conversational.py --memory
-
-# Export results to JSON
-python tests/integration/test_stress_conversational.py --export
-```
-
-### Stress Test Configuration Details
-
-| Setting | Default | Stress Max | Description |
-|---------|---------|------------|-------------|
-| final_top_k | 3 | 20 | Documents returned |
-| research_team_size | 4 | 5 | Active personas |
-| max_new_tokens | 2048 | 8192 | Generation limit |
-| search_phases | 4/5 | 5/5 | All phases enabled |
-| candidates (total) | ~640 | ~1500+ | Search candidates |
-
-### What Stress Tests Verify
-
-1. **System Stability**: No crashes under maximum load
-2. **Memory Bounds**: Memory stays within acceptable limits
-3. **Timeout Handling**: Long operations complete or timeout gracefully
-4. **Context Management**: Large conversation contexts are handled
-5. **Resource Cleanup**: Proper cleanup after heavy operations
-
-### Expected Stress Test Metrics
-
-| Metric | Quick Mode | Maximum Mode |
-|--------|------------|--------------|
-| Single Query Time | 30-60s | 60-180s |
-| Memory Peak | <2GB | <4GB |
-| Conv Turn Time (avg) | 20-40s | 40-90s |
-| 7-Turn Total | N/A | 5-15 min |
-
-## 📊 Verification Checklist
-
-After running tests, verify all bug fixes:
-
-- [ ] **Division by Zero**: No crashes with zero weights
-- [ ] **XML Parsing**: Handles malformed thinking tags gracefully
-- [ ] **Global State**: Multiple workers work correctly
-- [ ] **Memory Leak**: Memory stays bounded after many queries
-- [ ] **Input Validation**: Malicious inputs are rejected
-- [ ] **Rate Limiting**: Requests are rate-limited correctly
-
-## 🐛 Troubleshooting
-
-### Missing Dependencies
-
-```bash
-# If pytest not found
-pip install pytest pytest-cov pytest-timeout
-
-# If torch not found
-pip install torch torchvision torchaudio
-
-# If fastapi not found
-pip install fastapi uvicorn pydantic
-```
-
-### GPU/CUDA Issues
-
-```bash
-# Use CPU-only versions
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
-pip install faiss-cpu
-```
-
-### Import Errors
-
-```bash
-# Make sure you're in the project root
-cd /home/user/06_ID_Legal
-python -c "import sys; print(sys.path)"
-
-# Run tests from project root
+# 1. Unit tests (fast feedback)
 python -m pytest tests/unit/ -v
+
+# 2. Basic integration
+python tests/integration/test_production_ready.py
 ```
 
-## 📝 Expected Test Results
-
-All tests should pass with these approximate results:
-
-- **Unit Tests**: ~90% pass rate (some may need GPU)
-- **Integration Tests**: ~80% pass rate (some may need dataset)
-- **API Tests**: 100% pass rate (with server running)
-- **Syntax Checks**: 100% pass rate ✅
-
-## 🎯 Quick Validation Script
-
-Run this to validate all fixes at once:
-
+### For Pre-Commit
 ```bash
-# Create quick_validation.sh
-cat > quick_validation.sh << 'EOF'
-#!/bin/bash
-echo "🔍 Quick Validation of Bug Fixes"
-echo "================================="
+# 1. All unit tests
+python -m pytest tests/unit/ -v
 
-echo "✅ 1. Checking Python syntax..."
-python -m py_compile core/search/hybrid_search.py && echo "   hybrid_search.py OK"
-python -m py_compile core/generation/generation_engine.py && echo "   generation_engine.py OK"
-python -m py_compile api/server.py && echo "   api/server.py OK"
-python -m py_compile core/search/stages_research.py && echo "   stages_research.py OK"
-
-echo ""
-echo "✅ 2. Testing imports..."
-python -c "from core.search.hybrid_search import HybridSearchEngine; print('   HybridSearchEngine OK')"
-python -c "from core.generation.generation_engine import GenerationEngine; print('   GenerationEngine OK')"
-python -c "from core.search.stages_research import StagesResearchEngine; print('   StagesResearchEngine OK')"
-
-echo ""
-echo "✅ 3. Running unit tests (if available)..."
-python -m pytest tests/unit/ -q || echo "   (Skipped - pytest or dependencies not available)"
-
-echo ""
-echo "✅ All validations complete!"
-EOF
-
-chmod +x quick_validation.sh
-./quick_validation.sh
+# 2. Core integration
+python tests/integration/test_api_endpoints.py
+python tests/integration/test_streaming.py
 ```
 
-This comprehensive testing approach will verify that all 7 critical bugs have been fixed correctly!
+### For Release
+```bash
+# Full test suite
+python -m pytest tests/unit/ -v
+python tests/integration/test_production_ready.py
+python tests/integration/test_complete_rag.py
+python tests/integration/test_stress_single.py --quick
+```
 
 ---
 
-## ☁️ Running on Kaggle
+## 📈 Expected Results
 
-### Unified Kaggle Launcher Cell
+### Unit Tests
+- **Total:** ~50 tests
+- **Time:** < 2 minutes
+- **Pass Rate:** 100%
 
-Copy this single cell to run the full system on Kaggle with a public share link:
+### Integration Tests  
+- **Total:** ~30 tests
+- **Time:** 10-30 minutes (depends on GPU)
+- **Pass Rate:** 95%+ (some may skip without deps)
 
-```python
-# Unified Kaggle Launcher - Run this single cell
-import subprocess
-import time
-import requests
-import sys
-import os
-
-# Setup paths
-os.environ["PYTHONPATH"] = "/kaggle/working/06_ID_Legal"
-os.environ['LEGAL_API_KEY'] = 'kaggle_demo_key_2024'
-sys.path.insert(0, "/kaggle/working/06_ID_Legal")
-
-print("=" * 60)
-print("🏛️ LEGAL RAG INDONESIA - KAGGLE LAUNCHER")
-print("=" * 60)
-
-# Step 1: Start API in background
-print("\n🚀 Starting API server...")
-api_proc = subprocess.Popen(
-    [sys.executable, "-m", "uvicorn", "api.server:app", "--host", "127.0.0.1", "--port", "8000"],
-    cwd="/kaggle/working/06_ID_Legal",
-    stdout=subprocess.PIPE,
-    stderr=subprocess.STDOUT
-)
-
-# Step 2: Wait for API to be ready (up to 10 minutes)
-print("⏳ Waiting for models to load (this takes ~5-8 minutes)...")
-max_wait = 600  # 10 minutes
-start_time = time.time()
-
-while time.time() - start_time < max_wait:
-    try:
-        r = requests.get("http://127.0.0.1:8000/api/v1/ready", timeout=5)
-        data = r.json()
-        if data.get("ready"):
-            print(f"\n✅ API is ready! (took {int(time.time() - start_time)}s)")
-            break
-        else:
-            elapsed = int(time.time() - start_time)
-            print(f"   [{elapsed}s] Loading: {data.get('message', '...')}")
-    except requests.exceptions.ConnectionError:
-        elapsed = int(time.time() - start_time)
-        print(f"   [{elapsed}s] API starting...")
-    except Exception as e:
-        pass
-    time.sleep(30)  # Check every 30 seconds
-else:
-    print("❌ API failed to start within 10 minutes")
-    api_proc.terminate()
-    raise Exception("API startup timeout")
-
-# Step 3: Launch UI with share link
-print("\n🎨 Launching Unified UI with public share link...")
-print("=" * 60)
-
-from ui.unified_app_api import launch_unified_app
-launch_unified_app(share=True, server_name="0.0.0.0")
-```
-
-### What to Expect
-
-1. **Model Loading (~5-8 minutes)**
-   - Embedding model: Qwen3-Embedding-0.6B
-   - Reranker model: Qwen3-Reranker-0.6B
-   - LLM model: Deepseek_ID_Legal_Preview
-   - Dataset: 200K legal documents
-
-2. **Share Link**
-   - After loading, a public URL like `https://xxxxx.gradio.live` will appear
-   - Share this link with anyone to access your UI
-
-3. **Demo Login**
-   - Username: `demo` / Password: `demo123`
-   - Username: `admin` / Password: `admin123`
-
-### Requirements
-- Kaggle notebook with **GPU enabled** (T4 x2 or P100)
-- At least 16GB RAM
-- Internet access (for model downloads)
-
+### Stress Tests
+- **Time:** 10-20 minutes per test
+- **Memory:** May spike to 90%+ VRAM
+- **Pass Rate:** 100% (or OOM if insufficient resources)

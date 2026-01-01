@@ -24,18 +24,22 @@ logger = get_logger(__name__)
 # CLI arguments (parsed at module load or when __main__)
 _cli_args = None
 
-def parse_args():
-    """Parse command line arguments"""
+def parse_args(force_reparse: bool = False):
+    """Parse command line arguments
+    
+    Args:
+        force_reparse: If True, reparse args even if cached (useful for Kaggle notebooks)
+    """
     global _cli_args
-    if _cli_args is not None:
+    if _cli_args is not None and not force_reparse:
         return _cli_args
     
     parser = argparse.ArgumentParser(description="Indonesian Legal RAG API Server")
     parser.add_argument(
         "--llm-provider",
-        choices=["local", "openrouter", "none"],
+        choices=["local", "llamacpp", "openrouter", "none"],
         default=os.getenv("LLM_PROVIDER", "local"),
-        help="LLM provider: local (GPU), openrouter (cloud), none (retrieval only)"
+        help="LLM provider: local (GPU), llamacpp (GGUF), openrouter (cloud), none (retrieval only)"
     )
     parser.add_argument(
         "--host",
@@ -51,7 +55,18 @@ def parse_args():
     
     # Parse known args only (allows uvicorn to add its own)
     _cli_args, _ = parser.parse_known_args()
+    
+    # Debug: Log what we parsed
+    logger.info(f"Parsed args: llm_provider={_cli_args.llm_provider}, sys.argv={sys.argv[:3]}")
+    
     return _cli_args
+
+# Force parse on first import to catch sys.argv changes
+def reset_args():
+    """Reset cached args - call this before starting server in Kaggle notebooks"""
+    global _cli_args
+    _cli_args = None
+
 
 # FIXED: Use application state instead of global variables for multi-worker support
 # Application state is stored per-worker and properly isolated
@@ -63,10 +78,10 @@ async def lifespan(app: FastAPI):
 
     logger.info("Starting Indonesian Legal RAG API...")
     
-    # Get CLI args
-    args = parse_args()
+    # Get CLI args - force reparse to pick up sys.argv changes (important for Kaggle notebooks)
+    args = parse_args(force_reparse=True)
     llm_provider = args.llm_provider
-    logger.info(f"LLM Provider: {llm_provider}")
+    logger.info(f"LLM Provider selected: {llm_provider}")
     
     # Initialize LLM provider based on CLI argument
     try:
@@ -191,6 +206,8 @@ def create_app() -> FastAPI:
             '/api/v1/ready',
             '/api/v1/live',
             '/api/v1/memory',
+            # Auth endpoints (for login/register)
+            '/api/v1/auth',
             # LLM endpoints (for provider management)
             '/api/v1/llm',
             # Document endpoints (for testing - remove in production if needed)
@@ -216,6 +233,7 @@ def create_app() -> FastAPI:
     )
     from .routes.documents import router as documents_router
     from .routes.llm import router as llm_router
+    from .routes.auth import router as auth_router
 
     app.include_router(health_router, prefix="/api/v1", tags=["Health"])
     app.include_router(search_router, prefix="/api/v1", tags=["Search"])
@@ -224,6 +242,7 @@ def create_app() -> FastAPI:
     app.include_router(rag_enhanced_router, prefix="/api/v1", tags=["Enhanced RAG"])
     app.include_router(documents_router, prefix="/api/v1", tags=["Documents"])
     app.include_router(llm_router, prefix="/api/v1", tags=["LLM"])
+    app.include_router(auth_router, prefix="/api/v1", tags=["Authentication"])
 
     return app
 

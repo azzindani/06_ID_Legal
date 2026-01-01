@@ -126,7 +126,7 @@ class ConversationalRAGService:
                 try:
                     from core.llm_providers.factory import LLMProviderFactory
                     provider = LLMProviderFactory.get_current_provider()
-                    if provider and provider.provider_name in ('openrouter', 'local'):
+                    if provider and provider.provider_name in ('openrouter', 'local', 'llamacpp'):
                         use_streaming = True
                         self.logger.info(f"Streaming enabled with provider: {provider.provider_name}")
                 except:

@@ -152,11 +152,39 @@ class RAGPipeline:
 
             self.logger.info("Step 4/5: Initializing generation engine...")
             from core.generation.generation_engine import GenerationEngine
+            
+            # Get LLM provider from factory based on config
+            llm_provider = None
+            llm_provider_type = self.config.get('llm_provider', 'local')
+            
+            if llm_provider_type in ('openrouter', 'llamacpp', 'none'):
+                # Use provider factory for non-local providers
+                try:
+                    from core.llm_providers import LLMProviderFactory
+                    llm_provider = LLMProviderFactory.get_provider(
+                        provider_type=llm_provider_type,
+                        auto_load=True  # Auto-load model for llamacpp
+                    )
+                    self.logger.info(f"Using {llm_provider_type} provider from factory")
+                    
+                    # Ensure model is loaded (may be cached without model)
+                    if llm_provider_type == 'llamacpp' and not llm_provider.is_available():
+                        self.logger.info("LlamaCpp model not loaded, loading now...")
+                        if hasattr(llm_provider, 'load_model'):
+                            if llm_provider.load_model():
+                                self.logger.info("LlamaCpp model loaded successfully")
+                            else:
+                                self.logger.error("Failed to load LlamaCpp model")
+                                
+                except Exception as e:
+                    self.logger.warning(f"Failed to get {llm_provider_type} provider: {e}, falling back to local")
+                    llm_provider = None
 
-            self.generation_engine = GenerationEngine(self.config)
+            self.generation_engine = GenerationEngine(self.config, llm_provider=llm_provider)
             if not self.generation_engine.initialize():
                 self.logger.error("Failed to initialize generation engine")
                 return False
+
 
             # Step 5: Finalize
             if progress_callback:
@@ -425,9 +453,9 @@ class RAGPipeline:
                 
                 self.logger.info("Non-streaming valve routing", {"provider": provider_name})
                 
-                # Route to OpenRouter if that's the current provider
-                if provider and provider_name == "openrouter":
-                    self.logger.info("Routing to OpenRouter for non-streaming", {"provider": provider_name})
+                # Route to external providers (OpenRouter, LlamaCpp) if that's the current provider
+                if provider and provider_name in ("openrouter", "llamacpp"):
+                    self.logger.info("Routing to external provider for non-streaming", {"provider": provider_name})
                     # Collect all chunks for non-streaming response
                     full_answer = ""
                     for chunk in self._generate_with_external_llm(
@@ -1213,8 +1241,8 @@ Jawab dengan lengkap dan sitasi sumber regulasi yang relevan."""
         
         self.logger.info("Valve routing check", {"provider": provider_name})
         
-        # Route to external LLM provider if configured (e.g., OpenRouter)
-        if provider and provider_name == "openrouter":
+        # Route to external LLM provider if configured (e.g., OpenRouter, LlamaCpp)
+        if provider and provider_name in ("openrouter", "llamacpp"):
             self.logger.info("Routing to external LLM provider", {"provider": provider_name})
             yield from self._generate_with_external_llm(
                 question=question,

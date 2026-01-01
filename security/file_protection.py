@@ -240,22 +240,29 @@ class SecureFileUploader:
     def __init__(
         self,
         upload_dir: str,
-        max_size_mb: int = 50,
-        enable_virus_scan: bool = False
+        max_size_mb: int = None,
+        enable_virus_scan: bool = None
     ):
         """
         Initialize uploader
         
         Args:
             upload_dir: Directory for uploads
-            max_size_mb: Maximum file size
-            enable_virus_scan: Enable virus scanning (requires external tool)
+            max_size_mb: Maximum file size (default from config)
+            enable_virus_scan: Enable virus scanning (default from config, requires ClamAV)
         """
+        # Import config for defaults
+        from config import ENABLE_VIRUS_SCAN, MAX_UPLOAD_SIZE_MB
+        
         self.upload_dir = Path(upload_dir)
         self.upload_dir.mkdir(parents=True, exist_ok=True)
         
-        self.validator = FileValidator(max_size_mb)
-        self.enable_virus_scan = enable_virus_scan
+        # Use config defaults if not specified
+        actual_max_size = max_size_mb if max_size_mb is not None else MAX_UPLOAD_SIZE_MB
+        actual_virus_scan = enable_virus_scan if enable_virus_scan is not None else ENABLE_VIRUS_SCAN
+        
+        self.validator = FileValidator(actual_max_size)
+        self.enable_virus_scan = actual_virus_scan
     
     def save_upload(self, file_path: str, original_filename: str) -> Tuple[bool, str]:
         """
