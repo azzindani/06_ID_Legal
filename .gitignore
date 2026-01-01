@@ -60,3 +60,4 @@ Thumbs.db
 
 # Personal (not committed)
 local.ipynb
+.data/sessions.db
