@@ -80,6 +80,14 @@ class LLMEngine:
             try:
                 self.logger.debug(f"Attempt {attempt}/{max_retries}")
                 
+                # CRITICAL: Aggressive cleanup before loading to defragment GPU memory
+                import gc
+                gc.collect()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                    torch.cuda.synchronize()
+                    self.logger.debug("Cleared GPU cache before model loading")
+                
                 # Load tokenizer
                 self.logger.debug("Loading tokenizer")
                 self._tokenizer = AutoTokenizer.from_pretrained(
@@ -142,7 +150,8 @@ class LLMEngine:
                     cache_dir=CACHE_DIR,
                     torch_dtype=torch.float16 if self.device.type == 'cuda' else torch.float32,
                     trust_remote_code=True,
-                    device_map=device_map_setting
+                    device_map=device_map_setting,
+                    low_cpu_mem_usage=True  # Reduces peak memory during loading
                 )
                 
                 if device_map_setting is None:
