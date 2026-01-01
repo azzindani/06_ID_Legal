@@ -274,24 +274,32 @@ class EnhancedKGDatasetLoader:
             global_ids = [row[0] for row in rows]
             placeholders = ','.join(['?' for _ in global_ids])
             
-            # Check if embeddings table exists and detect column names
+            # Check if embeddings table exists and detect column names (cached)
             if 'embeddings' in tables:
-                # Detect available columns in embeddings table
-                if not hasattr(self, '_embedding_columns'):
+                # Detect available columns in embeddings table (only once)
+                if not hasattr(self, '_embedding_col_info'):
                     cursor.execute("PRAGMA table_info(embeddings)")
                     cols = [col[1] for col in cursor.fetchall()]
-                    self._embedding_columns = cols
-                    self.logger.debug("Embeddings table columns", {"columns": cols})
+                    
+                    # Find the embedding data column
+                    embedding_col = None
+                    for col_name in ['embedding_blob', 'embedding', 'vector', 'data', 'embeddings']:
+                        if col_name in cols:
+                            embedding_col = col_name
+                            break
+                    
+                    # Find the ID column
+                    id_col = 'global_id' if 'global_id' in cols else 'id'
+                    
+                    self._embedding_col_info = {
+                        'columns': cols,
+                        'embedding_col': embedding_col,
+                        'id_col': id_col
+                    }
+                    self.logger.debug("Embeddings table schema detected", self._embedding_col_info)
                 
-                # Find the embedding data column (different schemas use different names)
-                embedding_col = None
-                for col_name in ['embedding_blob', 'embedding', 'vector', 'data', 'embeddings']:
-                    if col_name in self._embedding_columns:
-                        embedding_col = col_name
-                        break
-                
-                # Find the ID column
-                id_col = 'global_id' if 'global_id' in self._embedding_columns else 'id'
+                embedding_col = self._embedding_col_info['embedding_col']
+                id_col = self._embedding_col_info['id_col']
                 
                 if embedding_col:
                     cursor.execute(f"""
@@ -315,15 +323,27 @@ class EnhancedKGDatasetLoader:
                                 except:
                                     # Raw numpy bytes
                                     embedding = np.frombuffer(blob, dtype=np.float32)
+                                
+                                # Validate dimension - resize if needed
+                                if len(embedding) != self.embedding_dim:
+                                    if len(embedding) > self.embedding_dim:
+                                        # Truncate if larger
+                                        embedding = embedding[:self.embedding_dim]
+                                    else:
+                                        # Pad with zeros if smaller
+                                        padded = np.zeros(self.embedding_dim, dtype=np.float32)
+                                        padded[:len(embedding)] = embedding
+                                        embedding = padded
+                                
                                 embeddings_temp.append(embedding)
                             except Exception as e:
-                                self.logger.debug(f"Failed to parse embedding: {e}")
+                                self.logger.debug(f"Failed to parse embedding for {gid}: {e}")
                                 embeddings_temp.append(np.zeros(self.embedding_dim, dtype=np.float32))
                         else:
                             embeddings_temp.append(np.zeros(self.embedding_dim, dtype=np.float32))
                 else:
                     self.logger.warning("No embedding column found in embeddings table", {
-                        "available_columns": self._embedding_columns
+                        "available_columns": self._embedding_col_info['columns']
                     })
                     for _ in global_ids:
                         embeddings_temp.append(np.zeros(self.embedding_dim, dtype=np.float32))
