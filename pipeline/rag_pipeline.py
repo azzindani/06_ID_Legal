@@ -453,9 +453,9 @@ class RAGPipeline:
                 
                 self.logger.info("Non-streaming valve routing", {"provider": provider_name})
                 
-                # Route to OpenRouter if that's the current provider
-                if provider and provider_name == "openrouter":
-                    self.logger.info("Routing to OpenRouter for non-streaming", {"provider": provider_name})
+                # Route to external providers (OpenRouter, LlamaCpp) if that's the current provider
+                if provider and provider_name in ("openrouter", "llamacpp"):
+                    self.logger.info("Routing to external provider for non-streaming", {"provider": provider_name})
                     # Collect all chunks for non-streaming response
                     full_answer = ""
                     for chunk in self._generate_with_external_llm(
@@ -1241,8 +1241,8 @@ Jawab dengan lengkap dan sitasi sumber regulasi yang relevan."""
         
         self.logger.info("Valve routing check", {"provider": provider_name})
         
-        # Route to external LLM provider if configured (e.g., OpenRouter)
-        if provider and provider_name == "openrouter":
+        # Route to external LLM provider if configured (e.g., OpenRouter, LlamaCpp)
+        if provider and provider_name in ("openrouter", "llamacpp"):
             self.logger.info("Routing to external LLM provider", {"provider": provider_name})
             yield from self._generate_with_external_llm(
                 question=question,
