@@ -2262,23 +2262,23 @@ def create_gradio_interface():
             dummy_logout,
             outputs=[login_panel, main_app, chatbot]
         )
-    
-    # Configure queue with explicit settings for sequential processing
-    # default_concurrency_limit=1 ensures requests are processed one at a time
-    # This prevents race conditions with GPU memory and model state
-    interface.queue(default_concurrency_limit=1, max_size=20)
-    
-    # Sync LLM provider dropdown from API on load
-    def sync_provider_on_load():
-        """Sync LLM provider dropdown with server status on UI load"""
-        provider = get_current_llm_provider()
-        status_msg = f"ℹ️ Current: **{provider}** (synced from server)"
-        return gr.update(value=provider), gr.update(value=status_msg)
-    
-    interface.load(
-        fn=sync_provider_on_load,
-        outputs=[llm_provider, llm_status]
-    )
+        
+        # Configure queue with explicit settings for sequential processing
+        # default_concurrency_limit=1 ensures requests are processed one at a time
+        # This prevents race conditions with GPU memory and model state
+        interface.queue(default_concurrency_limit=1, max_size=20)
+        
+        # Sync LLM provider dropdown from API on load (Gradio 6: must be inside Blocks context)
+        def sync_provider_on_load():
+            """Sync LLM provider dropdown with server status on UI load"""
+            provider = get_current_llm_provider()
+            status_msg = f"ℹ️ Current: **{provider}** (synced from server)"
+            return gr.update(value=provider), gr.update(value=status_msg)
+        
+        interface.load(
+            fn=sync_provider_on_load,
+            outputs=[llm_provider, llm_status]
+        )
     
     return interface
 
