@@ -556,6 +556,10 @@ def detect_hardware() -> HardwareConfig:
     """
     Auto-detect hardware and return optimal configuration.
     Supports multi-GPU distribution with intelligent allocation.
+    
+    **Environment Variable Overrides:**
+    If EMBEDDING_DEVICE, RERANKER_DEVICE, or LLM_DEVICE are set,
+    they will override the auto-detected values.
 
     Uses mathematical optimization to find the best model placement
     strategy that balances:
@@ -599,11 +603,35 @@ def detect_hardware() -> HardwareConfig:
         for name, placement in strategy.placements.items()
     }
 
+    # Get auto-detected values
+    embedding_device = emb_placement.device_string
+    reranker_device = rer_placement.device_string
+    llm_device = llm_placement.device_string
+    llm_quantization = llm_placement.quantization.value
+
+    # **OVERRIDE with environment variables if set**
+    env_embedding_device = os.environ.get("EMBEDDING_DEVICE")
+    env_reranker_device = os.environ.get("RERANKER_DEVICE")
+    env_llm_device = os.environ.get("LLM_DEVICE")
+    env_llm_4bit = os.environ.get("LLM_LOAD_IN_4BIT", "").lower() == "true"
+    env_llm_8bit = os.environ.get("LLM_LOAD_IN_8BIT", "").lower() == "true"
+    
+    if env_embedding_device:
+        embedding_device = env_embedding_device
+    if env_reranker_device:
+        reranker_device = env_reranker_device
+    if env_llm_device:
+        llm_device = env_llm_device
+    if env_llm_4bit:
+        llm_quantization = "4bit"
+    elif env_llm_8bit:
+        llm_quantization = "8bit"
+
     return HardwareConfig(
-        embedding_device=emb_placement.device_string,
-        reranker_device=rer_placement.device_string,
-        llm_device=llm_placement.device_string,
-        llm_quantization=llm_placement.quantization.value,
+        embedding_device=embedding_device,
+        reranker_device=reranker_device,
+        llm_device=llm_device,
+        llm_quantization=llm_quantization,
         recommended_model='Azzindani/Deepseek_ID_Legal_Preview',
         vram_available=total_vram,
         ram_available=ram_gb,

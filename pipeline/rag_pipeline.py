@@ -122,7 +122,7 @@ class RAGPipeline:
                 DATASET_NAME,
                 EMBEDDING_DIM
             )
-            self.data_loader.load_from_huggingface(
+            self.data_loader.load(
                 progress_callback=lambda msg: self.logger.debug(f"Dataset: {msg}")
             )
 
@@ -254,7 +254,7 @@ class RAGPipeline:
                 DATASET_NAME,
                 EMBEDDING_DIM
             )
-            self.data_loader.load_from_huggingface(
+            self.data_loader.load(
                 progress_callback=lambda msg: self.logger.debug(f"Dataset: {msg}")
             )
             

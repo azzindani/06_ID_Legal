@@ -2,6 +2,62 @@
 
 Gradio-based web interface for the Indonesian Legal RAG System.
 
+## Architecture
+
+```mermaid
+flowchart TB
+    subgraph "UI Layer"
+        direction TB
+        
+        subgraph "Gradio Apps"
+            GRAD[gradio_app.py<br/>Direct Pipeline UI]
+            UNIFIED[unified_app_api.py<br/>API-Based UI]
+            SEARCH[search_app.py<br/>Search-Only UI]
+        end
+        
+        subgraph "UI Components"
+            CHAT[Chat Interface<br/>Message History]
+            CONFIG[Config Panel<br/>Settings & Sliders]
+            DOCS[Document Upload<br/>Attachments]
+            EXPORT[Export Panel<br/>MD/JSON/HTML]
+            TESTS[Test Runners<br/>Conversational/Stress]
+        end
+        
+        subgraph "Services"
+            API_CLIENT[API Client<br/>HTTP Requests]
+            CONV_SVC[Conversational Service<br/>Multi-turn RAG]
+            SYS_SVC[System Service<br/>Health & Stats]
+        end
+    end
+    
+    subgraph "Backend"
+        API[FastAPI Server<br/>:8000]
+        PIPE[RAG Pipeline<br/>Direct Access]
+    end
+    
+    USER[User] --> GRAD & UNIFIED & SEARCH
+    GRAD --> CONV_SVC --> PIPE
+    UNIFIED --> API_CLIENT --> API
+    SEARCH --> API_CLIENT
+    
+    CHAT & CONFIG & DOCS & EXPORT & TESTS --> GRAD & UNIFIED
+```
+
+## Directory Structure
+
+```
+ui/
+├── __init__.py               # Package exports
+├── gradio_app.py             # Direct pipeline UI (1129 lines)
+├── unified_app_api.py        # API-based UI (2316 lines)
+├── search_app.py             # Search-only UI
+└── services/
+    ├── __init__.py           # Service exports
+    ├── api_client.py         # HTTP API client
+    ├── conversational_service.py  # Multi-turn RAG service
+    └── system_service.py     # Health, stats, initialization
+```
+
 ## Quick Start
 
 ```bash

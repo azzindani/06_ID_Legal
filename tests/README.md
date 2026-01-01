@@ -2,6 +2,64 @@
 
 Complete test suite for the Indonesian Legal RAG system.
 
+## Architecture
+
+```mermaid
+flowchart TB
+    subgraph "Test Suite"
+        direction TB
+        
+        subgraph "Unit Tests (No API)"
+            UT1[test_llm_providers.py<br/>Provider Logic]
+            UT2[test_generation.py<br/>LLM Engine]
+            UT3[test_hybrid_search.py<br/>Search Scoring]
+            UT4[test_consensus.py<br/>Consensus Algorithms]
+            UT5[test_knowledge_graph.py<br/>KG Functions]
+            UT6[test_query_detection.py<br/>Query Classification]
+            UT7[test_validators.py<br/>Input Validation]
+            UT8[conversation/*<br/>Session & Export]
+        end
+        
+        subgraph "Integration Tests (API Required)"
+            IT1[test_production_ready.py<br/>Full System]
+            IT2[test_streaming.py<br/>SSE Streaming]
+            IT3[test_conversational.py<br/>Multi-turn]
+            IT4[test_api_endpoints.py<br/>All Endpoints]
+            IT5[test_security_integration.py<br/>Security Tests]
+            IT6[test_concurrent_users.py<br/>Thread Safety]
+        end
+        
+        subgraph "Stress Tests"
+            ST1[test_stress_single.py<br/>Max Load Single]
+            ST2[test_stress_conversational.py<br/>Max Load 7-turn]
+        end
+        
+        subgraph "Document Parser Tests"
+            DT1[test_document_parser.py<br/>Extractors]
+            DT2[test_document_e2e.py<br/>Upload E2E]
+            DT3[test_multi_turn_comprehensive.py<br/>8-turn + Docs]
+        end
+    end
+    
+    PYTEST[pytest] --> UT1 & UT2 & UT3 & UT4 & UT5 & UT6 & UT7 & UT8
+    API[API Server] --> IT1 & IT2 & IT3 & IT4 & IT5 & IT6
+    API --> ST1 & ST2
+    API --> DT2 & DT3
+```
+
+## Test Categories Summary
+
+| Category | Count | API Required | Typical Time |
+|----------|-------|--------------|--------------|
+| Unit Tests | 14 | ❌ No | < 2 min |
+| Integration Tests | 17 | ✅ Yes | 30-60 min |
+| Stress Tests | 2 | ✅ Yes | 20-30 min |
+| Document Parser | 4 | Mixed | 15-20 min |
+| LLM Provider | 5 | Mixed | 10-15 min |
+| **Total** | **46** | | |
+
+---
+
 ## 📋 Quick Reference
 
 ### All Tests at a Glance

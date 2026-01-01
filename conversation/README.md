@@ -2,6 +2,59 @@
 
 Session management and export functionality for the Indonesian Legal RAG system.
 
+## Architecture
+
+```mermaid
+flowchart TB
+    subgraph "Conversation Module"
+        direction TB
+        
+        subgraph "Session Management"
+            MGR[Conversation Manager<br/>manager.py]
+            STORAGE[Session Storage<br/>In-Memory + SQLite]
+            HISTORY[History Tracker<br/>Turn Management]
+        end
+        
+        subgraph "Export System"
+            BASE[Base Exporter<br/>Abstract Interface]
+            MD[Markdown Exporter<br/>Collapsible Details]
+            JSON[JSON Exporter<br/>Full Metadata]
+            HTML[HTML Exporter<br/>Styled, Printable]
+        end
+        
+        subgraph "Context Building"
+            CTX[Context Builder<br/>RAG Integration]
+            SUMMARY[Session Summary<br/>Statistics]
+        end
+    end
+    
+    API[API Layer] --> MGR
+    MGR --> STORAGE
+    MGR --> HISTORY
+    HISTORY --> CTX --> RAG[RAG Pipeline]
+    
+    MGR --> BASE
+    BASE --> MD & JSON & HTML
+    MD & JSON & HTML --> FILE[Export Files]
+    
+    MGR --> SUMMARY
+```
+
+## Directory Structure
+
+```
+conversation/
+├── __init__.py                    # Package exports
+├── manager.py                     # ConversationManager class
+├── session_storage.py             # SQLite persistence (optional)
+└── export/
+    ├── __init__.py                # Exporter exports
+    ├── base_exporter.py           # Abstract base class
+    ├── markdown_exporter.py       # Markdown format
+    ├── json_exporter.py           # JSON format
+    └── html_exporter.py           # HTML format
+```
+
 ## Purpose
 
 The Conversation module provides:
