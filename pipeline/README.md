@@ -9,28 +9,28 @@ flowchart TB
     subgraph "RAG Pipeline"
         direction TB
         
-        INIT[Initialize<br/>Load Models & Data]
+        INIT["Initialize<br/>Load Models & Data"]
         
         subgraph "Query Flow"
-            QUERY[query()]
-            ANALYZE[Query Analysis<br/>Type Detection]
-            RETRIEVE[Document Retrieval<br/>Hybrid Search]
-            EXPAND[Expansion<br/>8 Strategies]
-            RESEARCH[Multi-Stage Research<br/>5 Personas]
-            CONSENSUS[Consensus Building<br/>Weighted Voting]
-            RERANK[Neural Reranking<br/>Cross-Encoder]
-            GENERATE[LLM Generation<br/>Streaming Support]
+            QUERY["query method"]
+            ANALYZE["Query Analysis<br/>Type Detection"]
+            RETRIEVE["Document Retrieval<br/>Hybrid Search"]
+            EXPAND["Expansion<br/>8 Strategies"]
+            RESEARCH["Multi-Stage Research<br/>5 Personas"]
+            CONSENSUS["Consensus Building<br/>Weighted Voting"]
+            RERANK["Neural Reranking<br/>Cross-Encoder"]
+            GENERATE["LLM Generation<br/>Streaming Support"]
         end
         
-        SHUTDOWN[shutdown()<br/>Cleanup Resources]
+        SHUTDOWN["shutdown method<br/>Cleanup Resources"]
     end
     
     subgraph "Components Used"
-        MM[Model Manager<br/>Embedding/Reranker]
-        DL[Data Loader<br/>Dataset]
-        ORCH[LangGraph Orchestrator<br/>Workflow]
-        GEN[Generation Engine<br/>LLM]
-        PROV[LLM Provider<br/>Local/Cloud]
+        MM["Model Manager<br/>Embedding/Reranker"]
+        DL["Data Loader<br/>Dataset"]
+        ORCH["LangGraph Orchestrator<br/>Workflow"]
+        GEN["Generation Engine<br/>LLM"]
+        PROV["LLM Provider<br/>Local/Cloud"]
     end
     
     USER[User] --> INIT --> QUERY
