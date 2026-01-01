@@ -2,6 +2,62 @@
 
 High-level RAG Pipeline API that orchestrates the complete retrieval-augmented generation workflow.
 
+## Architecture
+
+```mermaid
+flowchart TB
+    subgraph "RAG Pipeline"
+        direction TB
+        
+        INIT[Initialize<br/>Load Models & Data]
+        
+        subgraph "Query Flow"
+            QUERY[query()]
+            ANALYZE[Query Analysis<br/>Type Detection]
+            RETRIEVE[Document Retrieval<br/>Hybrid Search]
+            EXPAND[Expansion<br/>8 Strategies]
+            RESEARCH[Multi-Stage Research<br/>5 Personas]
+            CONSENSUS[Consensus Building<br/>Weighted Voting]
+            RERANK[Neural Reranking<br/>Cross-Encoder]
+            GENERATE[LLM Generation<br/>Streaming Support]
+        end
+        
+        SHUTDOWN[shutdown()<br/>Cleanup Resources]
+    end
+    
+    subgraph "Components Used"
+        MM[Model Manager<br/>Embedding/Reranker]
+        DL[Data Loader<br/>Dataset]
+        ORCH[LangGraph Orchestrator<br/>Workflow]
+        GEN[Generation Engine<br/>LLM]
+        PROV[LLM Provider<br/>Local/Cloud]
+    end
+    
+    USER[User] --> INIT --> QUERY
+    QUERY --> ANALYZE --> RETRIEVE --> EXPAND
+    EXPAND --> RESEARCH --> CONSENSUS --> RERANK --> GENERATE
+    GENERATE --> RESPONSE[Response]
+    
+    INIT --> MM & DL
+    RETRIEVE --> ORCH
+    GENERATE --> GEN --> PROV
+    
+    USER --> SHUTDOWN
+```
+
+## Directory Structure
+
+```
+pipeline/
+├── __init__.py              # Package exports: RAGPipeline
+├── rag_pipeline.py          # Main RAGPipeline class (1548 lines)
+│                            # - initialize(), query(), shutdown()
+│                            # - Streaming and non-streaming modes
+│                            # - Configuration management
+└── tests/
+    └── test_rag_pipeline.py # Unit and integration tests
+```
+
 ## Purpose
 
 The Pipeline module provides a simplified interface for executing complete RAG queries without needing to manually coordinate individual components. It handles:
@@ -13,12 +69,6 @@ The Pipeline module provides a simplified interface for executing complete RAG q
 - Resource cleanup
 
 ## Components
-
-| File | Description |
-|------|-------------|
-| `__init__.py` | Package exports |
-| `rag_pipeline.py` | Main RAGPipeline class |
-| `tests/test_rag_pipeline.py` | Unit and integration tests |
 
 ## Usage
 

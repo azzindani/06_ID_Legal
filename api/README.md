@@ -11,9 +11,83 @@ uvicorn api.server:app --host 0.0.0.0 --port 8000 --reload
 
 The API will be available at `http://localhost:8000`.
 - **Swagger UI**: [http://localhost:8000/docs](http://localhost:8000/docs)
-- **ReDoc**: [http://localhost:8000/redoc](http://localhost:8000/redoc)
+---
+
+## Architecture
+
+```mermaid
+flowchart TB
+    subgraph "API Layer"
+        direction TB
+        
+        SERVER[FastAPI Server<br/>api/server.py]
+        
+        subgraph "Middleware"
+            AUTH[API Key Auth<br/>middleware/auth.py]
+            RATE[Rate Limiter<br/>middleware/rate_limiter.py]
+            SEC[Security Headers<br/>CORS, XSS Protection]
+        end
+        
+        subgraph "Routes"
+            RAG["/rag/*"<br/>Chat, Research, Retrieve]
+            LLM["/llm/*"<br/>Provider Config]
+            DOC["/documents/*"<br/>Upload, Extract]
+            SESS["/sessions/*"<br/>Management]
+            HEALTH["/health, /ready"<br/>Status Checks]
+        end
+        
+        subgraph "Validators"
+            VAL[Input Validators<br/>Pydantic Models]
+            SAN[Query Sanitizer<br/>XSS/Injection Block]
+        end
+    end
+    
+    subgraph "Service Layer"
+        CONV[Conversational Service<br/>Multi-turn RAG]
+        PIPE[RAG Pipeline<br/>Core Engine]
+        DOCPARSE[Document Parser<br/>PDF/DOCX/URL]
+        SESSMGR[Session Manager<br/>History Tracking]
+    end
+    
+    subgraph "LLM Providers"
+        FACTORY[Provider Factory<br/>Hot-Swappable]
+        LOCAL[Local GPU]
+        CLOUD[OpenRouter]
+        NONE[RAG Only]
+    end
+    
+    CLIENT[HTTP Client] --> AUTH --> RATE --> SEC
+    SEC --> RAG & LLM & DOC & SESS & HEALTH
+    RAG --> VAL --> SAN --> CONV
+    LLM --> FACTORY
+    DOC --> DOCPARSE
+    SESS --> SESSMGR
+    CONV --> PIPE
+    FACTORY --> LOCAL & CLOUD & NONE
+```
+
+## Directory Structure
+
+```
+api/
+├── server.py              # FastAPI app, lifespan events, middleware
+├── validators.py          # Shared Pydantic validators
+├── middleware/
+│   ├── auth.py            # API key authentication middleware
+│   └── rate_limiter.py    # Request rate limiting
+└── routes/
+    ├── auth.py            # JWT authentication endpoints
+    ├── documents.py       # Document upload and management
+    ├── health.py          # Health and readiness checks
+    ├── llm_management.py  # LLM provider configuration
+    ├── rag_enhanced.py    # RAG chat, research, retrieve
+    ├── search.py          # Pure search endpoints
+    └── sessions.py        # Session management
+```
 
 ---
+
+
 
 ## 🔐 Authentication
 
