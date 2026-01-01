@@ -114,16 +114,38 @@ class LLMEngine:
                 self.logger.debug(f"Set padding_side to left, pad_token_id={self._tokenizer.pad_token_id}, eos_token_id={self._tokenizer.eos_token_id}")
 
                 # Load model
+                # NOTE: device_map='auto' causes issues with smaller VRAM - use specific device
+                # When LLM_DEVICE is explicitly set to 'cuda', use it directly instead of 'auto'
                 self.logger.debug("Loading model weights")
+                
+                # Determine device_map:
+                # - 'auto' for multi-GPU or when device is 'auto'
+                # - None for CPU (will use .to(device) later)
+                # - specific device string for single GPU
+                import os
+                llm_device_env = os.environ.get("LLM_DEVICE", "auto")
+                
+                if llm_device_env == "auto":
+                    # Use HuggingFace auto device map for multi-GPU distribution
+                    device_map_setting = "auto"
+                elif self.device.type == 'cuda':
+                    # Explicit CUDA device - put all on that device
+                    device_map_setting = str(self.device)
+                else:
+                    # CPU - no device_map needed
+                    device_map_setting = None
+                
+                self.logger.debug(f"Using device_map={device_map_setting}")
+                
                 self._model = AutoModelForCausalLM.from_pretrained(
                     self.model_name,
                     cache_dir=CACHE_DIR,
                     torch_dtype=torch.float16 if self.device.type == 'cuda' else torch.float32,
                     trust_remote_code=True,
-                    device_map='auto' if self.device.type == 'cuda' else None
+                    device_map=device_map_setting
                 )
                 
-                if self.device.type != 'cuda':
+                if device_map_setting is None:
                     self._model.to(self.device)
 
                 # Resize embeddings if we added new tokens
